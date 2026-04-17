@@ -46,6 +46,30 @@ services:
     depends_on:
       - mongodb
 
+  redis:
+    image: redis:7-alpine
+    container_name: antcart-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  ak-shoppingcart-api:
+    image: ak-shoppingcart-api
+    build:
+      context: .
+      dockerfile: AK.ShoppingCart/AK.ShoppingCart.API/Dockerfile
+    container_name: ak-shoppingcart-api
+    restart: unless-stopped
+    ports:
+      - "8082:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - RedisSettings__ConnectionString=redis:6379
+      - RedisSettings__InstanceName=AKCart:
+      - RedisSettings__CartExpiryDays=30
+    depends_on:
+      - redis
+
 volumes:
   mongodb_data:
   discount_data:

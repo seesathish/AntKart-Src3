@@ -63,6 +63,18 @@ AK.<Service>/
 - **Tests:** 11 passing (domain, commands, queries)
 - **Design doc:** [AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md](AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md)
 
+### ✅ AK.ShoppingCart  (REST Minimal API)
+- **Transport:** HTTP REST, port 5079 (dev) / 8082 (Docker)
+- **Database:** Redis — key pattern `AKCart:cart:{userId}`, 30-day TTL
+- **Architecture:** DDD + Clean Architecture
+- **Patterns:** CQRS (MediatR 12.4.1), FluentValidation pipeline, Repository, Unit of Work
+- **Operations:** Add to cart, remove item, update quantity, clear cart, get cart
+- **Cart behaviour:** Adding existing product increments quantity; quantity=0 removes item
+- **Serialisation:** `System.Text.Json` snapshot pattern (domain → CartSnapshot DTO → Redis)
+- **Tests:** 88 passing (domain, commands, queries, validators, behaviors, infrastructure)
+- **Swagger:** `http://localhost:5079/swagger`
+- **Design doc:** [AK.ShoppingCart/SHOPPING_CART_TECHNICAL_DESIGN.md](AK.ShoppingCart/SHOPPING_CART_TECHNICAL_DESIGN.md)
+
 ### ✅ AK.BuildingBlocks  (Shared Library)
 - `Common/PagedResult<T>`, `Result<T>`
 - `Exceptions/NotFoundException`, `ValidationException`

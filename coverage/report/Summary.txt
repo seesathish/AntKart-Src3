@@ -1,0 +1,118 @@
+Summary
+  Generated on: 17-04-2026 - 16:57:48
+  Coverage date: 17-04-2026 - 16:57:47
+  Parser: MultiReport (2x Cobertura)
+  Assemblies: 7
+  Classes: 84
+  Files: 84
+  Line coverage: 60.1%
+  Covered lines: 676
+  Uncovered lines: 447
+  Coverable lines: 1123
+  Total lines: 1920
+  Branch coverage: 64.6% (97 of 150)
+  Covered branches: 97
+  Total branches: 150
+  Method coverage: 80.1% (266 of 332)
+  Full method coverage: 78.6% (261 of 332)
+  Covered methods: 266
+  Fully covered methods: 261
+  Total methods: 332
+
+AK.BuildingBlocks                                                                             33.3%
+  AK.BuildingBlocks.Common.PagedResult<T>                                                      100%
+  AK.BuildingBlocks.Common.Result<T>                                                           100%
+  AK.BuildingBlocks.Exceptions.NotFoundException                                               100%
+  AK.BuildingBlocks.Exceptions.ValidationException                                             100%
+  AK.BuildingBlocks.HealthChecks.HealthCheckExtensions                                           0%
+  AK.BuildingBlocks.Logging.SerilogExtensions                                                    0%
+  AK.BuildingBlocks.Middleware.CorrelationIdMiddleware                                           0%
+
+AK.Discount.Application                                                                         89%
+  AK.Discount.Application.Behaviors.ValidationBehavior<T1, T2>                                 100%
+  AK.Discount.Application.Commands.CreateDiscount.CreateDiscountCommand                        100%
+  AK.Discount.Application.Commands.CreateDiscount.CreateDiscountCommandHandler                 100%
+  AK.Discount.Application.Commands.DeleteDiscount.DeleteDiscountCommand                        100%
+  AK.Discount.Application.Commands.DeleteDiscount.DeleteDiscountCommandHandler                 100%
+  AK.Discount.Application.Commands.UpdateDiscount.UpdateDiscountCommand                        100%
+  AK.Discount.Application.Commands.UpdateDiscount.UpdateDiscountCommandHandler                 100%
+  AK.Discount.Application.Common.CouponMapper                                                  100%
+  AK.Discount.Application.DTOs.CouponDto                                                      38.4%
+  AK.Discount.Application.DTOs.CreateCouponDto                                                 100%
+  AK.Discount.Application.DTOs.UpdateCouponDto                                                 100%
+  AK.Discount.Application.Extensions.ServiceCollectionExtensions                                 0%
+  AK.Discount.Application.Queries.GetAllDiscounts.GetAllDiscountsQuery                         100%
+  AK.Discount.Application.Queries.GetAllDiscounts.GetAllDiscountsQueryHandler                  100%
+  AK.Discount.Application.Queries.GetDiscountByProductId.GetDiscountByProductIdQuery           100%
+  AK.Discount.Application.Queries.GetDiscountByProductId.GetDiscountByProductIdQueryHandler    100%
+  AK.Discount.Application.Validators.CreateDiscountValidator                                   100%
+
+AK.Discount.Domain                                                                             100%
+  AK.Discount.Domain.Entities.Coupon                                                           100%
+
+AK.Discount.Infrastructure                                                                    32.8%
+  AK.Discount.Infrastructure.Extensions.ServiceCollectionExtensions                              0%
+  AK.Discount.Infrastructure.Extensions.WebApplicationExtensions                                 0%
+  AK.Discount.Infrastructure.Migrations.DiscountContextModelSnapshot                             0%
+  AK.Discount.Infrastructure.Migrations.InitialCreate                                            0%
+  AK.Discount.Infrastructure.Persistence.DiscountContext                                       100%
+  AK.Discount.Infrastructure.Persistence.Repositories.CouponRepository                         100%
+  AK.Discount.Infrastructure.Seeders.DiscountSeeder                                            100%
+  AK.Discount.Infrastructure.Seeders.StringExtensions                                          100%
+
+AK.Products.Application                                                                       87.5%
+  AK.Products.Application.Behaviors.ValidationBehavior<T1, T2>                                 100%
+  AK.Products.Application.Commands.BulkInsertProducts.BulkInsertProductsCommand                100%
+  AK.Products.Application.Commands.BulkInsertProducts.BulkInsertProductsCommandHandler         100%
+  AK.Products.Application.Commands.BulkUpdateProducts.BulkUpdateProductsCommand                100%
+  AK.Products.Application.Commands.BulkUpdateProducts.BulkUpdateProductsCommandHandler         100%
+  AK.Products.Application.Commands.CreateProduct.CreateProductCommand                          100%
+  AK.Products.Application.Commands.CreateProduct.CreateProductCommandHandler                   100%
+  AK.Products.Application.Commands.DeleteProduct.DeleteProductCommand                          100%
+  AK.Products.Application.Commands.DeleteProduct.DeleteProductCommandHandler                   100%
+  AK.Products.Application.Commands.UpdateProduct.UpdateProductCommand                          100%
+  AK.Products.Application.Commands.UpdateProduct.UpdateProductCommandHandler                   100%
+  AK.Products.Application.Common.ProductMapper                                                 100%
+  AK.Products.Application.DTOs.BulkUpdateProductDto                                            100%
+  AK.Products.Application.DTOs.CreateProductDto                                                100%
+  AK.Products.Application.DTOs.PagedResult<T>                                                  100%
+  AK.Products.Application.DTOs.ProductDto                                                       28%
+  AK.Products.Application.DTOs.UpdateProductDto                                                100%
+  AK.Products.Application.Extensions.ServiceCollectionExtensions                                 0%
+  AK.Products.Application.Queries.GetProductById.GetProductByIdQuery                           100%
+  AK.Products.Application.Queries.GetProductById.GetProductByIdQueryHandler                    100%
+  AK.Products.Application.Queries.GetProducts.GetProductsQuery                                 100%
+  AK.Products.Application.Queries.GetProducts.GetProductsQueryHandler                         90.4%
+  AK.Products.Application.Queries.GetProductsByCategory.GetProductsByCategoryQuery             100%
+  AK.Products.Application.Queries.GetProductsByCategory.GetProductsByCategoryQueryHandler      100%
+  AK.Products.Application.Validators.CreateProductValidator                                    100%
+  AK.Products.Application.Validators.UpdateProductValidator                                    100%
+
+AK.Products.Domain                                                                              90%
+  AK.Products.Domain.Common.BaseEntity                                                         100%
+  AK.Products.Domain.Common.BaseSpecification<T>                                                 0%
+  AK.Products.Domain.Common.Entity                                                            62.5%
+  AK.Products.Domain.Entities.Category                                                         100%
+  AK.Products.Domain.Entities.Product                                                         98.6%
+  AK.Products.Domain.Events.ProductCreatedEvent                                                100%
+  AK.Products.Domain.Events.ProductDeletedEvent                                                  0%
+  AK.Products.Domain.Events.ProductUpdatedEvent                                                100%
+  AK.Products.Domain.Specifications.ActiveProductsSpecification                                100%
+  AK.Products.Domain.Specifications.BaseSpecification<T>                                      87.5%
+  AK.Products.Domain.Specifications.FeaturedProductsSpecification                              100%
+  AK.Products.Domain.Specifications.ProductByCategorySpecification                             100%
+  AK.Products.Domain.Specifications.ProductByGenderSpecification                               100%
+  AK.Products.Domain.Specifications.ProductByIdSpecification                                   100%
+  AK.Products.Domain.Specifications.ProductSearchSpecification                                 100%
+  AK.Products.Domain.ValueObjects.Money                                                       86.3%
+  AK.Products.Domain.ValueObjects.ProductCategory                                              100%
+  AK.Products.Domain.ValueObjects.ProductDimensions                                            100%
+  AK.Products.Domain.ValueObjects.ProductImage                                                 100%
+
+AK.Products.Infrastructure                                                                    29.9%
+  AK.Products.Infrastructure.Extensions.ServiceCollectionExtensions                              0%
+  AK.Products.Infrastructure.Persistence.MongoDbContext                                       16.6%
+  AK.Products.Infrastructure.Persistence.MongoDbSettings                                       100%
+  AK.Products.Infrastructure.Persistence.Repositories.ProductRepository                       98.1%
+  AK.Products.Infrastructure.Persistence.UnitOfWork                                            100%
+  AK.Products.Infrastructure.Seeders.ProductSeeder                                               0%

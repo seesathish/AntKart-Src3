@@ -8,8 +8,11 @@
   "variable": [
     { "key": "productsUrl", "value": "http://localhost:5077", "type": "string" },
     { "key": "discountGrpc", "value": "localhost:5001", "type": "string" },
+    { "key": "cartUrl", "value": "http://localhost:5079", "type": "string" },
     { "key": "productId", "value": "replace-with-actual-id", "type": "string" },
-    { "key": "discountId", "value": "1", "type": "string" }
+    { "key": "discountId", "value": "1", "type": "string" },
+    { "key": "cartUserId", "value": "user-001", "type": "string" },
+    { "key": "cartProductId", "value": "replace-with-product-id", "type": "string" }
   ],
   "item": [
     {
@@ -416,6 +419,81 @@
               "raw": "http://{{discountGrpc}}/",
               "host": ["http://{{discountGrpc}}"],
               "path": [""]
+            }
+          }
+        }
+      ]
+    }
+  ,
+    {
+      "name": "AK.ShoppingCart API",
+      "description": "Shopping cart microservice — REST/HTTP on port 5079.\nSwagger UI: http://localhost:5079/swagger\nRedis-backed cart with 30-day TTL.",
+      "item": [
+        {
+          "name": "GET Cart",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{cartUrl}}/api/v1/cart/{{cartUserId}}",
+              "host": ["{{cartUrl}}"],
+              "path": ["api", "v1", "cart", "{{cartUserId}}"]
+            }
+          }
+        },
+        {
+          "name": "POST Add Item to Cart",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{cartProductId}}\",\n  \"productName\": \"Men's Classic Shirt\",\n  \"sku\": \"MEN-SHRT-001\",\n  \"price\": 999.99,\n  \"quantity\": 2,\n  \"imageUrl\": null\n}"
+            },
+            "url": {
+              "raw": "{{cartUrl}}/api/v1/cart/{{cartUserId}}/items",
+              "host": ["{{cartUrl}}"],
+              "path": ["api", "v1", "cart", "{{cartUserId}}", "items"]
+            }
+          }
+        },
+        {
+          "name": "PUT Update Cart Item Quantity",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 5\n}"
+            },
+            "url": {
+              "raw": "{{cartUrl}}/api/v1/cart/{{cartUserId}}/items/{{cartProductId}}",
+              "host": ["{{cartUrl}}"],
+              "path": ["api", "v1", "cart", "{{cartUserId}}", "items", "{{cartProductId}}"]
+            }
+          }
+        },
+        {
+          "name": "DELETE Remove Item from Cart",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{cartUrl}}/api/v1/cart/{{cartUserId}}/items/{{cartProductId}}",
+              "host": ["{{cartUrl}}"],
+              "path": ["api", "v1", "cart", "{{cartUserId}}", "items", "{{cartProductId}}"]
+            }
+          }
+        },
+        {
+          "name": "DELETE Clear Cart",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{cartUrl}}/api/v1/cart/{{cartUserId}}",
+              "host": ["{{cartUrl}}"],
+              "path": ["api", "v1", "cart", "{{cartUserId}}"]
             }
           }
         }

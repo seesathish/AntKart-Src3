@@ -16,3 +16,9 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
     ports:
       - "5001:8080"
+
+  ak-shoppingcart-api:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    ports:
+      - "5079:8080"
