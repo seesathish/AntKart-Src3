@@ -4,4 +4,4 @@
 
 | Service | Description | Technical Design |
 |---------|-------------|-----------------|
-| [AK.Products](../AK.Products) | Product catalogue — Men, Women & Kids dress collections | [Technical Design](../AK.Products/TECHNICAL_DESIGN.md) |
+| [AK.Products](src/AK.Products.API/AK.Products.API) | Product catalogue — Men, Women & Kids dress collections | [Technical Design](TECHNICAL_DESIGN.md) |
