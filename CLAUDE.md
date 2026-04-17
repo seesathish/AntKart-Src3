@@ -48,7 +48,7 @@ AK.<Service>/
 - **Patterns:** CQRS (MediatR 12.4.1), FluentValidation pipeline, Specification, Unit of Work
 - **Seed data:** 300 products — 100 Men / 100 Women / 100 Kids, 10 categories × 10 products each
 - **SKU format:** `{MEN|WOM|KID}-{CAT4}-{001..010}`  e.g. `MEN-SHIR-001`
-- **Tests:** 45 passing (domain, commands, queries, validators)
+- **Tests:** 179 passing (domain, commands, queries, validators, specifications, DTO mapping)
 - **Swagger:** `http://localhost:5077/swagger`
 - **Design doc:** [AK.Products/PRODUCTS_TECHNICAL_DESIGN.md](AK.Products/PRODUCTS_TECHNICAL_DESIGN.md)
 
@@ -60,7 +60,7 @@ AK.<Service>/
 - **Proto:** `AK.Discount/AK.Discount.Grpc/Protos/discount.proto`
 - **RPCs:** GetDiscount, CreateDiscount, UpdateDiscount, DeleteDiscount, GetAllDiscounts
 - **Seed data:** 300 coupons matching AK.Products SKUs (one per product)
-- **Tests:** 11 passing (domain, commands, queries)
+- **Tests:** 53 passing (domain, commands, queries, validators, DTO mapping)
 - **Design doc:** [AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md](AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md)
 
 ### ✅ AK.ShoppingCart  (REST Minimal API)

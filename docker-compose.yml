@@ -63,10 +63,10 @@ services:
     ports:
       - "8082:8080"
     environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-      - RedisSettings__ConnectionString=redis:6379
-      - RedisSettings__InstanceName=AKCart:
-      - RedisSettings__CartExpiryDays=30
+      ASPNETCORE_ENVIRONMENT: Production
+      RedisSettings__ConnectionString: "redis:6379"
+      RedisSettings__InstanceName: "AKCart:"
+      RedisSettings__CartExpiryDays: "30"
     depends_on:
       - redis
 

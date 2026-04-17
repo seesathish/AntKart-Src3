@@ -102,7 +102,7 @@ dotnet test
 ```
 | Project | Tests |
 |---------|-------|
-| AK.Products.Tests | 165 |
-| AK.Discount.Tests | 51 |
+| AK.Products.Tests | 179 |
+| AK.Discount.Tests | 53 |
 | AK.ShoppingCart.Tests | 88 |
-| **Total** | **304** |
+| **Total** | **320** |

@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "antkart-microservices-collection",
     "name": "AntKart Microservices",
-    "description": "Unified Postman collection for all AntKart microservices.\n\n**Services:**\n- AK.Products REST API — http://localhost:5077\n- AK.Discount gRPC — localhost:5001 (use grpcurl or Postman gRPC tab)\n\n**Variables:**\n- `productsUrl` — Products API base URL\n- `discountGrpc` — Discount gRPC host\n- `productId` — Replace with actual MongoDB ObjectId after creating a product",
+    "description": "Unified Postman collection for all AntKart microservices.\n\n**Services:**\n- AK.Products REST API — http://localhost:5077\n- AK.Discount gRPC — localhost:5001 (use grpcurl or Postman gRPC tab)\n- AK.ShoppingCart REST API — http://localhost:5079\n\n**Collection Variables:**\n- `productsUrl` — Products API base URL (default: http://localhost:5077)\n- `discountGrpc` — Discount gRPC host (default: localhost:5001)\n- `cartUrl` — ShoppingCart API base URL (default: http://localhost:5079)\n- `productId` — MongoDB ObjectId of a product (set after creating)\n- `cartUserId` — User ID for cart operations (default: user-001)\n- `cartProductId` — Product ID for cart item operations",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -352,7 +352,7 @@
             "header": [],
             "url": {
               "raw": "http://{{discountGrpc}}/health",
-              "host": ["http://{{discountGrpc}}"],
+              "host": ["{{discountGrpc}}"],
               "path": ["health"]
             }
           }
@@ -494,6 +494,18 @@
               "raw": "{{cartUrl}}/api/v1/cart/{{cartUserId}}",
               "host": ["{{cartUrl}}"],
               "path": ["api", "v1", "cart", "{{cartUserId}}"]
+            }
+          }
+        },
+        {
+          "name": "GET ShoppingCart Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{cartUrl}}/health",
+              "host": ["{{cartUrl}}"],
+              "path": ["health"]
             }
           }
         }

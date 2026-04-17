@@ -85,4 +85,50 @@ public sealed class GetProductsQueryHandlerTests
         result.HasNextPage.Should().BeTrue();
         result.HasPreviousPage.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task Handle_WithCategoryFilter_ShouldGetByCategory()
+    {
+        var products = new List<Product>
+        {
+            TestDataFactory.CreateMenProduct("SKU-001"),
+            TestDataFactory.CreateMenProduct("SKU-002")
+        }.AsReadOnly();
+        _repoMock.Setup(r => r.GetByCategoryAsync("Shirts", default)).ReturnsAsync(products);
+
+        var result = await _handler.Handle(new GetProductsQuery(Category: "Shirts"), default);
+
+        result.Items.Should().HaveCount(2);
+        result.Items.All(p => p.CategoryName == "Shirts").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_WithIsFeaturedFilter_ShouldFilterByFeatured()
+    {
+        var featured = TestDataFactory.CreateMenProduct("SKU-001");
+        featured.SetFeatured(true);
+        var notFeatured = TestDataFactory.CreateMenProduct("SKU-002");
+        var products = new List<Product> { featured, notFeatured }.AsReadOnly();
+        _repoMock.Setup(r => r.GetAllAsync(default)).ReturnsAsync(products);
+
+        var result = await _handler.Handle(new GetProductsQuery(IsFeatured: true), default);
+
+        result.Items.Should().HaveCount(1);
+        result.Items[0].IsFeatured.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_WithSearchTerm_ShouldFilterByBrand()
+    {
+        var products = new List<Product>
+        {
+            TestDataFactory.CreateMenProduct("SKU-001"),
+            TestDataFactory.CreateWomenProduct("SKU-002")
+        }.AsReadOnly();
+        _repoMock.Setup(r => r.GetAllAsync(default)).ReturnsAsync(products);
+
+        var result = await _handler.Handle(new GetProductsQuery(SearchTerm: "ArrowMen"), default);
+
+        result.Items.Should().HaveCount(1);
+    }
 }
