@@ -15,6 +15,11 @@ public sealed class MongoDbContext
         CreateIndexes();
     }
 
+    public MongoDbContext(IMongoDatabase database)
+    {
+        _database = database;
+    }
+
     public IMongoCollection<T> GetCollection<T>(string collectionName) =>
         _database.GetCollection<T>(collectionName);
 
