@@ -1,6 +1,10 @@
 version: '3.8'
 
 services:
+  keycloak:
+    ports:
+      - "8090:8080"
+
   mongodb:
     ports:
       - "27017:27017"
@@ -32,3 +36,9 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
     ports:
       - "5080:8080"
+
+  ak-useridentity-api:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    ports:
+      - "5085:8080"

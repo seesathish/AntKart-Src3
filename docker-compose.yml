@@ -1,6 +1,26 @@
 version: '3.8'
 
 services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: antcart-keycloak
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: 8080
+    ports:
+      - "8090:8080"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/realms/antkart || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
   mongodb:
     image: mongo:latest
     container_name: antcart-mongodb
@@ -26,8 +46,18 @@ services:
       - MongoDbSettings__ConnectionString=mongodb://mongodb:27017
       - MongoDbSettings__DatabaseName=AKProductsDb
       - MongoDbSettings__ProductsCollection=Products
+      - DiscountGrpc__Address=http://ak-discount-grpc:8080
+      - Keycloak__Authority=http://keycloak:8080/realms/antkart
+      - Keycloak__Audience=antkart-client
+      - Keycloak__RequireHttpsMetadata=false
+      - Keycloak__AdminUrl=http://keycloak:8080
+      - Keycloak__Realm=antkart
+      - Keycloak__ClientId=antkart-client
+      - Keycloak__ClientSecret=antkart-secret
     depends_on:
       - mongodb
+      - keycloak
+      - ak-discount-grpc
 
   ak-discount-grpc:
     image: ak-discount-grpc
@@ -67,8 +97,16 @@ services:
       RedisSettings__ConnectionString: "redis:6379"
       RedisSettings__InstanceName: "AKCart:"
       RedisSettings__CartExpiryDays: "30"
+      Keycloak__Authority: "http://keycloak:8080/realms/antkart"
+      Keycloak__Audience: "antkart-client"
+      Keycloak__RequireHttpsMetadata: "false"
+      Keycloak__AdminUrl: "http://keycloak:8080"
+      Keycloak__Realm: "antkart"
+      Keycloak__ClientId: "antkart-client"
+      Keycloak__ClientSecret: "antkart-secret"
     depends_on:
       - redis
+      - keycloak
 
   postgres:
     image: postgres:16-alpine
@@ -95,8 +133,38 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=AKOrdersDb;Username=postgres;Password=postgres"
+      Keycloak__Authority: "http://keycloak:8080/realms/antkart"
+      Keycloak__Audience: "antkart-client"
+      Keycloak__RequireHttpsMetadata: "false"
+      Keycloak__AdminUrl: "http://keycloak:8080"
+      Keycloak__Realm: "antkart"
+      Keycloak__ClientId: "antkart-client"
+      Keycloak__ClientSecret: "antkart-secret"
     depends_on:
       - postgres
+      - keycloak
+
+  ak-useridentity-api:
+    image: ak-useridentity-api
+    build:
+      context: .
+      dockerfile: AK.UserIdentity/AK.UserIdentity.API/Dockerfile
+    container_name: ak-useridentity-api
+    restart: unless-stopped
+    ports:
+      - "8084:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Keycloak__Authority: "http://keycloak:8080/realms/antkart"
+      Keycloak__Audience: "antkart-client"
+      Keycloak__RequireHttpsMetadata: "false"
+      Keycloak__AdminUrl: "http://keycloak:8080"
+      Keycloak__Realm: "antkart"
+      Keycloak__ClientId: "antkart-client"
+      Keycloak__ClientSecret: "antkart-secret"
+    depends_on:
+      keycloak:
+        condition: service_healthy
 
 volumes:
   mongodb_data:

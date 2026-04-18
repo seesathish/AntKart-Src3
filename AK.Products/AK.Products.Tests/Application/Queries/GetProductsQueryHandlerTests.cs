@@ -1,4 +1,5 @@
 using AK.Products.Domain.Entities;
+using AK.Products.Application.Common;
 using AK.Products.Application.Interfaces;
 using AK.Products.Application.Queries.GetProducts;
 using AK.Products.Domain.Enums;
@@ -12,12 +13,15 @@ public sealed class GetProductsQueryHandlerTests
 {
     private readonly Mock<IUnitOfWork> _uowMock = new();
     private readonly Mock<IProductRepository> _repoMock = new();
+    private readonly Mock<IDiscountGrpcClient> _discountMock = new();
     private readonly GetProductsQueryHandler _handler;
 
     public GetProductsQueryHandlerTests()
     {
         _uowMock.Setup(u => u.Products).Returns(_repoMock.Object);
-        _handler = new GetProductsQueryHandler(_uowMock.Object);
+        _discountMock.Setup(d => d.GetDiscountAsync(It.IsAny<string>(), default))
+            .ReturnsAsync((DiscountResult?)null);
+        _handler = new GetProductsQueryHandler(_uowMock.Object, _discountMock.Object);
     }
 
     [Fact]
@@ -130,5 +134,19 @@ public sealed class GetProductsQueryHandlerTests
         var result = await _handler.Handle(new GetProductsQuery(SearchTerm: "ArrowMen"), default);
 
         result.Items.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task Handle_WithActiveDiscounts_ShouldEnrichDiscountPrice()
+    {
+        var product = TestDataFactory.CreateMenProduct("SKU-001");
+        var products = new List<Product> { product }.AsReadOnly();
+        _repoMock.Setup(r => r.GetAllAsync(default)).ReturnsAsync(products);
+        _discountMock.Setup(d => d.GetDiscountAsync(product.Id, default))
+            .ReturnsAsync(new DiscountResult(20.0, "Percentage", true));
+
+        var result = await _handler.Handle(new GetProductsQuery(Page: 1, PageSize: 20), default);
+
+        result.Items[0].DiscountPrice.Should().Be(ProductMapper.ComputeDiscountedPrice(product.Price, 20.0, "Percentage"));
     }
 }

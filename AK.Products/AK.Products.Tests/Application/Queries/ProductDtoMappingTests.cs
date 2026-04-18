@@ -1,4 +1,5 @@
 using AK.Products.Application.Commands.CreateProduct;
+using AK.Products.Application.Common;
 using AK.Products.Application.DTOs;
 using AK.Products.Application.Interfaces;
 using AK.Products.Domain.Entities;
@@ -48,5 +49,49 @@ public sealed class ProductDtoMappingTests
         result.Tags.Should().NotBeNull();
         result.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
         result.UpdatedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public void ComputeDiscountedPrice_WithPercentageDiscount_ReturnsCorrectPrice()
+    {
+        var price = 100m;
+        var result = ProductMapper.ComputeDiscountedPrice(price, 20.0, "Percentage");
+        result.Should().Be(80m);
+    }
+
+    [Fact]
+    public void ComputeDiscountedPrice_WithFixedDiscount_ReturnsCorrectPrice()
+    {
+        var price = 100m;
+        var result = ProductMapper.ComputeDiscountedPrice(price, 15.0, "Fixed");
+        result.Should().Be(85m);
+    }
+
+    [Fact]
+    public void ComputeDiscountedPrice_WithCaseInsensitiveDiscountType_Works()
+    {
+        var price = 100m;
+        var result = ProductMapper.ComputeDiscountedPrice(price, 10.0, "PERCENTAGE");
+        result.Should().Be(90m);
+    }
+
+    [Fact]
+    public void ToDto_WithDiscountedPriceOverride_UsesOverride()
+    {
+        var product = TestDataFactory.CreateMenProduct();
+        var overridePrice = 49.99m;
+
+        var dto = ProductMapper.ToDto(product, overridePrice);
+
+        dto.DiscountPrice.Should().Be(overridePrice);
+    }
+
+    [Fact]
+    public void ToDto_WithNoOverride_UsesEntityDiscountPrice()
+    {
+        var product = TestDataFactory.CreateMenProduct();
+        var dto = ProductMapper.ToDto(product);
+
+        dto.DiscountPrice.Should().Be(product.DiscountPrice);
     }
 }

@@ -7,11 +7,16 @@ using AK.Discount.Infrastructure.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddSerilogLogging();
-builder.Services.AddGrpc(opts => opts.Interceptors.Add<ExceptionInterceptor>());
+builder.Services.AddGrpc(opts =>
+{
+    opts.Interceptors.Add<AuthInterceptor>();
+    opts.Interceptors.Add<ExceptionInterceptor>();
+});
 builder.Services.AddDiscountApplication();
 builder.Services.AddDiscountInfrastructure(builder.Configuration);
 builder.Services.AddDefaultHealthChecks();
 builder.Services.AddSingleton<ExceptionInterceptor>();
+builder.Services.AddSingleton<AuthInterceptor>();
 
 var app = builder.Build();
 app.MapGrpcService<DiscountService>();

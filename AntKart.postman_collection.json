@@ -50,6 +50,22 @@
       "key": "orderId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "identityUrl",
+      "value": "http://localhost:5085",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string",
+      "description": "JWT access token — set automatically by the Login request test script"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": "http://localhost:8090",
+      "type": "string"
     }
   ],
   "item": [
@@ -408,6 +424,11 @@
                   {
                     "key": "Content-Type",
                     "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
                   }
                 ],
                 "body": {
@@ -440,6 +461,11 @@
                   {
                     "key": "Content-Type",
                     "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
                   }
                 ],
                 "body": {
@@ -472,6 +498,11 @@
                   {
                     "key": "Content-Type",
                     "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
                   }
                 ],
                 "body": {
@@ -504,6 +535,11 @@
                   {
                     "key": "Content-Type",
                     "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
                   }
                 ],
                 "body": {
@@ -533,7 +569,13 @@
               "name": "DELETE Product",
               "request": {
                 "method": "DELETE",
-                "header": [],
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
                 "url": {
                   "raw": "{{productsUrl}}/api/v1/products/{{productId}}",
                   "host": [
@@ -556,6 +598,11 @@
                   {
                     "key": "Content-Type",
                     "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
                   }
                 ],
                 "body": {
@@ -589,6 +636,11 @@
                   {
                     "key": "Content-Type",
                     "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
                   }
                 ],
                 "body": {
@@ -733,7 +785,13 @@
           "name": "GET Cart",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
             "url": {
               "raw": "{{cartUrl}}/api/v1/cart/{{cartUserId}}",
               "host": [
@@ -756,6 +814,11 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
               }
             ],
             "body": {
@@ -785,6 +848,11 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
               }
             ],
             "body": {
@@ -811,7 +879,13 @@
           "name": "DELETE Remove Item from Cart",
           "request": {
             "method": "DELETE",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
             "url": {
               "raw": "{{cartUrl}}/api/v1/cart/{{cartUserId}}/items/{{cartProductId}}",
               "host": [
@@ -832,7 +906,13 @@
           "name": "DELETE Clear Cart",
           "request": {
             "method": "DELETE",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
             "url": {
               "raw": "{{cartUrl}}/api/v1/cart/{{cartUserId}}",
               "host": [
@@ -851,7 +931,13 @@
           "name": "GET ShoppingCart Health Check",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
             "url": {
               "raw": "{{cartUrl}}/health",
               "host": [
@@ -872,7 +958,13 @@
           "name": "Get All Orders",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
             "url": {
               "raw": "{{orderUrl}}/api/orders?page=1&pageSize=20",
               "host": [
@@ -899,7 +991,13 @@
           "name": "Get Orders by User",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
             "url": {
               "raw": "{{orderUrl}}/api/orders/user/user-123?page=1&pageSize=20",
               "host": [
@@ -928,7 +1026,13 @@
           "name": "Get Order by ID",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
             "url": {
               "raw": "{{orderUrl}}/api/orders/{{orderId}}",
               "host": [
@@ -950,6 +1054,11 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
               }
             ],
             "body": {
@@ -976,6 +1085,11 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
               }
             ],
             "body": {
@@ -1000,7 +1114,13 @@
           "name": "Cancel Order",
           "request": {
             "method": "DELETE",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
             "url": {
               "raw": "{{orderUrl}}/api/orders/{{orderId}}",
               "host": [
@@ -1018,11 +1138,266 @@
           "name": "Health Check",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
             "url": {
               "raw": "{{orderUrl}}/health",
               "host": [
                 "{{orderUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "AK.UserIdentity API",
+      "description": "User identity microservice — Keycloak-backed auth proxy on port 5085.\nSwagger UI: http://localhost:5085/swagger\n\nPre-seeded users:\n- admin / admin123 (roles: admin, user)\n- user1 / user123 (roles: user)\n\nThe Login request auto-saves the access token to {{accessToken}} collection variable.",
+      "item": [
+        {
+          "name": "Auth",
+          "item": [
+            {
+              "name": "POST Login (User)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    pm.collectionVariables.set('accessToken', json.accessToken);",
+                      "    console.log('Access token saved to {{accessToken}}');",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"user1\",\n  \"password\": \"user123\"\n}"
+                },
+                "url": {
+                  "raw": "{{identityUrl}}/api/auth/login",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "auth",
+                    "login"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "POST Login (Admin)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    pm.collectionVariables.set('accessToken', json.accessToken);",
+                      "    console.log('Admin access token saved to {{accessToken}}');",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+                },
+                "url": {
+                  "raw": "{{identityUrl}}/api/auth/login",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "auth",
+                    "login"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "POST Register",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"newuser\",\n  \"email\": \"newuser@example.com\",\n  \"password\": \"SecurePass1!\",\n  \"firstName\": \"New\",\n  \"lastName\": \"User\"\n}"
+                },
+                "url": {
+                  "raw": "{{identityUrl}}/api/auth/register",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "auth",
+                    "register"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "POST Refresh Token",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"refreshToken\": \"paste-refresh-token-here\"\n}"
+                },
+                "url": {
+                  "raw": "{{identityUrl}}/api/auth/refresh",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "auth",
+                    "refresh"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "GET Me (current user)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{identityUrl}}/api/auth/me",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "auth",
+                    "me"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin",
+          "item": [
+            {
+              "name": "GET All Users (Admin only)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{identityUrl}}/api/admin/users",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "users"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "POST Assign Role (Admin only)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"role\": \"admin\"\n}"
+                },
+                "url": {
+                  "raw": "{{identityUrl}}/api/admin/users/replace-with-user-id/roles",
+                  "host": [
+                    "{{identityUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "users",
+                    "replace-with-user-id",
+                    "roles"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{identityUrl}}/health",
+              "host": [
+                "{{identityUrl}}"
               ],
               "path": [
                 "health"

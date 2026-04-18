@@ -1,3 +1,4 @@
+using AK.BuildingBlocks.Authentication;
 using AK.BuildingBlocks.HealthChecks;
 using AK.BuildingBlocks.Logging;
 using AK.ShoppingCart.API.Endpoints;
@@ -11,11 +12,34 @@ builder.AddSerilogLogging();
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddKeycloakAuthentication(builder.Configuration);
 builder.Services.AddDefaultHealthChecks();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "AK.ShoppingCart API", Version = "v1", Description = "AntKart Shopping Cart Microservice — Redis-backed cart management" });
+    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header
+    });
+    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
 });
 
 var app = builder.Build();
@@ -24,6 +48,8 @@ app.UseMiddleware<ExceptionHandlerMiddleware>();
 
 app.UseSwagger();
 app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "AK.ShoppingCart API v1"));
+
+app.UseKeycloakAuth();
 
 app.MapCartEndpoints();
 app.MapDefaultHealthChecks();

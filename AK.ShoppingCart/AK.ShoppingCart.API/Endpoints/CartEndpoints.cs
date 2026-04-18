@@ -13,7 +13,8 @@ public static class CartEndpoints
     public static void MapCartEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/v1/cart")
-            .WithTags("Cart");
+            .WithTags("Cart")
+            .RequireAuthorization("authenticated");
 
         // GET /api/v1/cart/{userId}
         group.MapGet("/{userId}", async (string userId, IMediator mediator, CancellationToken ct) =>

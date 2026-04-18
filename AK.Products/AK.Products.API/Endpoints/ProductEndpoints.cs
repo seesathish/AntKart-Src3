@@ -1,4 +1,4 @@
-﻿using AK.Products.Application.Commands.BulkInsertProducts;
+using AK.Products.Application.Commands.BulkInsertProducts;
 using AK.Products.Application.Commands.BulkUpdateProducts;
 using AK.Products.Application.Commands.CreateProduct;
 using AK.Products.Application.Commands.DeleteProduct;
@@ -41,6 +41,7 @@ public static class ProductEndpoints
             var result = await mediator.Send(query, ct);
             return Results.Ok(result);
         })
+        .AllowAnonymous()
         .WithName("GetProducts")
         .WithSummary("Get all products with optional filtering and paging");
 
@@ -50,6 +51,7 @@ public static class ProductEndpoints
             var result = await mediator.Send(new GetProductByIdQuery(id), ct);
             return result is null ? Results.NotFound(new { error = $"Product '{id}' not found" }) : Results.Ok(result);
         })
+        .AllowAnonymous()
         .WithName("GetProductById")
         .WithSummary("Get a product by ID");
 
@@ -59,6 +61,7 @@ public static class ProductEndpoints
             var result = await mediator.Send(new GetProductsByCategoryQuery(category), ct);
             return Results.Ok(result);
         })
+        .AllowAnonymous()
         .WithName("GetProductsByCategory")
         .WithSummary("Get all products by category name");
 
@@ -68,8 +71,9 @@ public static class ProductEndpoints
             var result = await mediator.Send(new CreateProductCommand(dto), ct);
             return Results.Created($"/api/v1/products/{result.Id}", result);
         })
+        .RequireAuthorization("admin")
         .WithName("CreateProduct")
-        .WithSummary("Create a new product");
+        .WithSummary("Create a new product (Admin only)");
 
         // PUT /api/v1/products/{id}
         group.MapPut("/{id}", async (string id, UpdateProductDto dto, IMediator mediator, CancellationToken ct) =>
@@ -77,8 +81,9 @@ public static class ProductEndpoints
             var result = await mediator.Send(new UpdateProductCommand(id, dto), ct);
             return Results.Ok(result);
         })
+        .RequireAuthorization("admin")
         .WithName("UpdateProduct")
-        .WithSummary("Update an existing product");
+        .WithSummary("Update an existing product (Admin only)");
 
         // DELETE /api/v1/products/{id}
         group.MapDelete("/{id}", async (string id, IMediator mediator, CancellationToken ct) =>
@@ -86,8 +91,9 @@ public static class ProductEndpoints
             await mediator.Send(new DeleteProductCommand(id), ct);
             return Results.NoContent();
         })
+        .RequireAuthorization("admin")
         .WithName("DeleteProduct")
-        .WithSummary("Delete a product");
+        .WithSummary("Delete a product (Admin only)");
 
         // POST /api/v1/products/bulk-insert
         group.MapPost("/bulk-insert", async (List<CreateProductDto> products, IMediator mediator, CancellationToken ct) =>
@@ -95,8 +101,9 @@ public static class ProductEndpoints
             var count = await mediator.Send(new BulkInsertProductsCommand(products), ct);
             return Results.Ok(new { inserted = count, message = $"Successfully inserted {count} products" });
         })
+        .RequireAuthorization("admin")
         .WithName("BulkInsertProducts")
-        .WithSummary("Bulk insert multiple products");
+        .WithSummary("Bulk insert multiple products (Admin only)");
 
         // PUT /api/v1/products/bulk-update
         group.MapPut("/bulk-update", async (List<BulkUpdateProductDto> updates, IMediator mediator, CancellationToken ct) =>
@@ -104,8 +111,9 @@ public static class ProductEndpoints
             var count = await mediator.Send(new BulkUpdateProductsCommand(updates), ct);
             return Results.Ok(new { updated = count, message = $"Successfully updated {count} products" });
         })
+        .RequireAuthorization("admin")
         .WithName("BulkUpdateProducts")
-        .WithSummary("Bulk update multiple products");
+        .WithSummary("Bulk update multiple products (Admin only)");
 
         // GET /api/v1/products/men
         group.MapGet("/men", async (IMediator mediator, CancellationToken ct) =>
@@ -113,6 +121,7 @@ public static class ProductEndpoints
             var result = await mediator.Send(new GetProductsQuery(Gender: Gender.Men), ct);
             return Results.Ok(result);
         })
+        .AllowAnonymous()
         .WithName("GetMenProducts")
         .WithSummary("Get all men's products");
 
@@ -122,6 +131,7 @@ public static class ProductEndpoints
             var result = await mediator.Send(new GetProductsQuery(Gender: Gender.Women), ct);
             return Results.Ok(result);
         })
+        .AllowAnonymous()
         .WithName("GetWomenProducts")
         .WithSummary("Get all women's products");
 
@@ -131,6 +141,7 @@ public static class ProductEndpoints
             var result = await mediator.Send(new GetProductsQuery(Gender: Gender.Kids), ct);
             return Results.Ok(result);
         })
+        .AllowAnonymous()
         .WithName("GetKidsProducts")
         .WithSummary("Get all kids' products");
 
@@ -140,6 +151,7 @@ public static class ProductEndpoints
             var result = await mediator.Send(new GetProductsQuery(IsFeatured: true, PageSize: 50), ct);
             return Results.Ok(result);
         })
+        .AllowAnonymous()
         .WithName("GetFeaturedProducts")
         .WithSummary("Get all featured products");
     }

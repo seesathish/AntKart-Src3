@@ -89,12 +89,25 @@ AK.<Service>/
 - **Swagger:** `http://localhost:5080/swagger`
 - **Design doc:** [AK.Order/ORDER_TECHNICAL_DESIGN.md](AK.Order/ORDER_TECHNICAL_DESIGN.md)
 
+### ✅ AK.UserIdentity  (REST Minimal API — Keycloak Proxy)
+- **Transport:** HTTP REST, port 5085 (dev) / 8084 (Docker)
+- **Identity Provider:** Keycloak 24.0 — realm `antkart`, client `antkart-client` (confidential, service accounts enabled)
+- **Architecture:** Single API project — thin proxy, no domain layer needed
+- **Roles:** `user` (standard), `admin` (full access)
+- **Endpoints:** POST /login, POST /register, POST /refresh, GET /me, GET /admin/users, POST /admin/users/{id}/roles
+- **Auth:** JWT Bearer validated against Keycloak OIDC discovery endpoint
+- **Tests:** 15 passing (KeycloakService, KeycloakAdminService, ExceptionHandlerMiddleware — all mocked HTTP)
+- **Swagger:** `http://localhost:5085/swagger`
+- **Design doc:** [AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md](AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md)
+
 ### ✅ AK.BuildingBlocks  (Shared Library)
 - `Common/PagedResult<T>`, `Result<T>`
 - `Exceptions/NotFoundException`, `ValidationException`
 - `Logging/SerilogExtensions` — Serilog with console + rolling file
 - `HealthChecks/HealthCheckExtensions` — `/health` endpoint
 - `Middleware/CorrelationIdMiddleware` — `X-Correlation-Id` header
+- `Authentication/AuthenticationExtensions` — `AddKeycloakAuthentication()` + `UseKeycloakAuth()` shared JWT auth wiring
+- `Authentication/KeycloakSettings` — typed config record for Keycloak settings
 
 ---
 
