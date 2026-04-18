@@ -26,10 +26,9 @@ public static class AuthenticationExtensions
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
-                    ValidateAudience = true,
+                    ValidateAudience = false, // Keycloak uses azp claim, not aud, for client tokens
                     ValidateLifetime = true,
-                    ValidateIssuerSigningKey = true,
-                    RoleClaimType = "realm_access.roles"
+                    ValidateIssuerSigningKey = true
                 };
                 options.Events = new JwtBearerEvents
                 {
