@@ -37,6 +37,12 @@ services:
     ports:
       - "5080:8080"
 
+  ak-payments-api:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    ports:
+      - "5086:8080"
+
   ak-useridentity-api:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development

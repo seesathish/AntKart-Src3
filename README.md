@@ -101,7 +101,6 @@ AntKart/
 ├── docker-compose.override.yml
 ├── EVENTBUS.md           Event bus & SAGA design
 ├── RESILIENCE.md         Circuit breaker & Polly design
-├── INTEGRATION_TESTS.md  Integration test design
 ├── OBSERVABILITY.md      ELK observability design
 └── nuget.config
 ```
@@ -117,6 +116,7 @@ AntKart/
 | [AK.ShoppingCart](AK.ShoppingCart/AK.ShoppingCart.API) | REST Minimal API | Redis | 8082 | [ShoppingCart Design](AK.ShoppingCart/SHOPPING_CART_TECHNICAL_DESIGN.md) |
 | [AK.Order](AK.Order/AK.Order.API) | REST Minimal API | PostgreSQL | 8083 | [Order Design](AK.Order/ORDER_TECHNICAL_DESIGN.md) |
 | [AK.UserIdentity](AK.UserIdentity/AK.UserIdentity.API) | REST Minimal API | Keycloak | 8084 | [Identity Design](AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md) |
+| [AK.Payments](AK.Payments/AK.Payments.API) | REST Minimal API | PostgreSQL + Razorpay | 8085 | [Payments Design](AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md) |
 | [AK.Gateway](AK.Gateway/AK.Gateway.API) | Ocelot API Gateway | — | 9090 | [Gateway Design](AK.Gateway/API_GATEWAY.md) |
 
 ## Cross-Cutting
@@ -126,7 +126,7 @@ AntKart/
 | Event Bus | MassTransit + RabbitMQ + SAGA + Outbox | [EVENTBUS.md](EVENTBUS.md) |
 | Resilience | Polly v8 (retry, circuit breaker, timeout) | [RESILIENCE.md](RESILIENCE.md) |
 | Observability | Serilog + Elasticsearch + Kibana | [OBSERVABILITY.md](OBSERVABILITY.md) |
-| Integration Tests | MassTransit in-memory test harness | [INTEGRATION_TESTS.md](INTEGRATION_TESTS.md) |
+| Integration Tests | MassTransit in-memory test harness | [INTEGRATION_TESTS.md](AK.IntegrationTests/INTEGRATION_TESTS.md) |
 
 ---
 
@@ -266,5 +266,6 @@ dotnet test
 | AK.ShoppingCart.Tests | 88 |
 | AK.Order.Tests | 106 |
 | AK.UserIdentity.Tests | 15 |
-| AK.IntegrationTests | 10 |
-| **Total** | **462** |
+| AK.IntegrationTests | 28 |
+| AK.Payments.Tests | 28 |
+| **Total** | **508** |

@@ -45,6 +45,8 @@ public static class ServiceCollectionExtensions
 
             cfg.AddConsumer<OrderConfirmedConsumer>();
             cfg.AddConsumer<OrderCancelledConsumer>();
+            cfg.AddConsumer<PaymentSucceededConsumer>();
+            cfg.AddConsumer<PaymentFailedConsumer>();
         });
 
         return services;

@@ -36,4 +36,38 @@ public static class IntegrationTestData
         Guid orderId,
         string reason = "Insufficient stock")
         => new(orderId, reason);
+
+    public static PaymentInitiatedIntegrationEvent CreatePaymentInitiatedEvent(
+        Guid? paymentId = null,
+        Guid? orderId = null,
+        string? userId = null,
+        decimal amount = 999.00m)
+        => new(
+            paymentId ?? Guid.NewGuid(),
+            orderId ?? Guid.NewGuid(),
+            userId ?? TestUserId,
+            amount,
+            "INR",
+            "order_test_" + Guid.NewGuid().ToString("N")[..8]);
+
+    public static PaymentSucceededIntegrationEvent CreatePaymentSucceededEvent(
+        Guid? paymentId = null,
+        Guid? orderId = null,
+        string? userId = null)
+        => new(
+            paymentId ?? Guid.NewGuid(),
+            orderId ?? Guid.NewGuid(),
+            userId ?? TestUserId,
+            "pay_test_" + Guid.NewGuid().ToString("N")[..8]);
+
+    public static PaymentFailedIntegrationEvent CreatePaymentFailedEvent(
+        Guid? paymentId = null,
+        Guid? orderId = null,
+        string reason = "Signature verification failed.",
+        string? userId = null)
+        => new(
+            paymentId ?? Guid.NewGuid(),
+            orderId ?? Guid.NewGuid(),
+            userId ?? TestUserId,
+            reason);
 }

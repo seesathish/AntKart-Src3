@@ -20,6 +20,7 @@ AntKart/
 ├── AK.Order/             REST Minimal API — order management (PostgreSQL + SAGA)
 ├── AK.UserIdentity/      REST Minimal API — Keycloak identity proxy
 ├── AK.Gateway/           API Gateway — Ocelot single entry point
+├── AK.Payments/          REST Minimal API — payment processing (PostgreSQL + Razorpay)
 ├── AK.BuildingBlocks/    Shared cross-cutting library (no business logic)
 ├── AK.IntegrationTests/  SAGA + event bus tests (no API/Grpc dependency)
 ├── AntKart.sln
@@ -28,7 +29,6 @@ AntKart/
 ├── docker-compose.override.yml
 ├── EVENTBUS.md           Event bus & SAGA design
 ├── RESILIENCE.md         Polly circuit breaker design
-├── INTEGRATION_TESTS.md  Integration test design
 ├── OBSERVABILITY.md      ELK observability design
 ├── nuget.config
 └── CLAUDE.md             ← this file
@@ -129,8 +129,21 @@ AK.<Service>/
 
 ### ✅ AK.IntegrationTests  (Event Bus Tests)
 - **Framework:** MassTransit in-memory test harness (no RabbitMQ, no DB, no host)
-- **Tests:** 10 passing — 3 happy path, 3 sad path, 4 event bus flow
-- **Design doc:** [INTEGRATION_TESTS.md](INTEGRATION_TESTS.md)
+- **Tests:** 28 passing — 6 order saga, 4 order event bus, 7 payment event bus, 5 payment happy-path, 6 payment sad-path
+- **Design doc:** [AK.IntegrationTests/INTEGRATION_TESTS.md](AK.IntegrationTests/INTEGRATION_TESTS.md)
+
+### ✅ AK.Payments  (REST Minimal API)
+- **Transport:** HTTP REST, port 5086 (dev) / 8085 (Docker)
+- **Database:** PostgreSQL — `AKPaymentsDb` via EF Core 9 + Npgsql, code-first migrations
+- **External:** Razorpay sandbox (test cards: 4111 1111 1111 1111 Visa, 5267 3169 4984 2643 Mastercard; OTP: 1234 1234)
+- **Architecture:** DDD + Clean Architecture
+- **Patterns:** CQRS (MediatR 12.4.1), FluentValidation pipeline, Repository, Unit of Work, EF Core Outbox
+- **Operations:** Initiate payment, verify signature, saved cards CRUD, user payment history
+- **Saved cards:** PCI-compliant — Razorpay token IDs only, never raw card numbers
+- **Integration events:** Publishes `PaymentInitiatedIntegrationEvent`, `PaymentSucceededIntegrationEvent`, `PaymentFailedIntegrationEvent`; AK.Order consumes succeeded/failed to update order status
+- **Tests:** 28 passing (domain, commands, validators)
+- **Swagger:** `http://localhost:5086/swagger`
+- **Design doc:** [AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md](AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md)
 
 ---
 
@@ -245,6 +258,7 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | Microsoft.Extensions.Http.Resilience | 9.0.0 | BuildingBlocks, Products Infrastructure |
 | Microsoft.Extensions.Resilience | 9.0.0 | BuildingBlocks, Order/ShoppingCart Infrastructure |
 | Ocelot | 23.4.2 | Gateway API |
+| Razorpay | 3.1.0 | Payments Infrastructure |
 | xunit | 2.9.x | Tests |
 | Moq | 4.20.x | Tests |
 | FluentAssertions | 7.x | Tests |

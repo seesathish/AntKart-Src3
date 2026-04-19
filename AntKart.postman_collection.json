@@ -66,6 +66,46 @@
       "key": "keycloakUrl",
       "value": "http://localhost:8090",
       "type": "string"
+    },
+    {
+      "key": "paymentsUrl",
+      "value": "http://localhost:5086",
+      "type": "string"
+    },
+    {
+      "key": "paymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "razorpayOrderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "razorpayPaymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "razorpaySignature",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "razorpayCustomerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cardId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "user1",
+      "type": "string"
     }
   ],
   "item": [
@@ -1401,6 +1441,231 @@
               ],
               "path": [
                 "health"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "AK.Payments API",
+      "item": [
+        {
+          "name": "Initiate Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"userId\": \"{{userId}}\",\n  \"amount\": 999,\n  \"method\": 1\n}"
+            },
+            "url": {
+              "raw": "{{paymentsUrl}}/api/payments/initiate",
+              "host": [
+                "{{paymentsUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "initiate"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Verify Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentId\": \"{{paymentId}}\",\n  \"razorpayOrderId\": \"{{razorpayOrderId}}\",\n  \"razorpayPaymentId\": \"{{razorpayPaymentId}}\",\n  \"razorpaySignature\": \"{{razorpaySignature}}\"\n}"
+            },
+            "url": {
+              "raw": "{{paymentsUrl}}/api/payments/verify",
+              "host": [
+                "{{paymentsUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "verify"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Payment by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentsUrl}}/api/payments/{{paymentId}}",
+              "host": [
+                "{{paymentsUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "{{paymentId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Payment by Order",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentsUrl}}/api/payments/order/{{orderId}}",
+              "host": [
+                "{{paymentsUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "order",
+                "{{orderId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get User Payments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentsUrl}}/api/payments/user/{{userId}}",
+              "host": [
+                "{{paymentsUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "user",
+                "{{userId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Save Card",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"razorpayCustomerId\": \"{{razorpayCustomerId}}\",\n  \"razorpayPaymentId\": \"{{razorpayPaymentId}}\",\n  \"customerName\": \"Test User\",\n  \"customerEmail\": \"user1@example.com\",\n  \"customerContact\": \"+911234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{paymentsUrl}}/api/payments/cards/save",
+              "host": [
+                "{{paymentsUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "cards",
+                "save"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Saved Cards",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentsUrl}}/api/payments/cards/user/{{userId}}",
+              "host": [
+                "{{paymentsUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "cards",
+                "user",
+                "{{userId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Saved Card",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentsUrl}}/api/payments/cards/{{cardId}}?userId={{userId}}",
+              "host": [
+                "{{paymentsUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "cards",
+                "{{cardId}}"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{userId}}"
+                }
               ]
             }
           }

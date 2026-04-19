@@ -165,6 +165,38 @@ services:
       - rabbitmq
       - elasticsearch
 
+  ak-payments-api:
+    image: ak-payments-api
+    build:
+      context: .
+      dockerfile: AK.Payments/AK.Payments.API/Dockerfile
+    container_name: ak-payments-api
+    restart: unless-stopped
+    ports:
+      - "8085:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__PaymentsDb: "Host=postgres;Port=5432;Database=AKPaymentsDb;Username=postgres;Password=postgres"
+      Razorpay__KeyId: "rzp_test_SfDi8y9YJGd7DF"
+      Razorpay__KeySecret: "iJiuTafS42VfKLES4gOvPjLV"
+      Keycloak__Authority: "http://keycloak:8080/realms/antkart"
+      Keycloak__Audience: "antkart-client"
+      Keycloak__RequireHttpsMetadata: "false"
+      Keycloak__AdminUrl: "http://keycloak:8080"
+      Keycloak__Realm: "antkart"
+      Keycloak__ClientId: "antkart-client"
+      Keycloak__ClientSecret: "antkart-secret"
+      RabbitMq__Host: "rabbitmq"
+      RabbitMq__VirtualHost: "/"
+      RabbitMq__Username: "guest"
+      RabbitMq__Password: "guest"
+      Elasticsearch__Url: "http://elasticsearch:9200"
+    depends_on:
+      - postgres
+      - keycloak
+      - rabbitmq
+      - elasticsearch
+
   ak-useridentity-api:
     image: ak-useridentity-api
     build:
@@ -265,6 +297,7 @@ services:
       - ak-shoppingcart-api
       - ak-order-api
       - ak-useridentity-api
+      - ak-payments-api
 
 volumes:
   mongodb_data:
