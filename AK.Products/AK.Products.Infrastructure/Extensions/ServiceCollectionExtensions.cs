@@ -15,6 +15,7 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        ProductClassMap.Register();
         services.Configure<MongoDbSettings>(configuration.GetSection("MongoDbSettings"));
         services.AddSingleton<MongoDbContext>();
         services.AddScoped<IProductRepository, ProductRepository>();

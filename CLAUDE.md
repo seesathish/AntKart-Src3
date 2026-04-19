@@ -53,9 +53,11 @@ AK.<Service>/
 ### ✅ AK.Products  (REST Minimal API)
 - **Transport:** HTTP REST, port 5077 (dev) / 8080 (Docker)
 - **Database:** MongoDB — `AKProductsDb` / `Products` collection
-- **Architecture:** DDD + Clean Architecture
+- **Architecture:** DDD + Clean Architecture — `MongoDB.Driver` confined to Infrastructure only; Domain has zero infrastructure dependencies
 - **Patterns:** CQRS (MediatR 12.4.1), FluentValidation pipeline, Specification, Unit of Work
 - **Category design:** Data-driven — `CategoryName` (top-level: Men/Women/Kids/Sports/etc.) + `SubCategoryName` (specific: Shirts/Dresses/etc.) are plain strings; no hardcoded enum. Adding a new category is a data change only.
+- **ID format:** `Guid.NewGuid().ToString("N")` — 32-char hex string, pure .NET, stored as BSON string
+- **MongoDB mapping:** `ProductClassMap` (Infrastructure) registers `BsonClassMap` — handles `SetIgnoreExtraElements` and unmaps `DomainEvents`; called before `MongoDbContext` is registered
 - **Seed data:** 300 products driven by `CategoryDefinition` record array — 10 sub-categories × 10 products per top-level category. Currently seeded: Men, Women, Kids.
 - **SKU format:** `{CAT_ABBREV}-{SUBCAT_ABBREV}-{001..NNN}` e.g. `MEN-SHIR-001`, `WOM-DRES-001`
 - **New endpoint:** `GET /api/v1/products/categories` — returns distinct top-level category names from DB
@@ -194,7 +196,7 @@ Tests         ← Application, Infrastructure, Domain (no API/Grpc)
 ### Entities / Domain
 - Domain entities: private setters, factory method `Create(...)`, no EF Core attributes
 - EF Core config (Infrastructure): fluent API in `OnModelCreating`, never data annotations on domain entities
-- MongoDB entities: `[BsonIgnore]` on domain events, ObjectId as string `Id`
+- MongoDB entities: no Bson attributes on domain entities — register `BsonClassMap` in Infrastructure instead; use `Guid.NewGuid().ToString("N")` for IDs
 - No cross-service entity references — denormalise (copy) fields needed from other services
 
 ### DTOs

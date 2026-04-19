@@ -2,11 +2,9 @@ using AK.Products.Domain.Common;
 using AK.Products.Domain.Enums;
 using AK.Products.Domain.Events;
 using AK.Products.Domain.ValueObjects;
-using MongoDB.Bson.Serialization.Attributes;
 
 namespace AK.Products.Domain.Entities;
 
-[BsonIgnoreExtraElements]
 public sealed class Product : BaseEntity, IAggregateRoot
 {
     public string Name { get; private set; } = string.Empty;
@@ -29,10 +27,7 @@ public sealed class Product : BaseEntity, IAggregateRoot
     public int ReviewCount { get; private set; }
     public List<string> Tags { get; private set; } = new();
 
-    [BsonIgnore]
     private readonly List<IDomainEvent> _domainEvents = new();
-
-    [BsonIgnore]
     public IReadOnlyCollection<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
     private Product() { }

@@ -114,7 +114,7 @@ graph TB
     API["AK.Products.API\nMinimal API Endpoints · 12 routes\nExceptionHandler · Swagger · :5077"]:::api
     APP["AK.Products.Application\nCommands: CreateProduct · UpdateProduct · DeleteProduct\nBulkInsertProducts · BulkUpdateProducts\nQueries: GetProductById · GetProducts · GetProductsByCategory\nValidationBehavior · FluentValidation Validators"]:::app
     DOMAIN["AK.Products.Domain\nProduct Aggregate Root\nValue Objects · Enums · Events\nSpecifications"]:::domain
-    INFRA["AK.Products.Infrastructure\nMongoDbContext (indexes on startup)\nProductRepository · UnitOfWork\nProductSeeder (300 records)"]:::infra
+    INFRA["AK.Products.Infrastructure\nProductClassMap (BsonClassMap registration)\nMongoDbContext (indexes on startup)\nProductRepository · UnitOfWork\nProductSeeder (300 records)"]:::infra
     DB[("MongoDB\nAKProductsDb\nCollection: products")]:::db
 
     GW -->|"HTTP/REST"| API
@@ -140,8 +140,6 @@ graph LR
 
 > Infrastructure depends on Application (through interfaces), never the reverse — Dependency Inversion Principle.
 
-> Infrastructure depends on Application (through interfaces), never the reverse — Dependency Inversion Principle.
-
 ---
 
 ## 5. Solution Structure
@@ -155,15 +153,13 @@ AK.Products/
 │   ├── AK.Products.Domain/
 │   │   └── AK.Products.Domain/
 │   │       ├── Common/
-│   │       │   ├── BaseEntity.cs          # MongoDB Id, CreatedAt, UpdatedAt
+│   │       │   ├── BaseEntity.cs          # GUID Id, CreatedAt, UpdatedAt (no infrastructure deps)
 │   │       │   ├── IAggregateRoot.cs      # Marker interface
 │   │       │   └── IDomainEvent.cs        # : INotification (MediatR)
 │   │       ├── Entities/
 │   │       │   └── Product.cs             # Aggregate root
 │   │       ├── Enums/
-│   │       │   ├── Gender.cs
-│   │       │   ├── ProductStatus.cs
-│   │       │   └── AgeGroup.cs
+│   │       │   └── ProductStatus.cs
 │   │       ├── Events/
 │   │       │   ├── ProductCreatedEvent.cs
 │   │       │   ├── ProductUpdatedEvent.cs
@@ -172,10 +168,7 @@ AK.Products/
 │   │       │   ├── ISpecification.cs
 │   │       │   └── BaseSpecification.cs
 │   │       └── ValueObjects/
-│   │           ├── Money.cs
-│   │           ├── ProductCategory.cs
-│   │           ├── ProductImage.cs
-│   │           └── ProductDimensions.cs
+│   │           └── Money.cs
 │   │
 │   ├── AK.Products.Application/
 │   │   └── AK.Products.Application/
@@ -213,6 +206,7 @@ AK.Products/
 │   │       ├── Extensions/
 │   │       │   └── ServiceCollectionExtensions.cs
 │   │       ├── Persistence/
+│   │       │   ├── ProductClassMap.cs     # BsonClassMap registration (Infrastructure only)
 │   │       │   ├── MongoDbContext.cs      # Index creation on startup
 │   │       │   ├── MongoDbSettings.cs
 │   │       │   ├── UnitOfWork.cs
@@ -271,13 +265,13 @@ classDiagram
     class Product {
         +string Id
         +DateTime CreatedAt
-        +DateTime UpdatedAt
+        +DateTime? UpdatedAt
         +string Name
         +string SKU
         +string Brand
         +string Description
-        +Gender Gender
         +string CategoryName
+        +string? SubCategoryName
         +decimal Price
         +string Currency
         +decimal? DiscountPrice
@@ -289,7 +283,7 @@ classDiagram
         +List~string~ ImageUrls
         +List~string~ Sizes
         +List~string~ Colors
-        +string Material
+        +string? Material
         +List~string~ Tags
         +Create(...)$ Product
         +Update(...) void
@@ -302,27 +296,7 @@ classDiagram
         +string Currency
     }
 
-    class ProductCategory {
-        +string Name
-        +string SubCategory
-    }
-
-    class ProductImage {
-        +string Url
-        +string AltText
-        +bool IsPrimary
-    }
-
-    class ProductDimensions {
-        +double Weight
-        +string Size
-        +string SizeChart
-    }
-
-    Product --> Money : Price
-    Product --> ProductCategory : Category
-    Product --> ProductImage : ImageUrls
-    Product --> ProductDimensions : Dimensions
+    Product --> Money : GetPrice() / GetDiscountPrice()
 ```
 
 **Key invariants enforced by domain methods:**
@@ -335,10 +309,7 @@ classDiagram
 
 | Value Object | Purpose | Equality |
 |---|---|---|
-| `Money` | Typed price with currency | Amount + Currency |
-| `ProductCategory` | Category + SubCategory pair with 15 pre-built statics | Name + SubCategory |
-| `ProductImage` | URL, alt text, primary flag | Value-based |
-| `ProductDimensions` | Weight, size, size chart | Value-based |
+| `Money` | Typed price with currency — returned by `GetPrice()` and `GetDiscountPrice()` | Amount + Currency |
 
 ### 6.3 Domain Events
 
@@ -354,9 +325,7 @@ Events implement `IDomainEvent : INotification` — compatible with MediatR's `I
 
 | Enum | Values |
 |---|---|
-| `Gender` | Men=1, Women=2, Kids=3, Unisex=4 |
 | `ProductStatus` | Active=1, Inactive=2, OutOfStock=3, Discontinued=4 |
-| `AgeGroup` | Infant=1, Toddler=2, Child=3, Teen=4, Adult=5 |
 
 ---
 
@@ -377,8 +346,9 @@ Events implement `IDomainEvent : INotification` — compatible with MediatR's `I
 | Query | Input | Output | Description |
 |---|---|---|---|
 | `GetProductByIdQuery` | `string id` | `ProductDto?` | Returns null if not found |
-| `GetProductsQuery` | page, pageSize, gender, category, search, featured | `PagedResult<ProductDto>` | Filtered + paged listing |
+| `GetProductsQuery` | page, pageSize, category, subCategory, search, featured | `PagedResult<ProductDto>` | Filtered + paged listing |
 | `GetProductsByCategoryQuery` | `string category` | `IReadOnlyList<ProductDto>` | All products in a category |
+| `GetProductCategoriesQuery` | — | `IReadOnlyList<string>` | Distinct top-level category names from MongoDB |
 
 ### 7.3 MediatR Pipeline
 
@@ -421,13 +391,12 @@ sequenceDiagram
 - CategoryName: NotEmpty, MaxLength(100)
 - Sizes: NotEmpty
 - Colors: NotEmpty
-- Gender: IsInEnum
 
 ### 7.5 DTOs
 
 ```csharp
 // Read model
-record ProductDto(Id, Name, Description, SKU, Brand, Gender, Status,
+record ProductDto(Id, Name, Description, SKU, Brand, Status,
     CategoryName, SubCategoryName, Price, Currency, DiscountPrice,
     StockQuantity, Sizes, Colors, ImageUrls, Material, IsFeatured,
     Rating, ReviewCount, Tags, CreatedAt, UpdatedAt);
@@ -448,7 +417,6 @@ record PagedResult<T>(Items, TotalCount, Page, PageSize)
 | Index Name | Field(s) | Type |
 |---|---|---|
 | `sku_unique` | SKU | Unique ascending |
-| `idx_gender` | Gender | Ascending |
 | `idx_category` | CategoryName | Ascending |
 | `idx_status` | Status | Ascending |
 | `text_search` | Name, Brand, Description | Full-text |
@@ -461,8 +429,8 @@ Implements `IProductRepository` using `MongoDB.Driver` directly:
 |---|---|
 | `GetByIdAsync` | `Find(p => p.Id == id).FirstOrDefaultAsync` |
 | `GetAllAsync` | `Find(_ => true).ToListAsync` |
-| `GetByGenderAsync` | `Find(p => p.Gender == gender).ToListAsync` |
 | `GetByCategoryAsync` | `Find(p => p.CategoryName == cat).ToListAsync` |
+| `GetDistinctCategoriesAsync` | `DistinctAsync<string>("CategoryName", ...)` |
 | `ListAsync(spec)` | Filter from `spec.Criteria` + OrderBy + Paging |
 | `CountAsync(spec)` | `CountDocumentsAsync` with filter |
 | `AddAsync` | `InsertOneAsync` |
@@ -499,28 +467,26 @@ All endpoints are grouped under `/api/v1/products` with OpenAPI metadata.
 
 | Method | Route | Handler | Description |
 |---|---|---|---|
-| GET | `/api/v1/products` | `GetProductsQuery` | Paged list with optional filters |
+| GET | `/api/v1/products` | `GetProductsQuery` | Paged list — optional `?category=`, `?subCategory=`, `?search=`, `?featured=` |
 | GET | `/api/v1/products/{id}` | `GetProductByIdQuery` | Single product |
-| GET | `/api/v1/products/category/{category}` | `GetProductsByCategoryQuery` | By category |
-| GET | `/api/v1/products/men` | `GetProductsQuery(Gender.Men)` | Men's collection |
-| GET | `/api/v1/products/women` | `GetProductsQuery(Gender.Women)` | Women's collection |
-| GET | `/api/v1/products/kids` | `GetProductsQuery(Gender.Kids)` | Kids' collection |
+| GET | `/api/v1/products/categories` | `GetProductCategoriesQuery` | Distinct top-level category names |
+| GET | `/api/v1/products/category/{category}` | `GetProductsByCategoryQuery` | All products in a category (unpaged) |
 | GET | `/api/v1/products/featured` | `GetProductsQuery(IsFeatured=true)` | Featured products |
-| POST | `/api/v1/products` | `CreateProductCommand` | Create product → 201 |
-| PUT | `/api/v1/products/{id}` | `UpdateProductCommand` | Update product → 200 |
-| DELETE | `/api/v1/products/{id}` | `DeleteProductCommand` | Delete → 204 |
-| POST | `/api/v1/products/bulk-insert` | `BulkInsertProductsCommand` | Bulk insert |
-| PUT | `/api/v1/products/bulk-update` | `BulkUpdateProductsCommand` | Bulk update |
+| POST | `/api/v1/products` | `CreateProductCommand` | Create product → 201 (admin only) |
+| PUT | `/api/v1/products/{id}` | `UpdateProductCommand` | Update product → 200 (admin only) |
+| DELETE | `/api/v1/products/{id}` | `DeleteProductCommand` | Delete → 204 (admin only) |
+| POST | `/api/v1/products/bulk-insert` | `BulkInsertProductsCommand` | Bulk insert (admin only) |
+| PUT | `/api/v1/products/bulk-update` | `BulkUpdateProductsCommand` | Bulk update (admin only) |
 
 ### 9.2 Query Parameters (GET /api/v1/products)
 
 | Parameter | Type | Description |
 |---|---|---|
-| page | int | Page number (default: 1) |
-| pageSize | int | Items per page (default: 20) |
-| gender | int? | 1=Men, 2=Women, 3=Kids |
-| category | string? | Category name filter |
-| search | string? | Keyword search (name/brand/description) |
+| page | int? | Page number (default: 1) |
+| pageSize | int? | Items per page (default: 20) |
+| category | string? | Top-level category filter (e.g. `Men`, `Women`, `Sports`) |
+| subCategory | string? | Sub-category filter (e.g. `Shirts`, `Dresses`) |
+| search | string? | Keyword search (name / SKU) |
 | featured | bool? | Filter featured products |
 
 ### 9.3 Error Response Format
@@ -547,15 +513,14 @@ All endpoints are grouped under `/api/v1/products` with OpenAPI metadata.
 
 ```json
 {
-  "_id": "ObjectId",
+  "_id": "56e8f1aff4004a45b2bbf4b391123296",
   "Name": "string",
   "Description": "string",
   "SKU": "string",
   "Brand": "string",
-  "Gender": 1,
   "Status": 1,
-  "CategoryName": "string",
-  "SubCategoryName": "string | null",
+  "CategoryName": "Men",
+  "SubCategoryName": "Shirts",
   "Price": 999.99,
   "Currency": "USD",
   "DiscountPrice": 799.99,
@@ -652,11 +617,13 @@ This decouples handlers from direct MongoDB driver calls and allows future trans
 
 `ProductSeeder` generates **300 deterministic** sample products using a seeded `Random(42)` instance:
 
-| Gender | Count | Categories (10 each) | Price Range |
+| CategoryName | Count | Sub-categories (10 each) | Price Range |
 |---|---|---|---|
 | Men | 100 | Shirts, Pants, Jackets, Suits, Casual Wear, T-Shirts, Jeans, Shorts, Blazers, Ethnic Wear | $499–$4,999 |
 | Women | 100 | Dresses, Tops, Skirts, Blouses, Jackets, Kurtis, Sarees, Lehenga, Jumpsuits, Ethnic Fusion | $599–$5,599 |
 | Kids | 100 | T-Shirts, Pants, Dresses, Jumpsuits, School Wear, Party Wear, Ethnic Wear, Nightwear, Jackets, Shorts | $199–$1,699 |
+
+Adding a new category (e.g. Sports, Formal) is a data change only — add a new `CategoryDefinition` record to the seeder array; zero code changes required.
 
 **10 brands per gender**, **5 product name templates per category**, randomised colors (1–3), sizes (2–4), materials, and ~20% featured / ~35–40% discounted.
 
@@ -671,13 +638,12 @@ Seeding is idempotent: if `count >= 300`, the seeder does nothing.
 #### Read Endpoints
 
 ```
-GET  /api/v1/products?page=1&pageSize=20
-GET  /api/v1/products?gender=1&search=shirt&featured=true
+GET  /api/v1/products                                  (default page=1, pageSize=20)
+GET  /api/v1/products?category=Men&subCategory=Shirts
+GET  /api/v1/products?search=shirt&featured=true
 GET  /api/v1/products/{id}
+GET  /api/v1/products/categories
 GET  /api/v1/products/category/{category}
-GET  /api/v1/products/men
-GET  /api/v1/products/women
-GET  /api/v1/products/kids
 GET  /api/v1/products/featured
 ```
 
@@ -716,16 +682,20 @@ graph TB
 | Test Class | Tests | What is covered |
 |---|---|---|
 | `ProductTests` | 15 | All `Product` domain methods including edge cases |
-| `MoneyTests` | 10 | All `Money` value object operations and equality |
-| `CreateProductCommandHandlerTests` | 2 | Happy path + duplicate SKU |
-| `UpdateProductCommandHandlerTests` | 2 | Happy path + not found |
+| `MoneyTests` | 10 | `Money` value object operations and equality |
+| `SpecificationTests` | 17 | All concrete specifications |
+| `ProductDtoMappingTests` | 8 | Domain → DTO mapping |
+| `CreateProductCommandHandlerTests` | 4 | Happy path, duplicate SKU, validation |
+| `UpdateProductCommandHandlerTests` | 3 | Happy path, not found, invalid |
 | `DeleteProductCommandHandlerTests` | 2 | Happy path + not found |
-| `BulkInsertProductsCommandHandlerTests` | 2 | Multiple items + empty list |
-| `GetProductByIdQueryHandlerTests` | 2 | Found + not found |
-| `GetProductsQueryHandlerTests` | 4 | No filter, gender filter, search, paging |
-| `CreateProductValidatorTests` | 5 | Valid + 4 invalid rule scenarios |
+| `BulkInsertProductsCommandHandlerTests` | 4 | Multiple items, empty list, duplicate SKU |
+| `GetProductByIdQueryHandlerTests` | 3 | Found, not found, discount enrichment |
+| `GetProductsQueryHandlerTests` | 8 | No filter, category, subCategory, search, paging, discount |
+| `GetProductsByCategoryQueryHandlerTests` | 5 | Category match, empty, mapping, discount, parameterised |
+| `CreateProductValidatorTests` | 17 | All validation rules |
+| `UpdateProductValidatorTests` | 6 | All update rules |
 
-**Total: ~44 test cases**
+**Total: 190 tests**
 
 ### Test Tooling
 
@@ -800,3 +770,5 @@ dotnet test --verbosity normal
 | **Seeded Random(42)** | Deterministic 300-record dataset for repeatable testing | Not production-random; same data every seed |
 | **Domain events in-memory only** | Raises events during create/update for future pub/sub wiring | Events are not published to message bus in current scope |
 | **ValidationBehavior in pipeline** | Validation happens before handler — clean separation | All validators run even for simple queries |
+| **BsonClassMap in Infrastructure, not Domain** | Domain has zero infrastructure dependencies — `MongoDB.Driver` removed from Domain project; `ProductClassMap` in Infrastructure registers serialization rules (`SetIgnoreExtraElements`, `UnmapProperty(DomainEvents)`) | BsonClassMap must be registered before `MongoClient` is constructed; done in `AddInfrastructure()` |
+| **GUID IDs (`Guid.NewGuid().ToString("N")`)** | Pure .NET ID generation with no MongoDB library dependency in Domain; IDs stored as BSON strings | IDs are 32-char hex strings instead of 24-char ObjectId hex strings; seeder data must be reseeded on first deploy |

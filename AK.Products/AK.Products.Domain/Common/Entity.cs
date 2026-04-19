@@ -2,7 +2,7 @@
 
 public abstract class Entity
 {
-    public string Id { get; protected set; } = MongoDB.Bson.ObjectId.GenerateNewId().ToString();
+    public string Id { get; protected set; } = Guid.NewGuid().ToString("N");
     public DateTime CreatedAt { get; protected set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; protected set; } = DateTime.UtcNow;
 
