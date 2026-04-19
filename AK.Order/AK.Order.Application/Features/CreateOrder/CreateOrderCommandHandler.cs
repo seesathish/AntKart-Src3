@@ -25,8 +25,6 @@ public sealed class CreateOrderCommandHandler(IUnitOfWork uow, IPublishEndpoint 
 
         var order = OrderEntity.Create(request.UserId, shippingAddress, items, request.Order.Notes);
         await uow.Orders.AddAsync(order, ct);
-        await uow.SaveChangesAsync(ct);
-        order.ClearDomainEvents();
 
         var integrationEvent = new OrderCreatedIntegrationEvent(
             order.Id,
@@ -35,6 +33,8 @@ public sealed class CreateOrderCommandHandler(IUnitOfWork uow, IPublishEndpoint 
             order.TotalAmount);
 
         await publisher.Publish(integrationEvent, ct);
+        await uow.SaveChangesAsync(ct);
+        order.ClearDomainEvents();
 
         return OrderMapper.ToDto(order);
     }

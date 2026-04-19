@@ -250,6 +250,7 @@ services:
       - "9090:8000"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_HTTP_PORTS=8000
       - Keycloak__Authority=http://keycloak:8080/realms/antkart
       - Keycloak__Audience=antkart-client
       - Keycloak__RequireHttpsMetadata=false
