@@ -6,6 +6,7 @@ using MongoDB.Bson.Serialization.Attributes;
 
 namespace AK.Products.Domain.Entities;
 
+[BsonIgnoreExtraElements]
 public sealed class Product : BaseEntity, IAggregateRoot
 {
     public string Name { get; private set; } = string.Empty;

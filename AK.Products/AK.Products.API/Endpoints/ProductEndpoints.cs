@@ -22,18 +22,18 @@ public static class ProductEndpoints
 
         // GET /api/v1/products
         group.MapGet("/", async (
-            [FromQuery] int page,
-            [FromQuery] int pageSize,
-            [FromQuery] string? category,
-            [FromQuery] string? subCategory,
-            [FromQuery] string? search,
-            [FromQuery] bool? featured,
             IMediator mediator,
-            CancellationToken ct) =>
+            CancellationToken ct,
+            [FromQuery] int? page = null,
+            [FromQuery] int? pageSize = null,
+            [FromQuery] string? category = null,
+            [FromQuery] string? subCategory = null,
+            [FromQuery] string? search = null,
+            [FromQuery] bool? featured = null) =>
         {
             var query = new GetProductsQuery(
-                Page: page > 0 ? page : 1,
-                PageSize: pageSize > 0 ? pageSize : 20,
+                Page: (page ?? 1) > 0 ? (page ?? 1) : 1,
+                PageSize: (pageSize ?? 20) > 0 ? (pageSize ?? 20) : 20,
                 Category: category,
                 SubCategory: subCategory,
                 SearchTerm: search,

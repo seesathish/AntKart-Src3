@@ -90,25 +90,45 @@ fi
 DISC_PRICE=$(echo "$PROD_DETAIL" | grep -o '"discountPrice":[^,}]*')
 echo "  Discount field: $DISC_PRICE"
 
-CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/api/v1/products/category/shirts?page=1&pageSize=5")
-check "GET /products/category/shirts (anon)" $CODE 200
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/api/v1/products/categories")
+check "GET /products/categories (anon)" $CODE 200
+
+CATS=$(curl -s "http://localhost:8080/api/v1/products/categories")
+echo "  Available categories: $CATS"
+
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/api/v1/products?category=Men&pageSize=5")
+check "GET /products?category=Men (anon)" $CODE 200
+
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/api/v1/products?category=Women&pageSize=5")
+check "GET /products?category=Women (anon)" $CODE 200
+
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/api/v1/products?category=Men&subCategory=Shirts&pageSize=5")
+check "GET /products?category=Men&subCategory=Shirts (anon)" $CODE 200
+
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/api/v1/products/category/Men?pageSize=5")
+check "GET /products/category/Men (anon)" $CODE 200
 
 NEWPROD=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8080/api/v1/products \
   -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
-  -d "{\"name\":\"Test Shirt CI\",\"description\":\"Automated test\",\"sku\":\"TST-CI-$TS\",\"brand\":\"TestBrand\",\"gender\":1,\"categoryName\":\"Shirts\",\"price\":29.99,\"currency\":\"USD\",\"stockQuantity\":10,\"sizes\":[\"M\"],\"colors\":[\"Blue\"]}")
+  -d "{\"name\":\"Test Shirt CI\",\"description\":\"Automated test\",\"sku\":\"TST-CI-$TS\",\"brand\":\"TestBrand\",\"categoryName\":\"Sports\",\"subCategoryName\":\"Jerseys\",\"price\":29.99,\"currency\":\"USD\",\"stockQuantity\":10,\"sizes\":[\"M\"],\"colors\":[\"Blue\"]}")
 NEW_CODE=$(echo "$NEWPROD" | tail -1)
 NEW_ID=$(echo "$NEWPROD" | head -1 | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-check "POST /products (admin)" $NEW_CODE 201
+check "POST /products (admin, new category Sports)" $NEW_CODE 201
 echo "  Created ID: $NEW_ID"
+
+if [ -n "$NEW_ID" ]; then
+  CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/api/v1/products?category=Sports")
+  check "GET /products?category=Sports (new data-driven category visible)" $CODE 200
+fi
 
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/api/v1/products \
   -H "Content-Type: application/json" \
-  -d "{\"name\":\"Anon\",\"description\":\"x\",\"sku\":\"TST-AN-$TS\",\"brand\":\"X\",\"gender\":1,\"categoryName\":\"Shirts\",\"price\":9.99,\"currency\":\"USD\",\"stockQuantity\":1,\"sizes\":[],\"colors\":[]}")
+  -d "{\"name\":\"Anon\",\"description\":\"x\",\"sku\":\"TST-AN-$TS\",\"brand\":\"X\",\"categoryName\":\"Men\",\"price\":9.99,\"currency\":\"USD\",\"stockQuantity\":1,\"sizes\":[],\"colors\":[]}")
 check "POST /products (no auth -> 401)" $CODE 401
 
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/api/v1/products \
   -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
-  -d "{\"name\":\"User\",\"description\":\"x\",\"sku\":\"TST-US-$TS\",\"brand\":\"X\",\"gender\":1,\"categoryName\":\"Shirts\",\"price\":9.99,\"currency\":\"USD\",\"stockQuantity\":1,\"sizes\":[],\"colors\":[]}")
+  -d "{\"name\":\"User\",\"description\":\"x\",\"sku\":\"TST-US-$TS\",\"brand\":\"X\",\"categoryName\":\"Men\",\"price\":9.99,\"currency\":\"USD\",\"stockQuantity\":1,\"sizes\":[],\"colors\":[]}")
 check "POST /products (user role -> 403)" $CODE 403
 
 if [ -n "$NEW_ID" ]; then
