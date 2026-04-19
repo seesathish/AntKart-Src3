@@ -14,13 +14,32 @@ AK.Payments is the payment processing microservice for AntKart. It integrates wi
 
 ## Architecture
 
-```
-AK.Payments/
-├── AK.Payments.Domain/          Payment, SavedCard entities; PaymentStatus/Method enums; domain events
-├── AK.Payments.Application/     Commands, queries, interfaces (IRazorpayClient, IUnitOfWork), DTOs, validators
-├── AK.Payments.Infrastructure/  EF Core DbContext, Razorpay client, repositories, migrations
-├── AK.Payments.API/             Minimal API endpoints (payments + saved cards), Dockerfile
-└── AK.Payments.Tests/           Unit tests — domain entities, command handlers, validators
+```mermaid
+%%{init: {'theme': 'base'}}%%
+graph TB
+    API["AK.Payments.API\nMinimal API Endpoints\nPayments · SavedCards"]:::api
+    APP["AK.Payments.Application\nCommands · Queries\nInterfaces · DTOs · Validators"]:::app
+    DOM["AK.Payments.Domain\nPayment · SavedCard\nPaymentStatus · PaymentMethod\nDomain Events"]:::domain
+    INFRA["AK.Payments.Infrastructure\nEF Core DbContext\nRepositories · Migrations\nRazorpayGatewayClient"]:::infra
+
+    PG[("PostgreSQL\nAKPaymentsDb")]:::db
+    RZP["Razorpay SDK\nSandbox / Production"]:::ext
+    RMQ["RabbitMQ\nMassTransit EF Core Outbox"]:::ext
+
+    API --> APP
+    API --> INFRA
+    APP --> DOM
+    INFRA --> APP
+    INFRA --> PG
+    INFRA --> RZP
+    INFRA --> RMQ
+
+    classDef api fill:#4A90D9,stroke:#2471A3,color:#fff
+    classDef app fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef domain fill:#E67E22,stroke:#D35400,color:#fff
+    classDef infra fill:#8E44AD,stroke:#6C3483,color:#fff
+    classDef db fill:#2C3E50,stroke:#1A252F,color:#fff
+    classDef ext fill:#E74C3C,stroke:#C0392B,color:#fff
 ```
 
 ---
@@ -79,43 +98,160 @@ AK.Payments/
 
 **PCI Compliance:** Card numbers are **never stored**. Only Razorpay token IDs are persisted, which reference the card on Razorpay's PCI-DSS Level 1 compliant vault.
 
+### Domain Class Diagram
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+classDiagram
+    class Payment {
+        +Guid Id
+        +Guid OrderId
+        +string UserId
+        +decimal Amount
+        +string Currency
+        +PaymentStatus Status
+        +PaymentMethod Method
+        +string? RazorpayOrderId
+        +string? RazorpayPaymentId
+        +string? RazorpaySignature
+        +string? FailureReason
+        +string? SavedCardToken
+        +Create(orderId, userId, amount, method) Payment
+        +Initiate(razorpayOrderId) void
+        +Succeed(paymentId, signature) void
+        +Fail(reason) void
+    }
+
+    class SavedCard {
+        +Guid Id
+        +string UserId
+        +string RazorpayCustomerId
+        +string RazorpayTokenId
+        +string CardNetwork
+        +string Last4
+        +string CardType
+        +string CardName
+        +bool IsDefault
+        +Create(userId, customerId, tokenId, ...) SavedCard
+        +SetDefault() void
+    }
+
+    class PaymentStatus {
+        <<enumeration>>
+        Pending
+        Initiated
+        Succeeded
+        Failed
+        Refunded
+    }
+
+    class PaymentMethod {
+        <<enumeration>>
+        Card
+        SavedCard
+        UPI
+        NetBanking
+    }
+
+    Payment --> PaymentStatus
+    Payment --> PaymentMethod
+```
+
 ---
 
 ## Payment Flow
 
 ### Standard Card Payment
 
-```
-Client                    AK.Payments.API          Razorpay           AK.Order
-  |                            |                      |                   |
-  |-- POST /api/payments/init ->|                      |                   |
-  |   {orderId, amount, method} |                      |                   |
-  |                            |-- CreateOrder(amount) ->                  |
-  |                            |<-- {rzp_order_id} ---|                   |
-  |<-- {paymentId,             |                      |                   |
-  |     razorpayOrderId,        |                      |                   |
-  |     razorpayKeyId,          |                      |                   |
-  |     amount, currency}       |                      |                   |
-  |                            |                      |                   |
-  |--[User pays via Razorpay JS SDK / Checkout UI] -->|                   |
-  |                            |                      |                   |
-  |-- POST /api/payments/verify ->                     |                   |
-  |   {paymentId,              |                      |                   |
-  |    razorpayOrderId,         |-- VerifySignature -->|                   |
-  |    razorpayPaymentId,       |<-- valid/invalid  ---|                   |
-  |    razorpaySignature}       |                      |                   |
-  |                            |-- PaymentSucceededIntegrationEvent ------>|
-  |<-- PaymentDto (Succeeded)  |   (via RabbitMQ outbox)           order.Status = Paid
+```mermaid
+%%{init: {'theme': 'base'}}%%
+sequenceDiagram
+    participant OC as OrderConfirmedConsumer
+    participant C as Client
+    participant P as AK.Payments.API
+    participant RZP as Razorpay
+    participant MQ as RabbitMQ (Outbox)
+    participant O as AK.Order
+
+    Note over OC,O: Event-driven entry (future auto-initiate)
+    O->>MQ: OrderConfirmedIntegrationEvent
+    MQ->>OC: Consume (no-op stub — future use)
+
+    Note over C,O: Standard Payment Initiation
+    C->>P: POST /api/payments/initiate<br/>{orderId, amount, method}
+    P->>RZP: CreateOrder(amount in paise)
+    RZP-->>P: {razorpay_order_id}
+    P-->>C: {paymentId, razorpayOrderId, razorpayKeyId, amount, currency}
+    P->>MQ: PaymentInitiatedIntegrationEvent (outbox)
+
+    Note over C,O: User pays via Razorpay JS SDK / Checkout UI
+    C->>RZP: Pay (card details via Razorpay Checkout)
+    RZP-->>C: {razorpay_order_id, razorpay_payment_id, razorpay_signature}
+
+    Note over C,O: Signature Verification — Happy Path
+    C->>P: POST /api/payments/verify<br/>{paymentId, razorpayOrderId, razorpayPaymentId, razorpaySignature}
+    P->>RZP: VerifySignature (HMAC-SHA256)
+    RZP-->>P: valid
+    P->>MQ: PaymentSucceededIntegrationEvent (outbox)
+    MQ->>O: Consume → order.UpdateStatus(Paid)
+    P-->>C: PaymentDto {status: Succeeded}
+
+    Note over C,O: Signature Verification — Sad Path
+    C->>P: POST /api/payments/verify<br/>{paymentId, razorpayOrderId, razorpayPaymentId, razorpaySignature}
+    P->>RZP: VerifySignature (HMAC-SHA256)
+    RZP-->>P: invalid / error
+    P->>MQ: PaymentFailedIntegrationEvent (outbox)
+    MQ->>O: Consume → order.UpdateStatus(PaymentFailed)
+    P-->>C: PaymentDto {status: Failed}
 ```
 
 ### Saved Card Flow
 
-```
-After first successful payment:
-  POST /api/payments/cards/save  {userId, customerId, paymentId} → SavedCardDto
+```mermaid
+%%{init: {'theme': 'base'}}%%
+sequenceDiagram
+    participant C as Client
+    participant P as AK.Payments.API
+    participant RZP as Razorpay
 
-On subsequent orders:
-  POST /api/payments/initiate  {method: SavedCard, savedCardToken: "token_xxx"} → initiates with stored card
+    Note over C,RZP: Save Card After Successful Payment
+    C->>P: POST /api/payments/cards/save<br/>{userId, customerId, paymentId}
+    P->>RZP: Tokenize card (customer + payment reference)
+    RZP-->>P: {razorpay_token_id, card_network, last4, card_type}
+    Note over P: Stores token_xxx only — never raw card number
+    P-->>C: SavedCardDto {id, last4, cardNetwork, isDefault}
+
+    Note over C,RZP: Subsequent Order Payment with Saved Card
+    C->>P: GET /api/payments/cards/user/{userId}
+    P-->>C: [SavedCardDto, ...]
+
+    C->>P: POST /api/payments/initiate<br/>{orderId, amount, method: SavedCard, savedCardToken: "token_xxx"}
+    P->>RZP: CreateOrder(amount) with token reference
+    RZP-->>P: {razorpay_order_id}
+    P-->>C: {paymentId, razorpayOrderId, razorpayKeyId, amount}
+
+    Note over C,RZP: Delete Saved Card
+    C->>P: DELETE /api/payments/cards/{id}?userId={userId}
+    P->>RZP: Delete token from Razorpay vault
+    RZP-->>P: 200 OK
+    P-->>C: 204 No Content
+```
+
+---
+
+## Payment Status Lifecycle
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+stateDiagram-v2
+    [*] --> Pending : Payment.Create()
+    Pending --> Initiated : Payment.Initiate(razorpayOrderId)\nRazorpay order assigned
+    Initiated --> Succeeded : Payment.Succeed(paymentId, signature)\nHMAC-SHA256 verified
+    Initiated --> Failed : Payment.Fail(reason)\nSignature mismatch or gateway error
+    Succeeded --> Refunded : Refund processed (future)
+    Failed --> [*]
+    Succeeded --> [*]
+    Refunded --> [*]
 ```
 
 ---

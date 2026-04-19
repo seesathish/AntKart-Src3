@@ -73,47 +73,39 @@
 
 ## 4. High-Level Architecture
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                    AntKart Platform                       │
-│                                                          │
-│  ┌─────────────────┐        ┌──────────────────────┐    │
-│  │  AK.Products    │        │    Future Services   │    │
-│  │  (Minimal API)  │        │  (Cart, Order, etc.) │    │
-│  └────────┬────────┘        └──────────┬───────────┘    │
-│           │  gRPC call                  │  gRPC call     │
-│           ▼                             ▼                │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │              AK.Discount.Grpc                   │    │
-│  │         (gRPC Host — ASP.NET Core)              │    │
-│  │  ┌───────────────────────────────────────────┐  │    │
-│  │  │          ExceptionInterceptor             │  │    │
-│  │  │  ┌─────────────────────────────────────┐ │  │    │
-│  │  │  │        DiscountService              │ │  │    │
-│  │  │  │  (5 RPC methods, maps ↔ MediatR)    │ │  │    │
-│  │  │  └──────────────┬──────────────────────┘ │  │    │
-│  │  └─────────────────│───────────────────────-┘  │    │
-│  └────────────────────│────────────────────────────┘    │
-│                       │ MediatR                          │
-│  ┌────────────────────▼────────────────────────────┐    │
-│  │           AK.Discount.Application               │    │
-│  │  Commands: Create / Update / Delete             │    │
-│  │  Queries:  GetByProductId / GetAll              │    │
-│  │  Validators (FluentValidation pipeline)         │    │
-│  └────────────────────┬────────────────────────────┘    │
-│                       │ ICouponRepository                │
-│  ┌────────────────────▼────────────────────────────┐    │
-│  │         AK.Discount.Infrastructure              │    │
-│  │   EF Core 9  ──►  SQLite (discount.db)          │    │
-│  │   CouponRepository, DiscountSeeder              │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │            AK.BuildingBlocks                    │    │
-│  │  Serilog, HealthChecks, CorrelationId,          │    │
-│  │  PagedResult<T>, Result<T>, Base Exceptions     │    │
-│  └─────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────┘
+```mermaid
+%%{init: {'theme': 'base'}}%%
+graph TB
+    classDef api fill:#4A90D9,stroke:#2471A3,color:#fff
+    classDef app fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef domain fill:#E67E22,stroke:#D35400,color:#fff
+    classDef infra fill:#8E44AD,stroke:#6C3483,color:#fff
+    classDef db fill:#2C3E50,stroke:#1A252F,color:#fff
+    classDef ext fill:#E74C3C,stroke:#C0392B,color:#fff
+
+    PROD["AK.Products\n(Minimal API)"]:::ext
+    FUTURE["Future Services\n(Cart, Order, etc.)"]:::ext
+
+    GRPC["AK.Discount.Grpc\ngRPC Host — ASP.NET Core · :5001\nExceptionInterceptor\nDiscountService (5 RPC methods)"]:::api
+
+    APP["AK.Discount.Application\nCommands: Create / Update / Delete\nQueries: GetByProductId / GetAll\nValidationBehavior · FluentValidation"]:::app
+
+    DOMAIN["AK.Discount.Domain\nCoupon Entity · DiscountType Enum"]:::domain
+
+    INFRA["AK.Discount.Infrastructure\nEF Core 9 · CouponRepository\nDiscountSeeder (300 records)"]:::infra
+
+    BB["AK.BuildingBlocks\nSerilog · HealthChecks · CorrelationId\nPagedResult&lt;T&gt; · Result&lt;T&gt; · Base Exceptions"]:::infra
+
+    DB[("SQLite\ndiscount.db")]:::db
+
+    PROD -->|"gRPC call"| GRPC
+    FUTURE -->|"gRPC call"| GRPC
+    GRPC -->|"ISender.Send()"| APP
+    APP --> DOMAIN
+    INFRA -->|"ICouponRepository"| APP
+    INFRA -->|"EF Core 9"| DB
+    GRPC -.->|"shared lib"| BB
+    APP -.->|"shared lib"| BB
 ```
 
 ---
@@ -226,21 +218,34 @@ The Domain layer is deliberately thin — it contains the entity and its support
 
 ### 7.1 Coupon Entity
 
-```
-Coupon
-├── Id               : int         (auto-increment primary key)
-├── ProductId        : string      (references AK.Products SKU, e.g. MEN-SHIR-001)
-├── ProductName      : string      (denormalized for display without cross-service join)
-├── CouponCode       : string      (unique, uppercased on write)
-├── Description      : string
-├── Amount           : decimal     (percentage 0–100 or flat amount in currency)
-├── DiscountType     : DiscountType
-├── ValidFrom        : DateTime (UTC)
-├── ValidTo          : DateTime (UTC)
-├── IsActive         : bool        (default true)
-├── MinimumQuantity  : int         (minimum cart quantity to apply discount, default 1)
-├── CreatedAt        : DateTime (UTC)
-└── UpdatedAt        : DateTime (UTC)
+```mermaid
+%%{init: {'theme': 'base'}}%%
+classDiagram
+    classDef domain fill:#E67E22,stroke:#D35400,color:#fff
+
+    class Coupon {
+        +int Id
+        +string ProductId
+        +string ProductName
+        +string CouponCode
+        +string Description
+        +decimal Amount
+        +DiscountType DiscountType
+        +DateTime ValidFrom
+        +DateTime ValidTo
+        +bool IsActive
+        +int MinimumQuantity
+        +DateTime CreatedAt
+        +DateTime UpdatedAt
+    }
+
+    class DiscountType {
+        <<enumeration>>
+        Percentage = 0
+        FlatAmount = 1
+    }
+
+    Coupon --> DiscountType
 ```
 
 ### 7.2 DiscountType Enum
@@ -321,15 +326,28 @@ public interface ICouponRepository
 
 ### 9.1 EF Core Configuration (DiscountContext)
 
-```
-Entity: Coupon
-├── PK: Id (auto-increment)
-├── Index: CouponCode (unique)
-├── Index: ProductId (non-unique, for fast lookup by SKU)
-├── Amount: precision(18, 2)
-├── DiscountType: stored as string (human-readable in DB)
-├── ProductId: maxLength(100), required
-└── ProductName: maxLength(200), required
+```mermaid
+%%{init: {'theme': 'base'}}%%
+classDiagram
+    classDef infra fill:#8E44AD,stroke:#6C3483,color:#fff
+    classDef db fill:#2C3E50,stroke:#1A252F,color:#fff
+
+    class Coupons {
+        <<EF Core Entity>>
+        +int Id PK autoincrement
+        +string ProductId maxLength100 indexed
+        +string ProductName maxLength200 required
+        +string CouponCode UNIQUE required
+        +string Description required
+        +decimal Amount precision18_2
+        +string DiscountType stored as string
+        +DateTime ValidFrom required
+        +DateTime ValidTo required
+        +bool IsActive default true
+        +int MinimumQuantity default 1
+        +DateTime CreatedAt required
+        +DateTime UpdatedAt required
+    }
 ```
 
 SQLite is configured via `Data Source=discount.db`. On startup, `database.MigrateAsync()` runs all pending migrations automatically.
@@ -427,39 +445,66 @@ Maps `CouponDto` → `CouponModel` (the Protobuf message). `ValidFrom`/`ValidTo`
 
 ## 12. CQRS & MediatR Pipeline
 
-```
-gRPC Request
-     │
-     ▼
-DiscountService (gRPC handler)
-     │  ISender.Send(command/query)
-     ▼
-MediatR Pipeline
-     │
-     ├── ValidationBehavior<TRequest, TResponse>
-     │       IValidator<TRequest> instances resolved from DI
-     │       Aggregates failures → throws FluentValidation.ValidationException
-     │
-     └── Concrete Handler (IRequestHandler<TRequest, TResponse>)
-             │  ICouponRepository calls
-             ▼
-         EF Core / SQLite
+```mermaid
+%%{init: {'theme': 'base'}}%%
+graph TB
+    classDef api fill:#4A90D9,stroke:#2471A3,color:#fff
+    classDef app fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef infra fill:#8E44AD,stroke:#6C3483,color:#fff
+    classDef db fill:#2C3E50,stroke:#1A252F,color:#fff
+
+    REQ["gRPC Request"]:::api
+    SVC["DiscountService\n(gRPC handler)"]:::api
+    VB["ValidationBehavior&lt;TRequest, TResponse&gt;\nIValidator&lt;TRequest&gt; instances resolved from DI\nAggregates failures → throws ValidationException"]:::app
+    HANDLER["Concrete Handler\n(IRequestHandler&lt;TRequest, TResponse&gt;)"]:::app
+    REPO["ICouponRepository calls"]:::infra
+    DB[("EF Core / SQLite")]:::db
+
+    REQ --> SVC
+    SVC -->|"ISender.Send(command/query)"| VB
+    VB --> HANDLER
+    HANDLER --> REPO
+    REPO --> DB
 ```
 
 ### Request Lifecycle (CreateDiscount example)
 
-```
-1. gRPC client calls CreateDiscount(CreateDiscountRequest)
-2. ExceptionInterceptor wraps the call
-3. DiscountService.CreateDiscount() maps proto → CreateCouponDto
-4. ISender.Send(new CreateDiscountCommand(dto))
-5. ValidationBehavior runs CreateDiscountValidator
-   → on failure: throws ValidationException → interceptor returns InvalidArgument
-6. CreateDiscountCommandHandler:
-   a. Checks CouponCodeExistsAsync → throws InvalidOperationException if true
-   b. Maps dto → new Coupon entity
-   c. CouponRepository.CreateAsync() → EF Core INSERT
-7. Returns CouponDto → mapped to CouponModel → returned to client
+```mermaid
+%%{init: {'theme': 'base'}}%%
+sequenceDiagram
+    participant C as gRPC Client
+    participant I as ExceptionInterceptor
+    participant S as DiscountService
+    participant V as ValidationBehavior
+    participant H as CreateDiscountCommandHandler
+    participant R as ICouponRepository
+    participant DB as SQLite
+
+    C->>I: CreateDiscount(CreateDiscountRequest)
+    I->>S: forward RPC (wrapped in try/catch)
+    S->>S: map proto → CreateCouponDto
+    S->>V: ISender.Send(CreateDiscountCommand)
+    V->>V: run CreateDiscountValidator
+    alt validation fails
+        V-->>I: throws ValidationException
+        I-->>C: gRPC InvalidArgument
+    else validation passes
+        V->>H: next(command)
+        H->>R: CouponCodeExistsAsync()
+        alt duplicate code
+            R-->>H: true
+            H-->>I: throws InvalidOperationException
+            I-->>C: gRPC AlreadyExists
+        else code is unique
+            H->>H: map dto → Coupon entity
+            H->>R: CreateAsync(coupon)
+            R->>DB: EF Core INSERT
+            DB-->>R: saved Coupon
+            R-->>H: Coupon
+            H-->>S: CouponDto
+            S-->>C: CouponModel
+        end
+    end
 ```
 
 ---

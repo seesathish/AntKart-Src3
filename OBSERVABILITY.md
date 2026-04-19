@@ -16,16 +16,45 @@ All AntKart services emit structured JSON logs via **Serilog**, shipped to **Ela
 
 ---
 
+## Services Emitting Logs
+
+| Service | Port (Docker) | ServiceName | Notes |
+|---------|---------------|-------------|-------|
+| AK.Gateway | 8000 | AK.Gateway | Ocelot edge routing |
+| AK.UserIdentity | 8084 | AK.UserIdentity.API | Keycloak proxy |
+| AK.Products | 8080 | AK.Products.API | MongoDB |
+| AK.ShoppingCart | 8082 | AK.ShoppingCart.API | Redis |
+| AK.Order | 8083 | AK.Order.API | PostgreSQL |
+| AK.Payments | 8085 | AK.Payments.API | PostgreSQL + Razorpay |
+| AK.Discount | 8081 | AK.Discount.Grpc | SQLite gRPC |
+
+---
+
 ## Log Flow
 
-```
-.NET Service
-    │  Serilog structured JSON
-    ▼
-Console (stdout)  +  Rolling file (/logs/*.txt)
-    │
-    ▼  (when Elasticsearch:Url configured)
-Elasticsearch  →  Kibana Data Views  →  Dashboards
+```mermaid
+%%{init: {'theme': 'base'}}%%
+flowchart LR
+    classDef svc fill:#4A90D9,stroke:#2471A3,color:#fff
+    classDef infra fill:#F39C12,stroke:#D68910,color:#fff
+    classDef store fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef ui fill:#8E44AD,stroke:#6C3483,color:#fff
+
+    GW[🔀 Gateway]:::svc
+    UI[👤 UserIdentity]:::svc
+    PRD[📦 Products]:::svc
+    CART[🛒 ShoppingCart]:::svc
+    ORD[📋 Order]:::svc
+    PAY[💳 Payments]:::svc
+    DISC[🏷️ Discount]:::svc
+
+    SER[📝 Serilog\nStructured Logs]:::infra
+    ES[(🔍 Elasticsearch\n9200)]:::store
+    KIB[📊 Kibana\n5601]:::ui
+
+    GW & UI & PRD & CART & ORD & PAY & DISC --> SER
+    SER -->|antkart-logs-*| ES
+    ES --> KIB
 ```
 
 ---
@@ -79,6 +108,22 @@ if (!string.IsNullOrWhiteSpace(esUrl))
 
 ---
 
+## Structured Log Examples
+
+### Order Service
+```
+OrderId={OrderId} UserId={UserId} Status={Status}
+```
+
+### Payments Service
+```
+PaymentId={PaymentId} OrderId={OrderId} RazorpayOrderId={RazorpayOrderId}   ← payment initiated
+PaymentId={PaymentId} verified via Razorpay                                  ← payment succeeded
+PaymentId={PaymentId} reason={Reason}                                        ← payment failed
+```
+
+---
+
 ## Kibana Setup
 
 1. Open `http://localhost:5601`
@@ -92,6 +137,7 @@ Useful KQL queries:
 ServiceName: "AK.Order.API" AND Level: "Error"
 CorrelationId: "abc-123"
 MessageTemplate: *OrderCreated*
+ServiceName: "AK.Payments.API" AND (PaymentId: * OR OrderId: *)
 ```
 
 ---

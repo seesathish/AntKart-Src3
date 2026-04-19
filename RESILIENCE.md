@@ -53,7 +53,39 @@ services.AddNpgsqlResilience();
 
 Applied to EF Core Npgsql connection factory for transient connection errors.
 
-### 4. API Gateway QoS (Ocelot)
+### 4. Razorpay HTTP Client (Payments)
+
+Location: `AK.Payments/AK.Payments.Infrastructure/`
+
+```csharp
+services.AddHttpClient("razorpay", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+})
+.AddHttpResilienceWithCircuitBreaker(
+    maxRetryAttempts: 3,
+    failureRatio: 0.5,
+    minimumThroughput: 5,
+    breakDurationSeconds: 30);
+```
+
+Policy stack (inner → outer):
+1. **Retry** — 3 attempts, exponential back-off (1s, 2s, 4s)
+2. **Circuit Breaker** — opens after 5 failures in 30s
+3. **Timeout** — 10s per attempt
+
+Razorpay webhook signature verification is synchronous (HMAC-SHA256 computed locally) — no HTTP call is made, so no resilience policy is needed there.
+
+### 5. PostgreSQL (Payments)
+
+```csharp
+services.AddNpgsqlResilience();
+// Pipeline "npgsql": retry 3× constant 500ms + 30s timeout
+```
+
+Applied to EF Core Npgsql connection factory for the `AKPaymentsDb` database — same policy as Order.
+
+### 6. API Gateway QoS (Ocelot)
 
 `ocelot.json` per-route `QoSOptions`:
 
@@ -66,6 +98,41 @@ Applied to EF Core Npgsql connection factory for transient connection errors.
 ```
 
 The gateway circuit breaker is independent from the downstream service's own resilience — providing a second layer of protection at the edge.
+
+---
+
+## Resilience Architecture
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+flowchart TD
+    classDef svc fill:#4A90D9,stroke:#2471A3,color:#fff
+    classDef policy fill:#E67E22,stroke:#D35400,color:#fff
+    classDef store fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef ext fill:#8E44AD,stroke:#6C3483,color:#fff
+
+    PRD[📦 Products]:::svc
+    CART[🛒 ShoppingCart]:::svc
+    ORD[📋 Order]:::svc
+    PAY[💳 Payments]:::svc
+
+    GRPC[🔄 Retry + CB\ngRPC to Discount]:::policy
+    REDIS[🔄 Retry + CB\nRedis]:::policy
+    PG_ORD[🔄 Retry + CB\nPostgreSQL Order]:::policy
+    PG_PAY[🔄 Retry + CB\nPostgreSQL Payments]:::policy
+    RZP_HTTP[🔄 Retry + CB\nRazorpay HTTP]:::policy
+
+    DISC_SVC[🏷️ Discount gRPC]:::ext
+    REDIS_DB[(⚡ Redis)]:::store
+    PG_DB[(🐘 PostgreSQL)]:::store
+    RZP[💳 Razorpay API]:::ext
+
+    PRD --> GRPC --> DISC_SVC
+    CART --> REDIS --> REDIS_DB
+    ORD --> PG_ORD --> PG_DB
+    PAY --> PG_PAY --> PG_DB
+    PAY --> RZP_HTTP --> RZP
+```
 
 ---
 
@@ -95,6 +162,8 @@ public static IServiceCollection AddNpgsqlResilience(this IServiceCollection ser
 |----------|-----------|
 | Discount service down | Circuit opens after 5 failures; Products returns zero discount for 30s |
 | Redis unreachable | 3 retries × 500ms; then 503 to client |
-| PostgreSQL flaky | 3 retries × 500ms constant; then 500 to client |
+| PostgreSQL flaky (Order) | 3 retries × 500ms constant; then 500 to client |
+| PostgreSQL flaky (Payments) | 3 retries × 500ms constant; then 500 to client |
+| Razorpay API unreachable | 3 retries exponential (1s→2s→4s); circuit opens after 5 failures in 30s; then 500 to client |
 | Downstream timeout (Gateway) | 10s timeout per request; 503 after 5 consecutive timeouts |
 | RabbitMQ delivery failure | MassTransit retry: 3× exponential; then dead-letter queue |

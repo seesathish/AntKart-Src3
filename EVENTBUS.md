@@ -8,37 +8,46 @@ Async communication between microservices uses **MassTransit 8.3.6** with **Rabb
 
 ## Event Flow
 
-```
- Client
-   │  POST /api/orders
-   ▼
-AK.Order API
-   │  CreateOrderCommand
-   ▼
-CreateOrderCommandHandler
-   │  save Order (Pending) + publish to Outbox
-   ▼
-[RabbitMQ: order-created]
-   │
-   ├──────────────────────────────┐
-   ▼                              ▼
-OrderSaga (Order service)    ReserveStockConsumer
-                               (Products service)
-   ▲                              │
-   │  StockReserved /             │  Decrement stock
-   │  StockReservationFailed      │  publish result
-   └──────────────────────────────┘
+```mermaid
+%%{init: {'theme': 'base'}}%%
+flowchart TD
+    classDef service fill:#4A90D9,stroke:#2471A3,color:#fff
+    classDef event fill:#3498DB,stroke:#2471A3,color:#fff
+    classDef saga fill:#E67E22,stroke:#D35400,color:#fff,font-weight:bold
+    classDef database fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef decision fill:#E74C3C,stroke:#C0392B,color:#fff
 
-Happy path:
-  Saga receives StockReserved
-    → publishes OrderConfirmedIntegrationEvent
-    → OrderConfirmedConsumer updates Order.Status = Confirmed
-    → ClearCartOnOrderConfirmedConsumer clears cart
+    Client([Client]):::service
+    OrderAPI[AK.Order API]:::service
+    Handler[CreateOrderCommandHandler]:::service
+    MQ_OC{{RabbitMQ: order-created}}:::event
+    Saga[OrderSaga]:::saga
+    RSC[ReserveStockConsumer\nAK.Products]:::service
+    MongoDB[(MongoDB)]:::database
 
-Sad path:
-  Saga receives StockReservationFailed
-    → publishes OrderCancelledIntegrationEvent
-    → OrderCancelledConsumer updates Order.Status = Cancelled
+    Client -->|POST /api/orders| OrderAPI
+    OrderAPI -->|CreateOrderCommand| Handler
+    Handler -->|save Order + Outbox| MQ_OC
+    MQ_OC --> Saga
+    MQ_OC --> RSC
+    RSC -->|load & validate stock| MongoDB
+    RSC -->|all stock OK| MQ_SR{{RabbitMQ: stock-reserved}}:::event
+    RSC -->|stock insufficient| MQ_SRF{{RabbitMQ: stock-reservation-failed}}:::event
+
+    MQ_SR --> Saga
+    MQ_SRF --> Saga
+
+    Saga -->|StockReserved| MQ_OConf{{RabbitMQ: order-confirmed}}:::event
+    Saga -->|StockReservationFailed| MQ_OCan{{RabbitMQ: order-cancelled}}:::event
+
+    MQ_OConf --> OCC[OrderConfirmedConsumer\nAK.Order]:::service
+    MQ_OConf --> CCC[ClearCartOnOrderConfirmedConsumer\nAK.ShoppingCart]:::service
+    MQ_OCan --> OCan[OrderCancelledConsumer\nAK.Order]:::service
+
+    OCC -->|Status = Confirmed| OrderDB[(PostgreSQL\nAKOrdersDb)]:::database
+    CCC -->|DeleteCart| Redis[(Redis)]:::database
+    CCC -->|CartClearedIntegrationEvent| MQ_CC{{RabbitMQ: cart-cleared}}:::event
+    OCan -->|Status = Cancelled| OrderDB
 ```
 
 ---
@@ -53,8 +62,19 @@ Sad path:
 | `OrderConfirmedIntegrationEvent` | AK.Order (OrderSaga) | AK.Order (consumer), AK.ShoppingCart (consumer) |
 | `OrderCancelledIntegrationEvent` | AK.Order (OrderSaga) | AK.Order (consumer) |
 | `CartClearedIntegrationEvent` | AK.ShoppingCart | — |
+| `PaymentInitiatedIntegrationEvent` | AK.Payments | — |
+| `PaymentSucceededIntegrationEvent` | AK.Payments | AK.Order (updates status → Paid) |
+| `PaymentFailedIntegrationEvent` | AK.Payments | AK.Order (updates status → PaymentFailed) |
 
 All events implement `IIntegrationEvent` and are `sealed record` types in `AK.BuildingBlocks/Messaging/IntegrationEvents/`.
+
+**Payment event payloads:**
+
+| Event | Fields |
+|-------|--------|
+| `PaymentInitiatedIntegrationEvent` | `paymentId`, `orderId`, `userId`, `amount`, `currency`, `razorpayOrderId` |
+| `PaymentSucceededIntegrationEvent` | `paymentId`, `orderId`, `userId`, `razorpayPaymentId` |
+| `PaymentFailedIntegrationEvent` | `paymentId`, `orderId`, `userId`, `reason` |
 
 ---
 
@@ -62,20 +82,60 @@ All events implement `IIntegrationEvent` and are `sealed record` types in `AK.Bu
 
 Location: `AK.Order/AK.Order.Application/Sagas/OrderSaga.cs`
 
-```
-Initial
-  │  OrderCreatedIntegrationEvent
-  ▼
-StockPending
-  │  StockReservedIntegrationEvent       → publishes OrderConfirmedIntegrationEvent
-  ├──────────────────────────────────────→ Final
-  │  StockReservationFailedIntegrationEvent → publishes OrderCancelledIntegrationEvent
-  └──────────────────────────────────────→ Final
+> The saga runs entirely within the **AK.Order** service, persisted to PostgreSQL via EF Core.
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+stateDiagram-v2
+    classDef sagaState fill:#E67E22,stroke:#D35400,color:#fff,font-weight:bold
+
+    [*] --> StockPending : OrderCreated
+    StockPending --> Confirmed : StockReserved\n→ publishes OrderConfirmed
+    StockPending --> Cancelled : StockReservationFailed\n→ publishes OrderCancelled
+    Confirmed --> [*] : saga complete
+    Cancelled --> [*] : saga complete
 ```
 
 **Correlation:** `OrderCreatedIntegrationEvent.OrderId` → `CorrelationId`
 
 **State persistence:** PostgreSQL via EF Core (`order_saga_states` table), optimistic concurrency with `Version` column.
+
+---
+
+## Payment Event Flow
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+sequenceDiagram
+    participant C as Client
+    participant P as AK.Payments
+    participant R as Razorpay
+    participant MQ as RabbitMQ
+    participant O as AK.Order
+
+    C->>P: POST /api/payments/initiate
+    P->>R: CreateOrder (amount, currency)
+    R-->>P: razorpayOrderId
+    P->>MQ: PaymentInitiatedIntegrationEvent\n(paymentId, orderId, userId, amount, currency, razorpayOrderId)
+    P-->>C: 200 OK (razorpayOrderId, keyId)
+
+    Note over C,R: Client completes payment on Razorpay checkout UI
+
+    C->>P: POST /api/payments/verify\n(razorpayPaymentId, razorpayOrderId, razorpaySignature)
+    P->>P: Verify HMAC-SHA256 signature
+
+    alt Signature valid (happy path)
+        P->>MQ: PaymentSucceededIntegrationEvent\n(paymentId, orderId, userId, razorpayPaymentId)
+        MQ->>O: PaymentSucceededIntegrationEvent
+        O->>O: Update Order.Status = Paid
+        P-->>C: 200 OK (payment verified)
+    else Signature mismatch (sad path)
+        P->>MQ: PaymentFailedIntegrationEvent\n(paymentId, orderId, userId, reason)
+        MQ->>O: PaymentFailedIntegrationEvent
+        O->>O: Update Order.Status = PaymentFailed
+        P-->>C: 400 Bad Request (signature invalid)
+    end
+```
 
 ---
 
@@ -141,8 +201,10 @@ Location: `AK.ShoppingCart/AK.ShoppingCart.Application/Consumers/ClearCartOnOrde
 |----------|-------|--------|
 | `OrderConfirmedConsumer` | `OrderConfirmedIntegrationEvent` | Updates `Order.Status = Confirmed` |
 | `OrderCancelledConsumer` | `OrderCancelledIntegrationEvent` | Updates `Order.Status = Cancelled` |
+| `PaymentSucceededConsumer` | `PaymentSucceededIntegrationEvent` | Updates `Order.Status = Paid` |
+| `PaymentFailedConsumer` | `PaymentFailedIntegrationEvent` | Updates `Order.Status = PaymentFailed` |
 
-These keep the Order aggregate's status in sync after the SAGA finalises.
+These keep the Order aggregate's status in sync after the SAGA finalises or payment completes.
 
 ---
 
@@ -168,6 +230,8 @@ services.AddRabbitMqMassTransit(configuration, cfg =>
     });
     cfg.AddConsumer<OrderConfirmedConsumer>();
     cfg.AddConsumer<OrderCancelledConsumer>();
+    cfg.AddConsumer<PaymentSucceededConsumer>();
+    cfg.AddConsumer<PaymentFailedConsumer>();
 });
 
 // AK.Products
@@ -180,6 +244,14 @@ services.AddRabbitMqMassTransit(configuration, cfg =>
 services.AddRabbitMqMassTransit(configuration, cfg =>
 {
     cfg.AddConsumer<ClearCartOnOrderConfirmedConsumer>();
+});
+
+// AK.Payments
+services.AddRabbitMqMassTransit(configuration, cfg =>
+{
+    // publishes PaymentInitiatedIntegrationEvent,
+    //           PaymentSucceededIntegrationEvent,
+    //           PaymentFailedIntegrationEvent
 });
 ```
 

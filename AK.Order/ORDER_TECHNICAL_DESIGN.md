@@ -67,40 +67,25 @@
 
 ## 4. Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    AK.Order.API                         │
-│  Minimal API Endpoints  │  ExceptionHandlerMiddleware   │
-│  Swagger UI             │  Serilog / HealthChecks       │
-└───────────────────────────────┬─────────────────────────┘
-                                │ MediatR
-┌───────────────────────────────▼─────────────────────────┐
-│                AK.Order.Application                     │
-│  Features/                                              │
-│    CreateOrder/      UpdateOrderStatus/   CancelOrder/  │
-│    GetOrderById/     GetOrders/           GetOrdersByUser│
-│  Common/Interfaces  Common/DTOs  Common/Mapping         │
-│  Common/Behaviors   Extensions                          │
-└──────────────┬──────────────────────────────────────────┘
-               │                          │
-┌──────────────▼───────────┐  ┌───────────▼──────────────┐
-│    AK.Order.Domain       │  │  AK.Order.Infrastructure  │
-│  Entities/               │  │  Persistence/             │
-│    Order (aggregate)     │  │    OrderDbContext          │
-│    OrderItem             │  │    Configurations/        │
-│  ValueObjects/           │  │    Repositories/          │
-│    ShippingAddress       │  │    UnitOfWork             │
-│  Enums/ Events/          │  │  Extensions/              │
-│  Specifications/         │  │  Migrations/              │
-│  Common/                 │  └──────────────────────────┘
-└──────────────────────────┘
-               │
-┌──────────────▼───────────┐
-│    AK.BuildingBlocks     │
-│  PagedResult<T>, Result  │
-│  Serilog, HealthChecks   │
-│  Exceptions, Middleware  │
-└──────────────────────────┘
+```mermaid
+%%{init: {'theme': 'base'}}%%
+graph TB
+    API["🌐 AK.Order.API\nMinimal API · :5080\nCRUD + Status + Cancel"]:::api
+    APP["⚙️ AK.Order.Application\nVertical Slice CQRS · SAGA Consumers\nPaymentSucceeded/Failed consumers"]:::app
+    DOMAIN["🏛️ AK.Order.Domain\nOrder Aggregate · OrderItem\nOrderStatus · Domain Events"]:::domain
+    INFRA["🔧 AK.Order.Infrastructure\nEF Core + Npgsql\nMassTransit Outbox + SAGA State"]:::infra
+    DB[("🐘 PostgreSQL\nAKOrdersDb")]:::db
+    MQ["🐰 RabbitMQ\nSAGA + consumers"]:::infra
+    API --> APP --> DOMAIN
+    INFRA --> APP
+    INFRA --> DB
+    INFRA --> MQ
+
+    classDef api fill:#4A90D9,stroke:#2471A3,color:#fff
+    classDef app fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef domain fill:#E67E22,stroke:#D35400,color:#fff
+    classDef infra fill:#8E44AD,stroke:#6C3483,color:#fff
+    classDef db fill:#2C3E50,stroke:#1A252F,color:#fff
 ```
 
 ---
@@ -272,8 +257,40 @@ public string ToSingleLine() =>
 ### 6.4 Enums
 
 ```csharp
-public enum OrderStatus   { Pending, Processing, Shipped, Delivered, Cancelled }
+public enum OrderStatus   { Pending=1, Confirmed=2, Processing=3, Shipped=4, Delivered=5, Cancelled=6, Paid=7, PaymentFailed=8 }
 public enum PaymentStatus { Pending, Paid, Failed, Refunded }
+```
+
+**Order Status Lifecycle:**
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+stateDiagram-v2
+    [*] --> Pending : POST /api/orders
+    Pending --> Confirmed : SAGA — StockReserved
+    Pending --> Cancelled : SAGA — StockReservationFailed
+    Confirmed --> Paid : PaymentSucceededIntegrationEvent
+    Confirmed --> PaymentFailed : PaymentFailedIntegrationEvent
+    Confirmed --> Processing : Admin status update
+    Confirmed --> Cancelled : Admin cancel
+    Processing --> Shipped : Admin status update
+    Shipped --> Delivered : Admin status update
+    Paid --> [*]
+    PaymentFailed --> [*]
+    Delivered --> [*]
+    Cancelled --> [*]
+```
+
+**SAGA Choreography (AK.Order ↔ AK.Products ↔ AK.Payments):**
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+stateDiagram-v2
+    [*] --> StockPending : OrderCreatedIntegrationEvent\n(CreateOrderCommandHandler publishes via Outbox)
+    StockPending --> Confirmed : StockReservedIntegrationEvent\n→ SAGA publishes OrderConfirmedIntegrationEvent
+    StockPending --> Cancelled : StockReservationFailedIntegrationEvent\n→ SAGA publishes OrderCancelledIntegrationEvent
+    Confirmed --> [*] : SAGA complete\n(Payments + ShoppingCart consumers notified)
+    Cancelled --> [*] : SAGA complete
 ```
 
 ### 6.5 Domain Events

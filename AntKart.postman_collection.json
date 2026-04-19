@@ -1669,6 +1669,229 @@
               ]
             }
           }
+        },
+        {
+          "name": "[401] Initiate Payment — No Auth",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Expect 401 Unauthorized — no Bearer token provided",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"userId\": \"{{userId}}\",\n  \"amount\": 99.99,\n  \"currency\": \"INR\",\n  \"method\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{paymentsUrl}}/api/payments/initiate",
+              "host": [
+                "{{paymentsUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "initiate"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[400] Initiate Payment — Missing Amount",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "description": "Expect 400 Bad Request — amount is required",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"userId\": \"{{userId}}\",\n  \"currency\": \"INR\",\n  \"method\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{paymentsUrl}}/api/payments/initiate",
+              "host": [
+                "{{paymentsUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "initiate"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[400] Initiate Payment — Zero Amount",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "description": "Expect 400 Bad Request — amount must be > 0",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"userId\": \"{{userId}}\",\n  \"amount\": 0,\n  \"currency\": \"INR\",\n  \"method\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{paymentsUrl}}/api/payments/initiate",
+              "host": [
+                "{{paymentsUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "initiate"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[400] Verify Payment — Invalid Signature",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "description": "Expect 400 — HMAC-SHA256 signature mismatch",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"razorpayOrderId\": \"{{razorpayOrderId}}\",\n  \"razorpayPaymentId\": \"pay_invalid_test\",\n  \"razorpaySignature\": \"invalidsignature123abc\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{paymentsUrl}}/api/payments/verify",
+              "host": [
+                "{{paymentsUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "verify"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[401] Get User Payments — No Auth",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Expect 401 Unauthorized",
+            "url": {
+              "raw": "{{paymentsUrl}}/api/payments/user/{{userId}}",
+              "host": [
+                "{{paymentsUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "user",
+                "{{userId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[401] Get Saved Cards — No Auth",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Expect 401 Unauthorized",
+            "url": {
+              "raw": "{{paymentsUrl}}/api/payments/cards/user/{{userId}}",
+              "host": [
+                "{{paymentsUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "cards",
+                "user",
+                "{{userId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[400] Save Card — Missing TokenId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "description": "Expect 400 — razorpayTokenId is required",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"razorpayCustomerId\": \"cust_test\",\n  \"cardNetwork\": \"Visa\",\n  \"last4\": \"1111\",\n  \"cardType\": \"credit\",\n  \"cardName\": \"Test Card\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{paymentsUrl}}/api/payments/cards/save",
+              "host": [
+                "{{paymentsUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "cards",
+                "save"
+              ]
+            }
+          }
         }
       ]
     }

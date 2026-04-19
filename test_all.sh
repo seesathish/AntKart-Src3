@@ -227,6 +227,117 @@ fi
 echo ""
 
 # ============================================================
+echo "=== [AK.Payments] ==="
+# Routes: POST /api/payments/initiate, POST /api/payments/verify
+#         GET /api/payments/{id}, GET /api/payments/order/{orderId}
+#         GET /api/payments/user/{userId}
+#         GET /api/payments/cards/user/{userId}, POST /api/payments/cards/save
+#         DELETE /api/payments/cards/{id}
+# ============================================================
+CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8085/health)
+check "Health check" $CODE 200
+
+# Auth guard — no token
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8085/api/payments/initiate \
+  -H "Content-Type: application/json" \
+  -d '{"orderId":"00000000-0000-0000-0000-000000000001","userId":"user1","amount":29.99,"currency":"INR","method":1}')
+check "POST /api/payments/initiate (no auth -> 401)" $CODE 401
+
+# Validation — missing amount (user auth)
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8085/api/payments/initiate \
+  -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
+  -d '{"orderId":"00000000-0000-0000-0000-000000000001","userId":"user1","currency":"INR","method":1}')
+check "POST /api/payments/initiate (missing amount -> 400)" $CODE 400
+
+# Validation — zero amount
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8085/api/payments/initiate \
+  -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
+  -d '{"orderId":"00000000-0000-0000-0000-000000000001","userId":"user1","amount":0,"currency":"INR","method":1}')
+check "POST /api/payments/initiate (zero amount -> 400)" $CODE 400
+
+# Create a fresh order for payment testing
+PAY_ORDER=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8083/api/orders \
+  -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
+  -d "{\"userId\":\"user1\",\"order\":{\"shippingAddress\":{\"fullName\":\"Pay Test\",\"addressLine1\":\"1 Pay St\",\"city\":\"Mumbai\",\"state\":\"MH\",\"postalCode\":\"400001\",\"country\":\"IN\",\"phone\":\"+91-9999999999\"},\"items\":[{\"productId\":\"$PRODUCT_ID\",\"productName\":\"Test Product\",\"sku\":\"MEN-SHIR-001\",\"price\":29.99,\"quantity\":1}]}}")
+PAY_ORDER_CODE=$(echo "$PAY_ORDER" | tail -1)
+PAY_ORDER_ID=$(echo "$PAY_ORDER" | head -1 | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+echo "  Payment test order: $PAY_ORDER_ID (HTTP $PAY_ORDER_CODE)"
+
+# Initiate payment (hits Razorpay sandbox — requires internet from Docker)
+if [ -n "$PAY_ORDER_ID" ]; then
+  PAY_RESP=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8085/api/payments/initiate \
+    -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
+    -d "{\"orderId\":\"$PAY_ORDER_ID\",\"userId\":\"user1\",\"amount\":29.99,\"currency\":\"INR\",\"method\":1}")
+  PAY_CODE=$(echo "$PAY_RESP" | tail -1)
+  PAY_BODY=$(echo "$PAY_RESP" | head -1)
+  PAY_ID=$(echo "$PAY_BODY" | grep -o '"paymentId":"[^"]*"' | cut -d'"' -f4)
+  RZP_ORDER_ID=$(echo "$PAY_BODY" | grep -o '"razorpayOrderId":"[^"]*"' | cut -d'"' -f4)
+  check "POST /api/payments/initiate (user auth, valid order)" $PAY_CODE 200
+  echo "  PaymentId: $PAY_ID  RazorpayOrderId: $RZP_ORDER_ID"
+fi
+
+# Get payment by order id
+if [ -n "$PAY_ORDER_ID" ]; then
+  CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $USER_TOKEN" \
+    "http://localhost:8085/api/payments/order/$PAY_ORDER_ID")
+  check "GET /api/payments/order/{orderId} (user auth)" $CODE 200
+fi
+
+# Get payment by id
+if [ -n "$PAY_ID" ]; then
+  CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $USER_TOKEN" \
+    "http://localhost:8085/api/payments/$PAY_ID")
+  check "GET /api/payments/{id} (user auth)" $CODE 200
+fi
+
+# Get user payments — positive
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $USER_TOKEN" \
+  "http://localhost:8085/api/payments/user/user1")
+check "GET /api/payments/user/{userId} (user auth)" $CODE 200
+
+# Get user payments — no auth (negative)
+CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  "http://localhost:8085/api/payments/user/user1")
+check "GET /api/payments/user/{userId} (no auth -> 401)" $CODE 401
+
+# Verify with invalid signature (negative)
+if [ -n "$PAY_ORDER_ID" ] && [ -n "$RZP_ORDER_ID" ]; then
+  CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8085/api/payments/verify \
+    -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
+    -d "{\"orderId\":\"$PAY_ORDER_ID\",\"razorpayOrderId\":\"$RZP_ORDER_ID\",\"razorpayPaymentId\":\"pay_invalid_test\",\"razorpaySignature\":\"invalidsignature123\"}")
+  check "POST /api/payments/verify (invalid signature -> 400)" $CODE 400
+fi
+
+# Saved cards — no auth (negative)
+CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  "http://localhost:8085/api/payments/cards/user/user1")
+check "GET /api/payments/cards/user/{userId} (no auth -> 401)" $CODE 401
+
+# Saved cards — user auth (positive, returns empty list)
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $USER_TOKEN" \
+  "http://localhost:8085/api/payments/cards/user/user1")
+check "GET /api/payments/cards/user/{userId} (user auth)" $CODE 200
+
+# Save card — missing tokenId (negative)
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8085/api/payments/cards/save \
+  -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
+  -d '{"userId":"user1","razorpayCustomerId":"cust_test","cardNetwork":"Visa","last4":"1111","cardType":"credit","cardName":"Test Card"}')
+check "POST /api/payments/cards/save (missing tokenId -> 400)" $CODE 400
+
+# Save card — no auth (negative)
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8085/api/payments/cards/save \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"user1","razorpayCustomerId":"cust_test","razorpayTokenId":"tok_test","cardNetwork":"Visa","last4":"1111","cardType":"credit","cardName":"Test Card"}')
+check "POST /api/payments/cards/save (no auth -> 401)" $CODE 401
+
+# Cleanup: cancel the payment test order
+if [ -n "$PAY_ORDER_ID" ]; then
+  curl -s -o /dev/null -X DELETE "http://localhost:8083/api/orders/$PAY_ORDER_ID" \
+    -H "Authorization: Bearer $USER_TOKEN"
+fi
+echo ""
+
+# ============================================================
 echo "=== [Concurrent Load Tests] ==="
 # ============================================================
 TMPDIR=$(mktemp -d)

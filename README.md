@@ -6,81 +6,115 @@ AntKart is a cloud-native e-commerce platform built as independently deployable 
 
 ## Architecture Overview
 
-```
-                           ┌─────────────────────────────────────────────────────────┐
-                           │                   CLIENT LAYER                          │
-                           │         Browser / Mobile / Postman                      │
-                           └─────────────────────┬───────────────────────────────────┘
-                                                 │ HTTP  :9090
-                                                 ▼
-                           ┌─────────────────────────────────────────────────────────┐
-                           │              AK.GATEWAY  (Ocelot)  :8000                │
-                           │   Route   │   JWT auth   │   Rate limit   │   QoS CB    │
-                           └──┬────┬───┴──────┬───────┴───────┬─────────┴────────────┘
-                              │    │          │               │
-              ┌───────────────┘    │          │               └──────────────────┐
-              ▼                    ▼          ▼                                  ▼
-  ┌──────────────────┐  ┌──────────────┐  ┌──────────────┐          ┌───────────────────┐
-  │  AK.Products     │  │ AK.ShoppingCart│ │  AK.Order    │          │  AK.UserIdentity  │
-  │  REST :8080      │  │  REST :8082   │  │  REST :8083  │          │  REST :8084        │
-  │  MongoDB         │  │  Redis        │  │  PostgreSQL  │          │  Keycloak proxy    │
-  └────────┬─────────┘  └──────┬───────┘  └──────┬───────┘          └───────────────────┘
-           │ gRPC               │                  │
-           ▼                    │                  │
-  ┌──────────────────┐          │        ┌─────────────────────────────────────────┐
-  │  AK.Discount     │          │        │               RabbitMQ                  │
-  │  gRPC :8081      │          │        │  order-created  /  stock-reserved        │
-  │  SQLite          │          │        │  stock-failed   /  order-confirmed       │
-  └──────────────────┘          │        │  order-cancelled / cart-cleared          │
-                                └────────┴─────────────────────────────────────────┘
-                                                          │
-                                                          ▼
-                           ┌─────────────────────────────────────────────────────────┐
-                           │                 OBSERVABILITY                            │
-                           │   Elasticsearch :9200   →   Kibana :5601                │
-                           │   Serilog structured logs + X-Correlation-Id            │
-                           └─────────────────────────────────────────────────────────┘
+### Diagram 1 — Service Topology
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'lineColor': '#555'}}}%%
+graph LR
+    classDef gateway fill:#E74C3C,stroke:#C0392B,color:#fff,font-weight:bold
+    classDef api fill:#4A90D9,stroke:#2471A3,color:#fff
+    classDef db fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef infra fill:#F39C12,stroke:#D68910,color:#fff
+    classDef external fill:#8E44AD,stroke:#6C3483,color:#fff
+    classDef client fill:#2C3E50,stroke:#1A252F,color:#fff
+
+    CLIENT([🌐 Client]):::client
+
+    GW[🔀 API Gateway\nOcelot · 9090]:::gateway
+
+    subgraph Core Services
+        UI[👤 UserIdentity\n· 8084]:::api
+        PRD[📦 Products\n· 8080]:::api
+        CART[🛒 ShoppingCart\n· 8082]:::api
+        ORD[📋 Order\n· 8083]:::api
+        PAY[💳 Payments\n· 8085]:::api
+        DISC[🏷️ Discount gRPC\n· 8081]:::api
+    end
+
+    subgraph Data Stores
+        MONGO[(🍃 MongoDB\nProducts)]:::db
+        REDIS[(⚡ Redis\nCart)]:::db
+        PG[(🐘 PostgreSQL\nOrders + Payments)]:::db
+        SQLITE[(📄 SQLite\nDiscounts)]:::db
+    end
+
+    subgraph Infrastructure
+        KC[🔑 Keycloak\n· 8090]:::infra
+        MQ[🐰 RabbitMQ\n· 5672]:::infra
+        ES[(🔍 Elasticsearch\n· 9200)]:::infra
+        KIB[📊 Kibana\n· 5601]:::infra
+    end
+
+    RZP[💳 Razorpay\nSandbox]:::external
+
+    CLIENT --> GW
+    GW --> UI & PRD & CART & ORD & PAY
+    GW -. JWT .-> KC
+
+    PRD --> MONGO & DISC
+    DISC --> SQLITE
+    CART --> REDIS
+    ORD --> PG
+    PAY --> PG
+    PAY --> RZP
+    UI --> KC
+
+    ORD <--> MQ
+    PRD <--> MQ
+    CART <--> MQ
+    PAY <--> MQ
+
+    UI & PRD & CART & ORD & PAY --> ES
+    ES --> KIB
 ```
 
-### SAGA Choreography Flow
+### Diagram 2 — Order + Payment Event Flow (SAGA)
 
+```mermaid
+%%{init: {'theme': 'base'}}%%
+flowchart TD
+    classDef event fill:#3498DB,stroke:#2471A3,color:#fff,rx:8
+    classDef service fill:#2ECC71,stroke:#1E8449,color:#fff
+    classDef saga fill:#E67E22,stroke:#D35400,color:#fff,font-weight:bold
+    classDef decision fill:#E74C3C,stroke:#C0392B,color:#fff
+
+    A([🛍️ Client places order]):::service
+    B[📋 AK.Order\nPOST /api/orders]:::service
+    C{{OrderCreatedIntegrationEvent}}:::event
+    D[🧩 Order SAGA]:::saga
+    E[📦 AK.Products\nReserve stock]:::service
+    F{Stock\navailable?}:::decision
+    G{{StockReservedIntegrationEvent}}:::event
+    H{{StockReservationFailedIntegrationEvent}}:::event
+    I{{OrderConfirmedIntegrationEvent}}:::event
+    J{{OrderCancelledIntegrationEvent}}:::event
+    K[💳 AK.Payments\nInitiate payment]:::service
+    L[🛒 AK.ShoppingCart\nClear cart]:::service
+    M{Payment\nsucceeded?}:::decision
+    N{{PaymentSucceededIntegrationEvent}}:::event
+    O{{PaymentFailedIntegrationEvent}}:::event
+    P[📋 Order → Paid]:::service
+    Q[📋 Order → PaymentFailed]:::service
+
+    A --> B --> C --> D
+    D --> E --> F
+    F -- Yes --> G --> D --> I
+    F -- No --> H --> D --> J
+    I --> K & L
+    K --> M
+    M -- Yes --> N --> P
+    M -- No --> O --> Q
 ```
- POST /api/orders
-      │
-      ▼  CreateOrderCommand
- AK.Order saves Order (Pending)
-      │  publishes via Outbox
-      ▼
- ┌─────────────── RabbitMQ ────────────────────┐
- │ OrderCreatedIntegrationEvent                │
- └──────────────────┬──────────────────────────┘
-                    │
-      ┌─────────────▼──────────────────┐
-      │  OrderSaga (AK.Order)          │
-      │  State: Initial → StockPending │
-      └─────────────────────────────────┘
-                    │  (triggers Products)
-      ┌─────────────▼─────────────────────┐
-      │  ReserveStockConsumer (AK.Products)│
-      │  Check stock → Decrement          │
-      └───────────────┬───────────────────┘
-                      │
-          ┌───────────┴───────────┐
-          │  Stock OK             │  Stock FAIL
-          ▼                       ▼
-  StockReserved           StockReservationFailed
-          │                       │
-  Saga → Confirmed         Saga → Cancelled
-          │                       │
-  OrderConfirmed           OrderCancelled
-  Event published          Event published
-          │
-  ┌───────┴──────────────────┐
-  │                          │
-  ▼                          ▼
- AK.Order updates       AK.ShoppingCart
- Status=Confirmed        clears cart
-```
+
+### Architecture Highlights
+
+- **Clean Architecture + DDD per service** — each microservice has Domain, Application, Infrastructure, and API layers with strict inward dependency rules; domain entities use private setters and factory methods with no framework leakage.
+- **CQRS via MediatR 12 in every service** — commands and queries are fully separated; a `ValidationBehavior<TRequest, TResponse>` pipeline ensures all requests are validated by FluentValidation before reaching handlers.
+- **MassTransit SAGA orchestrates order → stock → payment** — the `OrderSaga` in AK.Order transitions through `Initial → StockPending → Confirmed/Cancelled` states, coordinating AK.Products, AK.ShoppingCart, and AK.Payments over RabbitMQ without any direct service-to-service HTTP calls.
+- **EF Core Outbox pattern in Order and Payments** — integration events are written atomically to the same PostgreSQL transaction as the business data, guaranteeing at-least-once delivery and preventing dual-write inconsistencies.
+- **JWT authentication via Keycloak, validated at Gateway and per-service** — Ocelot validates the Bearer token at the gateway edge; each downstream service independently re-validates via the Keycloak OIDC discovery endpoint, so a compromised gateway cannot bypass service-level auth.
+- **Polly v8 resilience (retry + circuit breaker) on all outbound calls** — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, and `AddNpgsqlResilience()` from AK.BuildingBlocks wrap every external dependency with exponential backoff retry and a half-open circuit breaker.
+- **Serilog → Elasticsearch → Kibana for structured observability** — every service ships structured JSON logs with a `X-Correlation-Id` header propagated end-to-end; Kibana dashboards provide cross-service request tracing without a separate APM agent.
 
 ---
 

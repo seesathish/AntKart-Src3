@@ -99,59 +99,45 @@
 
 ## 4. High-Level Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Client / API Gateway                    │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │ HTTP/REST
-┌───────────────────────────────▼─────────────────────────────────┐
-│                    AK.Products.API (Minimal API)                 │
-│  ┌─────────────┐  ┌──────────────────┐  ┌──────────────────┐   │
-│  │  Endpoints  │  │ ExceptionHandler  │  │  Swagger/OpenAPI  │   │
-│  │  (12 routes)│  │   Middleware      │  │                  │   │
-│  └──────┬──────┘  └──────────────────┘  └──────────────────┘   │
-└─────────┼───────────────────────────────────────────────────────┘
-          │ IMediator.Send()
-┌─────────▼───────────────────────────────────────────────────────┐
-│                  AK.Products.Application                        │
-│  ┌──────────────────────────┐  ┌─────────────────────────────┐  │
-│  │   Commands (CQRS Write)  │  │   Queries (CQRS Read)       │  │
-│  │   CreateProduct          │  │   GetProductById            │  │
-│  │   UpdateProduct          │  │   GetProducts (paged)       │  │
-│  │   DeleteProduct          │  │   GetProductsByCategory     │  │
-│  │   BulkInsertProducts     │  └─────────────────────────────┘  │
-│  │   BulkUpdateProducts     │  ┌─────────────────────────────┐  │
-│  └──────────────────────────┘  │   ValidationBehavior        │  │
-│  ┌──────────────────────────┐  │   (MediatR Pipeline)        │  │
-│  │   FluentValidation       │  └─────────────────────────────┘  │
-│  │   Validators             │                                    │
-│  └──────────────────────────┘                                   │
-└─────────┼───────────────────────────────────────────────────────┘
-          │ IUnitOfWork / IProductRepository
-┌─────────▼───────────────────────────────────────────────────────┐
-│                  AK.Products.Infrastructure                     │
-│  ┌──────────────────────────┐  ┌─────────────────────────────┐  │
-│  │   MongoDbContext         │  │   ProductRepository         │  │
-│  │   (Indexes on startup)   │  │   (IProductRepository impl) │  │
-│  └──────────────────────────┘  └─────────────────────────────┘  │
-│  ┌──────────────────────────┐  ┌─────────────────────────────┐  │
-│  │   UnitOfWork             │  │   ProductSeeder             │  │
-│  │                          │  │   (300 records)             │  │
-│  └──────────────────────────┘  └─────────────────────────────┘  │
-└─────────┼───────────────────────────────────────────────────────┘
-          │ MongoDB.Driver
-┌─────────▼───────────────────────────────────────────────────────┐
-│                         MongoDB                                 │
-│   Database: ACProductsDb   Collection: products                 │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+%%{init: {'theme': 'base'}}%%
+graph TB
+    classDef api fill:#4A90D9,stroke:#2471A3,color:#fff
+    classDef app fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef domain fill:#E67E22,stroke:#D35400,color:#fff
+    classDef infra fill:#8E44AD,stroke:#6C3483,color:#fff
+    classDef db fill:#2C3E50,stroke:#1A252F,color:#fff
+    classDef ext fill:#E74C3C,stroke:#C0392B,color:#fff
+
+    GW["Client / API Gateway"]:::ext
+    API["AK.Products.API\nMinimal API Endpoints · 12 routes\nExceptionHandler · Swagger · :5077"]:::api
+    APP["AK.Products.Application\nCommands: CreateProduct · UpdateProduct · DeleteProduct\nBulkInsertProducts · BulkUpdateProducts\nQueries: GetProductById · GetProducts · GetProductsByCategory\nValidationBehavior · FluentValidation Validators"]:::app
+    DOMAIN["AK.Products.Domain\nProduct Aggregate Root\nValue Objects · Enums · Events\nSpecifications"]:::domain
+    INFRA["AK.Products.Infrastructure\nMongoDbContext (indexes on startup)\nProductRepository · UnitOfWork\nProductSeeder (300 records)"]:::infra
+    DB[("MongoDB\nAKProductsDb\nCollection: products")]:::db
+
+    GW -->|"HTTP/REST"| API
+    API -->|"IMediator.Send()"| APP
+    APP --> DOMAIN
+    INFRA -->|"IUnitOfWork / IProductRepository"| APP
+    INFRA -->|"MongoDB.Driver"| DB
 ```
 
 ### Layer Dependencies
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+graph LR
+    classDef api fill:#4A90D9,stroke:#2471A3,color:#fff
+    classDef app fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef domain fill:#E67E22,stroke:#D35400,color:#fff
+    classDef infra fill:#8E44AD,stroke:#6C3483,color:#fff
+
+    API["API"]:::api --> APP["Application"]:::app --> DOMAIN["Domain"]:::domain
+    INFRA["Infrastructure"]:::infra --> APP
 ```
-API → Application → Domain
-Infrastructure → Application → Domain
-Tests → Application, Domain, Infrastructure
-```
+
+> Infrastructure depends on Application (through interfaces), never the reverse — Dependency Inversion Principle.
 
 > Infrastructure depends on Application (through interfaces), never the reverse — Dependency Inversion Principle.
 
@@ -275,15 +261,67 @@ AK.Products/
 
 `Product` is the single aggregate root. All state changes go through its public methods — no direct property setters are exposed.
 
-```
-Product (BaseEntity, IAggregateRoot)
-├── Identity:   Id (MongoDB ObjectId), CreatedAt, UpdatedAt
-├── Catalogue:  Name, SKU, Brand, Description, Gender, CategoryName
-├── Pricing:    Price, Currency, DiscountPrice
-├── Inventory:  StockQuantity, Status (auto-derived)
-├── Display:    IsFeatured, Rating, ReviewCount, ImageUrls
-├── Variants:   Sizes[], Colors[], Material, Tags[]
-└── Events:     _domainEvents (internal, BsonIgnore)
+```mermaid
+%%{init: {'theme': 'base'}}%%
+classDiagram
+    classDef domain fill:#E67E22,stroke:#D35400,color:#fff
+    classDef infra fill:#8E44AD,stroke:#6C3483,color:#fff
+
+    class Product {
+        +string Id
+        +DateTime CreatedAt
+        +DateTime UpdatedAt
+        +string Name
+        +string SKU
+        +string Brand
+        +string Description
+        +Gender Gender
+        +string CategoryName
+        +decimal Price
+        +string Currency
+        +decimal? DiscountPrice
+        +int StockQuantity
+        +ProductStatus Status
+        +bool IsFeatured
+        +double Rating
+        +int ReviewCount
+        +List~string~ ImageUrls
+        +List~string~ Sizes
+        +List~string~ Colors
+        +string Material
+        +List~string~ Tags
+        +Create(...)$ Product
+        +Update(...) void
+        +SetDiscount(price) void
+        +AddReview(rating) void
+    }
+
+    class Money {
+        +decimal Amount
+        +string Currency
+    }
+
+    class ProductCategory {
+        +string Name
+        +string SubCategory
+    }
+
+    class ProductImage {
+        +string Url
+        +string AltText
+        +bool IsPrimary
+    }
+
+    class ProductDimensions {
+        +double Weight
+        +string Size
+        +string SizeChart
+    }
+
+    Product --> Money : Price
+    Product --> ProductCategory : Category
+    Product --> ProductImage : ImageUrls
+    Product --> ProductDimensions : Dimensions
 ```
 
 **Key invariants enforced by domain methods:**
@@ -343,20 +381,30 @@ Events implement `IDomainEvent : INotification` — compatible with MediatR's `I
 
 ### 7.3 MediatR Pipeline
 
-```
-HTTP Request
-    │
-    ▼
-Endpoint (IMediator.Send)
-    │
-    ▼
-ValidationBehavior<TRequest, TResponse>   ← FluentValidation
-    │  (throws ValidationException on failure → 400)
-    ▼
-Command/Query Handler
-    │
-    ▼
-IUnitOfWork → IProductRepository → MongoDB
+```mermaid
+%%{init: {'theme': 'base'}}%%
+sequenceDiagram
+    participant C as Client
+    participant E as Endpoint
+    participant V as ValidationBehavior
+    participant H as Command/Query Handler
+    participant R as IProductRepository
+    participant DB as MongoDB
+
+    C->>E: HTTP Request
+    E->>V: IMediator.Send(request)
+    V->>V: Run IValidator&lt;TRequest&gt;
+    alt validation fails
+        V-->>E: throws ValidationException → 400
+    else validation passes
+        V->>H: next(request)
+        H->>R: IUnitOfWork.Products.*Async()
+        R->>DB: MongoDB.Driver call
+        DB-->>R: result
+        R-->>H: entity / list
+        H-->>E: DTO / PagedResult
+        E-->>C: HTTP Response
+    end
 ```
 
 ### 7.4 FluentValidation Rules
@@ -528,15 +576,17 @@ All endpoints are grouped under `/api/v1/products` with OpenAPI metadata.
 
 ## 11. CQRS & MediatR Pipeline
 
-```
-Request (IRequest<TResponse>)
-    │
-    ├── ValidationBehavior<TRequest, TResponse>
-    │     Collects all IValidator<TRequest> from DI
-    │     Throws ValidationException if any rule fails
-    │
-    └── IRequestHandler<TRequest, TResponse>
-          (CreateProductCommandHandler, etc.)
+```mermaid
+%%{init: {'theme': 'base'}}%%
+graph TB
+    classDef app fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef infra fill:#8E44AD,stroke:#6C3483,color:#fff
+
+    REQ["IRequest&lt;TResponse&gt;"]:::app
+    VB["ValidationBehavior&lt;TRequest, TResponse&gt;\nCollects all IValidator&lt;TRequest&gt; from DI\nThrows ValidationException if any rule fails"]:::app
+    HANDLER["IRequestHandler&lt;TRequest, TResponse&gt;\n(CreateProductCommandHandler, etc.)"]:::app
+
+    REQ --> VB --> HANDLER
 ```
 
 **Registration (AddApplication):**
@@ -578,9 +628,19 @@ The repository's `ListAsync(spec)` translates the specification into MongoDB LIN
 
 The Unit of Work wraps the repository and provides a transaction boundary abstraction:
 
-```
-Handler → IUnitOfWork.Products.AddAsync(product)
-        → IUnitOfWork.SaveChangesAsync()
+```mermaid
+%%{init: {'theme': 'base'}}%%
+graph LR
+    classDef app fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef infra fill:#8E44AD,stroke:#6C3483,color:#fff
+    classDef db fill:#2C3E50,stroke:#1A252F,color:#fff
+
+    H["Handler"]:::app
+    UOW["IUnitOfWork\n.Products.AddAsync(product)"]:::infra
+    SAVE["IUnitOfWork\n.SaveChangesAsync()"]:::infra
+    DB[("MongoDB")]:::db
+
+    H --> UOW --> SAVE --> DB
 ```
 
 This decouples handlers from direct MongoDB driver calls and allows future transaction support (e.g., MongoDB multi-document ACID transactions with replica sets).
@@ -638,14 +698,16 @@ PUT    /api/v1/products/bulk-update  → 200 { updated: N }
 
 ### Test Pyramid
 
-```
-     ┌─────────────────┐
-     │  Integration /  │  (Future — requires running MongoDB)
-     │  E2E Tests      │
-     ├─────────────────┤
-     │  Unit Tests     │  ← Current scope (XUnit + Moq)
-     │  (30+ tests)    │
-     └─────────────────┘
+```mermaid
+%%{init: {'theme': 'base'}}%%
+graph TB
+    classDef future fill:#E74C3C,stroke:#C0392B,color:#fff
+    classDef current fill:#27AE60,stroke:#1E8449,color:#fff
+
+    E2E["Integration / E2E Tests\n(Future — requires running MongoDB)"]:::future
+    UNIT["Unit Tests\nCurrent scope: XUnit + Moq\n(179 tests)"]:::current
+
+    E2E --> UNIT
 ```
 
 ### Test Coverage

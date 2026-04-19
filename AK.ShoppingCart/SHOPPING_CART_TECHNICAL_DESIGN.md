@@ -101,59 +101,55 @@
 
 ## 4. High-Level Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Client / API Gateway                       │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │ HTTP/REST
-┌───────────────────────────────▼─────────────────────────────────┐
-│                 AK.ShoppingCart.API (Minimal API)               │
-│  ┌─────────────┐  ┌──────────────────┐  ┌──────────────────┐   │
-│  │  Endpoints  │  │ ExceptionHandler  │  │  Swagger/OpenAPI │   │
-│  │  (5 routes) │  │   Middleware      │  │                  │   │
-│  └──────┬──────┘  └──────────────────┘  └──────────────────┘   │
-└─────────┼───────────────────────────────────────────────────────┘
-          │ IMediator.Send()
-┌─────────▼───────────────────────────────────────────────────────┐
-│                AK.ShoppingCart.Application                      │
-│  ┌──────────────────────────┐  ┌─────────────────────────────┐  │
-│  │   Commands (CQRS Write)  │  │   Queries (CQRS Read)       │  │
-│  │   AddToCart              │  │   GetCart                   │  │
-│  │   RemoveFromCart         │  └─────────────────────────────┘  │
-│  │   UpdateCartItem         │  ┌─────────────────────────────┐  │
-│  │   ClearCart              │  │   ValidationBehavior        │  │
-│  └──────────────────────────┘  │   (MediatR Pipeline)        │  │
-│  ┌──────────────────────────┐  └─────────────────────────────┘  │
-│  │   FluentValidation       │                                    │
-│  │   Validators             │                                    │
-│  └──────────────────────────┘                                   │
-└─────────┼───────────────────────────────────────────────────────┘
-          │ IUnitOfWork / ICartRepository
-┌─────────▼───────────────────────────────────────────────────────┐
-│               AK.ShoppingCart.Infrastructure                    │
-│  ┌──────────────────────────┐  ┌─────────────────────────────┐  │
-│  │   RedisContext           │  │   CartRepository            │  │
-│  │   (IConnectionMultiplexer│  │   (JSON snapshot pattern)   │  │
-│  │    wrapping)             │  └─────────────────────────────┘  │
-│  └──────────────────────────┘  ┌─────────────────────────────┐  │
-│  ┌──────────────────────────┐  │   UnitOfWork                │  │
-│  │   RedisSettings          │  │   (lazy repo, no-op save)   │  │
-│  │                          │  └─────────────────────────────┘  │
-│  └──────────────────────────┘                                   │
-└─────────┼───────────────────────────────────────────────────────┘
-          │ StackExchange.Redis
-┌─────────▼───────────────────────────────────────────────────────┐
-│                           Redis                                 │
-│   Key: AKCart:cart:{userId}   TTL: 30 days (sliding)           │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+%%{init: {'theme': 'base'}}%%
+graph TB
+    CLIENT["Client / API Gateway"]:::ext
+    API["AK.ShoppingCart.API\nMinimal API · :5079\nEndpoints · ExceptionHandler · Swagger"]:::api
+    APP["AK.ShoppingCart.Application\nCQRS Commands & Queries\nFluentValidation · ValidationBehavior"]:::app
+    DOMAIN["AK.ShoppingCart.Domain\nCart Aggregate · CartItem\nDomain Events"]:::domain
+    INFRA["AK.ShoppingCart.Infrastructure\nRedisContext · CartRepository\nUnitOfWork · RedisSettings"]:::infra
+    REDIS[("Redis\nAKCart:cart:{userId}\nTTL: 30 days sliding")]:::db
+    MQ["RabbitMQ\nPublishes CartClearedIntegrationEvent"]:::infra
+
+    CLIENT -->|HTTP/REST| API
+    API -->|IMediator.Send| APP
+    APP --> DOMAIN
+    INFRA -->|IUnitOfWork / ICartRepository| APP
+    INFRA --> REDIS
+    INFRA --> MQ
+
+    classDef api fill:#4A90D9,stroke:#2471A3,color:#fff
+    classDef app fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef domain fill:#E67E22,stroke:#D35400,color:#fff
+    classDef infra fill:#8E44AD,stroke:#6C3483,color:#fff
+    classDef db fill:#2C3E50,stroke:#1A252F,color:#fff
+    classDef ext fill:#E74C3C,stroke:#C0392B,color:#fff
 ```
 
 ### Layer Dependencies
 
-```
-API → Application → Domain
-Infrastructure → Application → Domain
-Tests → Application, Domain, Infrastructure
+```mermaid
+%%{init: {'theme': 'base'}}%%
+graph TB
+    API["API Layer"]:::api
+    APP["Application Layer"]:::app
+    DOMAIN["Domain Layer"]:::domain
+    INFRA["Infrastructure Layer"]:::infra
+    TESTS["Tests"]:::ext
+
+    API --> APP
+    APP --> DOMAIN
+    INFRA --> APP
+    TESTS --> APP
+    TESTS --> DOMAIN
+    TESTS --> INFRA
+
+    classDef api fill:#4A90D9,stroke:#2471A3,color:#fff
+    classDef app fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef domain fill:#E67E22,stroke:#D35400,color:#fff
+    classDef infra fill:#8E44AD,stroke:#6C3483,color:#fff
+    classDef ext fill:#E74C3C,stroke:#C0392B,color:#fff
 ```
 
 > Infrastructure depends on Application (through interfaces), never the reverse — Dependency Inversion Principle.
@@ -266,13 +262,59 @@ AK.ShoppingCart/
 
 `Cart` is the single aggregate root. All state changes go through its public methods — no direct property setters are exposed outside the class.
 
-```
-Cart
-├── Identity:   UserId (string, partition key)
-├── Timeline:   CreatedAt (UTC), UpdatedAt (UTC)
-├── Items:      IReadOnlyList<CartItem> (backed by private List<CartItem>)
-├── Computed:   TotalAmount (sum Price × Quantity), TotalItems (sum Quantity)
-└── Events:     _domainEvents (private List<object>)
+```mermaid
+%%{init: {'theme': 'base'}}%%
+classDiagram
+    class Cart {
+        +string UserId
+        +DateTime CreatedAt
+        +DateTime UpdatedAt
+        +IReadOnlyList~CartItem~ Items
+        +decimal TotalAmount
+        +int TotalItems
+        -List~CartItem~ _items
+        -List~object~ _domainEvents
+        +Create(userId) Cart$
+        +Restore(userId, createdAt, updatedAt, items) Cart$
+        +AddItem(productId, name, sku, price, qty, imageUrl?) void
+        +RemoveItem(productId) void
+        +UpdateItemQuantity(productId, qty) void
+        +Clear() void
+        +ClearDomainEvents() void
+    }
+
+    class CartItem {
+        +string ProductId
+        +string ProductName
+        +string SKU
+        +decimal Price
+        +int Quantity
+        +string? ImageUrl
+        +decimal SubTotal
+        +Create(productId, productName, sku, price, qty, imageUrl?) CartItem$
+        +Restore(productId, productName, sku, price, qty, imageUrl?) CartItem$
+        +UpdateQuantity(quantity) void
+    }
+
+    class CartItemAddedEvent {
+        +string UserId
+        +string ProductId
+        +int Quantity
+    }
+
+    class CartItemRemovedEvent {
+        +string UserId
+        +string ProductId
+    }
+
+    class CartClearedEvent {
+        +string UserId
+    }
+
+    Cart "1" *-- "0..*" CartItem : contains
+    Cart ..> CartItemAddedEvent : raises
+    Cart ..> CartItemRemovedEvent : raises
+    Cart ..> CartClearedEvent : raises
 ```
 
 **Factory methods:**
@@ -356,20 +398,29 @@ All events are `public sealed record` types. They are cleared via `Cart.ClearDom
 
 ### 7.3 MediatR Pipeline
 
-```
-HTTP Request
-    │
-    ▼
-Endpoint (IMediator.Send)
-    │
-    ▼
-ValidationBehavior<TRequest, TResponse>   ← FluentValidation
-    │  (throws ValidationException on failure → 400)
-    ▼
-Command/Query Handler
-    │
-    ▼
-IUnitOfWork → ICartRepository → Redis
+```mermaid
+%%{init: {'theme': 'base'}}%%
+sequenceDiagram
+    participant Client
+    participant Endpoint as CartEndpoints
+    participant VB as ValidationBehavior
+    participant Handler as Command/Query Handler
+    participant UoW as IUnitOfWork
+    participant Repo as ICartRepository
+    participant Redis
+
+    Client->>Endpoint: HTTP Request
+    Endpoint->>VB: IMediator.Send(command)
+    VB->>VB: Run IValidator(s) — throw 400 on failure
+    VB->>Handler: next()
+    Handler->>UoW: Carts.GetAsync / SaveAsync
+    UoW->>Repo: delegate
+    Repo->>Redis: StringGetAsync / StringSetAsync
+    Redis-->>Repo: RedisValue (JSON)
+    Repo-->>UoW: Cart domain object
+    UoW-->>Handler: Cart?
+    Handler-->>Endpoint: CartDto
+    Endpoint-->>Client: 200 OK
 ```
 
 ### 7.4 FluentValidation Rules
@@ -666,16 +717,30 @@ The following are derived at read time and never persisted to Redis:
 
 ## 11. CQRS & MediatR Pipeline
 
-```
-Request (IRequest<TResponse>)
-    │
-    ├── ValidationBehavior<TRequest, TResponse>
-    │     Collects all IValidator<TRequest> from DI
-    │     Runs all validators in parallel
-    │     Throws FluentValidation.ValidationException if any rule fails
-    │
-    └── IRequestHandler<TRequest, TResponse>
-          (AddToCartCommandHandler, GetCartQueryHandler, etc.)
+```mermaid
+%%{init: {'theme': 'base'}}%%
+sequenceDiagram
+    participant Endpoint
+    participant VB as ValidationBehavior
+    participant Handler as IRequestHandler
+    participant UoW as IUnitOfWork
+    participant Repo as ICartRepository
+    participant Redis
+
+    Endpoint->>VB: IMediator.Send(request)
+    Note over VB: Collects IValidator~TRequest~ from DI
+    Note over VB: Runs all validators in parallel
+    alt Validation fails
+        VB-->>Endpoint: throw ValidationException → 400
+    else Validation passes
+        VB->>Handler: next()
+        Handler->>UoW: Carts.GetAsync / SaveAsync
+        UoW->>Repo: delegate
+        Repo->>Redis: StringGetAsync / StringSetAsync
+        Redis-->>Repo: RedisValue
+        Repo-->>Handler: Cart?
+        Handler-->>Endpoint: TResponse
+    end
 ```
 
 **Registration (`AddApplication`):**
@@ -704,22 +769,20 @@ Rather than mapping Redis hashes or sorted sets to domain objects, cart state is
 
 ### Serialisation Boundary
 
-```
-Domain (Cart / CartItem)
-    │  CartRepository.SaveAsync
-    ▼
-CartSnapshot / CartItemSnapshot   ←── private records, serialisation contract
-    │  System.Text.Json
-    ▼
-Redis (UTF-8 JSON string)
+```mermaid
+%%{init: {'theme': 'base'}}%%
+sequenceDiagram
+    participant Domain as Domain\n(Cart / CartItem)
+    participant Snapshot as CartSnapshot /\nCartItemSnapshot
+    participant Redis
 
-Redis
-    │  System.Text.Json
-    ▼
-CartSnapshot / CartItemSnapshot
-    │  Cart.Restore() / CartItem.Restore()
-    ▼
-Domain (Cart / CartItem)
+    Note over Domain,Snapshot: CartRepository.SaveAsync
+    Domain->>Snapshot: map to private snapshot records
+    Snapshot->>Redis: System.Text.Json → UTF-8 JSON string
+
+    Note over Redis,Domain: CartRepository.GetAsync
+    Redis->>Snapshot: System.Text.Json deserialise
+    Snapshot->>Domain: Cart.Restore() / CartItem.Restore()
 ```
 
 The snapshot records mirror the domain model fields but are decoupled — changes to domain validation or factory logic do not affect the stored format as long as field names are preserved.
@@ -734,9 +797,22 @@ Every `SaveAsync` call sets the key TTL to `CartExpiryDays` days from `UtcNow`. 
 
 The Unit of Work provides a consistent interface for data access regardless of the underlying store:
 
-```
-Handler → IUnitOfWork.Carts.SaveAsync(cart)
-        → IUnitOfWork.SaveChangesAsync()  // returns 1 (no-op for Redis)
+```mermaid
+%%{init: {'theme': 'base'}}%%
+sequenceDiagram
+    participant Handler
+    participant UoW as IUnitOfWork
+    participant Repo as ICartRepository
+    participant Redis
+
+    Handler->>UoW: Carts.SaveAsync(cart)
+    UoW->>Repo: SaveAsync(cart)
+    Repo->>Redis: StringSetAsync(key, json, TTL)
+    Redis-->>Repo: OK
+    Repo-->>UoW: Task.CompletedTask
+    Handler->>UoW: SaveChangesAsync()
+    Note over UoW: returns Task.FromResult(1) — no-op for Redis
+    UoW-->>Handler: 1
 ```
 
 Benefits:
@@ -835,14 +911,16 @@ Available in both Development and Production environments.
 
 ### Test Pyramid
 
-```
-     ┌─────────────────┐
-     │  Integration /  │  (Future — requires running Redis)
-     │  E2E Tests      │
-     ├─────────────────┤
-     │  Unit Tests     │  ← Current scope (XUnit + Moq)
-     │  (88 tests)     │
-     └─────────────────┘
+```mermaid
+%%{init: {'theme': 'base'}}%%
+graph TB
+    E2E["Integration / E2E Tests\n(Future — requires running Redis)"]:::ext
+    UNIT["Unit Tests\n88 tests\n(XUnit + Moq)"]:::app
+
+    E2E --> UNIT
+
+    classDef app fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef ext fill:#E74C3C,stroke:#C0392B,color:#fff
 ```
 
 ### Test Coverage by Layer

@@ -294,6 +294,292 @@ All should return `200`.
 
 ---
 
+### Sad-Path SAGA Flow
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+flowchart TD
+    classDef ok fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef fail fill:#E74C3C,stroke:#C0392B,color:#fff
+    classDef event fill:#3498DB,stroke:#2471A3,color:#fff
+    classDef svc fill:#4A90D9,stroke:#2471A3,color:#fff
+
+    A([Client places order]):::svc
+    B[Order created\nstatus = Pending]:::ok
+    C{{OrderCreatedIntegrationEvent}}:::event
+    D[SAGA: request\nstock reservation]:::svc
+    E{Stock\navailable?}
+    F[Order status =\nConfirmed]:::ok
+    G[Order status =\nCancelled]:::fail
+    H{{OrderCancelledIntegrationEvent}}:::event
+    I[Payment flow\nbegins]:::ok
+    J{Payment\nverified?}
+    K[Order status = Paid]:::ok
+    L[Order status =\nPaymentFailed]:::fail
+
+    A --> B --> C --> D --> E
+    E -- Yes --> F --> I --> J
+    E -- No --> G --> H
+    J -- Valid sig --> K
+    J -- Invalid sig --> L
+```
+
+---
+
+### Sad Path 1 — Stock Reservation Failure (Order Cancelled)
+
+**Goal:** verify the SAGA cancels the order when stock is insufficient.
+
+#### Step 1.1 — Look up a product and capture its stock quantity
+
+```bash
+# Fetch a known product — MEN-SHIR-001 is always seeded
+PRODUCT=$(curl -s "http://localhost:9090/gateway/products?sku=MEN-SHIR-001" \
+  -H "Authorization: Bearer $TOKEN")
+
+PRODUCT_ID=$(echo $PRODUCT | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+STOCK=$(echo $PRODUCT | grep -o '"stockQuantity":[0-9]*' | head -1 | cut -d':' -f2)
+echo "ProductId: $PRODUCT_ID  StockQuantity: $STOCK"
+
+# Calculate a quantity that is guaranteed to exceed available stock
+OVER_QTY=$(( STOCK + 999 ))
+echo "Order quantity to use: $OVER_QTY"
+```
+
+#### Step 1.2 — Place the order with an excessive quantity
+
+```bash
+BAD_ORDER=$(curl -s -X POST http://localhost:9090/gateway/orders \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{
+    \"userId\": \"user1\",
+    \"order\": {
+      \"shippingAddress\": {
+        \"fullName\": \"Jane Doe\", \"addressLine1\": \"42 Commerce St\",
+        \"city\": \"Austin\", \"state\": \"TX\",
+        \"postalCode\": \"73301\", \"country\": \"US\", \"phone\": \"+1-512-555-0199\"
+      },
+      \"items\": [{
+        \"productId\": \"$PRODUCT_ID\",
+        \"productName\": \"T-Shirt\",
+        \"sKU\": \"MEN-SHIR-001\",
+        \"price\": 29.99,
+        \"quantity\": $OVER_QTY
+      }]
+    }
+  }")
+
+BAD_ORDER_ID=$(echo $BAD_ORDER | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+echo "Bad OrderId: $BAD_ORDER_ID"
+```
+
+#### Step 1.3 — Poll until status = Cancelled (expect within 2 s)
+
+```bash
+for i in 1 2 3 4 5; do
+  STATUS=$(curl -s "http://localhost:9090/gateway/orders/$BAD_ORDER_ID" \
+    -H "Authorization: Bearer $TOKEN" \
+    | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+  echo "Check $i: $STATUS"
+  [ "$STATUS" = "Cancelled" ] && break
+  sleep 1
+done
+
+# Expected final output: Check N: Cancelled
+```
+
+#### Step 1.4 — Confirm no lingering messages in RabbitMQ
+
+Open **http://localhost:15672** (guest / guest) → Queues. All queues should show **0 ready, 0 unacked** messages after the SAGA completes.
+
+#### Step 1.5 — Confirm payment was never triggered
+
+```bash
+# The payments service should have no record for this order
+curl -s "http://localhost:9090/gateway/payments/order/$BAD_ORDER_ID" \
+  -H "Authorization: Bearer $TOKEN"
+# Expected: 404 Not Found — payment was never initiated
+```
+
+---
+
+### Sad Path 2 — Payment Failure (Invalid Razorpay Signature)
+
+**Goal:** verify the payment failure event propagates and the order status reflects the failure.
+
+#### Step 2.1 — Place a valid order and wait for Confirmed
+
+Follow Steps 1–3 from the happy path above to obtain a `$ORDER_ID` with status `Confirmed`.
+
+#### Step 2.2 — Initiate payment
+
+```bash
+PAYMENT=$(curl -s -X POST http://localhost:9090/gateway/payments/initiate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{\"orderId\": \"$ORDER_ID\", \"userId\": \"user1\",
+       \"amount\": 29.99, \"currency\": \"INR\", \"method\": \"Card\"}")
+
+echo $PAYMENT
+# Note the razorpayOrderId and razorpayPaymentId from the response
+RAZORPAY_ORDER_ID=$(echo $PAYMENT | grep -o '"razorpayOrderId":"[^"]*"' | head -1 | cut -d'"' -f4)
+```
+
+#### Step 2.3 — Submit verify with a deliberately wrong signature
+
+```bash
+VERIFY_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+  -X POST http://localhost:9090/gateway/payments/verify \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{
+    \"orderId\": \"$ORDER_ID\",
+    \"razorpayPaymentId\": \"pay_test_BAD00000000\",
+    \"razorpayOrderId\": \"$RAZORPAY_ORDER_ID\",
+    \"razorpaySignature\": \"invalidsignature\"
+  }")
+
+echo "$VERIFY_RESPONSE"
+# Expected: HTTP_STATUS:400
+```
+
+#### Step 2.4 — Poll the order status
+
+```bash
+for i in 1 2 3 4 5; do
+  STATUS=$(curl -s "http://localhost:9090/gateway/orders/$ORDER_ID" \
+    -H "Authorization: Bearer $TOKEN" \
+    | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+  echo "Check $i: $STATUS"
+  [ "$STATUS" = "PaymentFailed" ] || [ "$STATUS" = "Confirmed" ] && break
+  sleep 1
+done
+# Expected: PaymentFailed (if the PaymentFailedIntegrationEvent consumer runs)
+# Acceptable: Confirmed (if the consumer has not yet processed — re-poll)
+```
+
+#### Step 2.5 — Verify PaymentFailedIntegrationEvent in RabbitMQ
+
+Open **http://localhost:15672** → Exchanges → `PaymentFailedIntegrationEvent`. The **message rate** graph should show a recent spike confirming the event was published and routed.
+
+---
+
+### Sad Path 3 — Auth Failures (401 / 403)
+
+**Goal:** verify all protected endpoints reject unauthenticated or insufficiently authorised requests.
+
+#### No token — expect 401
+
+```bash
+# POST /gateway/orders — no Authorization header
+curl -s -o /dev/null -w "POST /gateway/orders (no token): %{http_code}\n" \
+  -X POST http://localhost:9090/gateway/orders \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"user1","order":{}}'
+# Expected: 401
+
+# POST /gateway/payments/initiate — no Authorization header
+curl -s -o /dev/null -w "POST /gateway/payments/initiate (no token): %{http_code}\n" \
+  -X POST http://localhost:9090/gateway/payments/initiate \
+  -H "Content-Type: application/json" \
+  -d '{"orderId":"dummy","userId":"user1","amount":1,"currency":"INR","method":"Card"}'
+# Expected: 401
+```
+
+#### User token on admin endpoint — expect 403
+
+```bash
+# GET /gateway/identity/admin/users — user role, not admin
+curl -s -o /dev/null -w "GET /gateway/identity/admin/users (user token): %{http_code}\n" \
+  http://localhost:9090/gateway/identity/admin/users \
+  -H "Authorization: Bearer $TOKEN"
+# Expected: 403
+```
+
+#### User token on allowed endpoint — expect 201 / 200
+
+```bash
+# POST /gateway/orders with valid user token — should succeed
+curl -s -o /dev/null -w "POST /gateway/orders (user token): %{http_code}\n" \
+  -X POST http://localhost:9090/gateway/orders \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{
+    \"userId\": \"user1\",
+    \"order\": {
+      \"shippingAddress\": {
+        \"fullName\": \"Jane Doe\", \"addressLine1\": \"42 Commerce St\",
+        \"city\": \"Austin\", \"state\": \"TX\",
+        \"postalCode\": \"73301\", \"country\": \"US\", \"phone\": \"+1-512-555-0199\"
+      },
+      \"items\": [{\"productId\": \"$PRODUCT_ID\", \"productName\": \"T-Shirt\",
+                   \"sKU\": \"MEN-SHIR-001\", \"price\": 29.99, \"quantity\": 1}]
+    }
+  }"
+# Expected: 201
+
+# POST /gateway/payments/initiate with valid user token — should succeed
+curl -s -o /dev/null -w "POST /gateway/payments/initiate (user token): %{http_code}\n" \
+  -X POST http://localhost:9090/gateway/payments/initiate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{\"orderId\": \"$ORDER_ID\", \"userId\": \"user1\",
+       \"amount\": 29.99, \"currency\": \"INR\", \"method\": \"Card\"}"
+# Expected: 200
+```
+
+---
+
+### Sad Path 4 — Validation Failures (400)
+
+**Goal:** verify FluentValidation rejects malformed requests at the API layer before any domain logic runs.
+
+#### Missing shippingAddress on order creation
+
+```bash
+curl -s -w "\nHTTP_STATUS:%{http_code}" \
+  -X POST http://localhost:9090/gateway/orders \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "userId": "user1",
+    "order": {
+      "items": [{"productId": "any-id", "productName": "T-Shirt",
+                 "sKU": "MEN-SHIR-001", "price": 29.99, "quantity": 1}]
+    }
+  }'
+# Expected: HTTP_STATUS:400
+# Body: validation errors listing shippingAddress as required
+```
+
+#### Payment initiation with amount = 0
+
+```bash
+curl -s -w "\nHTTP_STATUS:%{http_code}" \
+  -X POST http://localhost:9090/gateway/payments/initiate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{\"orderId\": \"$ORDER_ID\", \"userId\": \"user1\",
+       \"amount\": 0, \"currency\": \"INR\", \"method\": \"Card\"}"
+# Expected: HTTP_STATUS:400
+# Body: validation error — amount must be greater than 0
+```
+
+#### Payment initiation with missing orderId
+
+```bash
+curl -s -w "\nHTTP_STATUS:%{http_code}" \
+  -X POST http://localhost:9090/gateway/payments/initiate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"userId": "user1", "amount": 29.99, "currency": "INR", "method": "Card"}'
+# Expected: HTTP_STATUS:400
+# Body: validation error — orderId is required
+```
+
+---
+
 ## Architecture Notes
 
 - Tests use `IAsyncLifetime` for harness start/stop lifecycle
