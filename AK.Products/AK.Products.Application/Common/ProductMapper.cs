@@ -1,4 +1,4 @@
-﻿using AK.Products.Application.DTOs;
+using AK.Products.Application.DTOs;
 using AK.Products.Domain.Entities;
 
 namespace AK.Products.Application.Common;
@@ -7,7 +7,7 @@ public static class ProductMapper
 {
     public static ProductDto ToDto(Product p, decimal? discountedPrice = null) => new(
         p.Id, p.Name, p.Description, p.SKU, p.Brand,
-        p.Gender.ToString(), p.Status.ToString(),
+        p.Status.ToString(),
         p.CategoryName, p.SubCategoryName,
         p.Price, p.Currency,
         discountedPrice ?? p.DiscountPrice,

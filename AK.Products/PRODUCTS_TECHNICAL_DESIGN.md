@@ -24,7 +24,7 @@
 
 ## 1. Overview
 
-**AK.Products** is a .NET 9 microservice responsible for managing a product catalogue covering Men's, Women's, and Kids' dress collections. It is part of the AntKart e-commerce platform.
+**AK.Products** is a .NET 9 microservice responsible for managing a product catalogue with data-driven, extensible categories. Categories (e.g. Men, Women, Kids, Sports, Formal) are defined by data — adding a new category requires no code change. It is part of the AntKart e-commerce platform.
 
 | Attribute       | Value                            |
 |-----------------|----------------------------------|
@@ -46,8 +46,9 @@
 | FR-03 | Delete a product by ID |
 | FR-04 | Retrieve a single product by ID |
 | FR-05 | Retrieve a paginated list of all products |
-| FR-06 | Retrieve products filtered by gender (Men / Women / Kids) |
-| FR-07 | Retrieve products filtered by category name |
+| FR-06 | Retrieve products filtered by top-level category name (e.g. Men, Women, Kids, Sports) |
+| FR-06a | Retrieve products filtered by sub-category name (e.g. Shirts, Dresses) |
+| FR-07 | List all distinct top-level category names from the product catalogue |
 | FR-08 | Search products by name, brand, or description keyword |
 | FR-09 | Retrieve featured products |
 | FR-10 | Bulk insert multiple products in a single operation |
@@ -60,9 +61,8 @@
 | Description     | string            | Required, max 2000 chars |
 | SKU             | string            | Required, globally unique |
 | Brand           | string            | Required |
-| Gender          | enum              | Men=1, Women=2, Kids=3, Unisex=4 |
-| Category        | string            | e.g. Shirts, Dresses, T-Shirts |
-| Sub-Category    | string (optional) | |
+| CategoryName    | string            | Top-level category — data-driven (e.g. Men, Women, Kids, Sports) |
+| SubCategoryName | string (optional) | Specific type (e.g. Shirts, Dresses, T-Shirts) |
 | Price           | decimal           | In USD, must be > 0 |
 | Discount Price  | decimal (optional)| Must be < Price |
 | Stock Quantity  | int               | ≥ 0; 0 → OutOfStock status |
@@ -79,7 +79,8 @@
 - Discount price must be strictly less than the original price
 - Status is automatically set to `OutOfStock` when stock quantity = 0
 - Domain events are raised on create and update for downstream consumers
-- Seeder auto-populates 300 products (100 Men / 100 Women / 100 Kids) in Development environment
+- Seeder auto-populates 300 products driven by a `CategoryDefinition` record array — adding a new category is a data change, not a code change
+- Categories are data-driven: `GET /api/v1/products/categories` returns all distinct category names currently in the catalogue
 
 ---
 
@@ -92,7 +93,7 @@
 | NFR-03 | Input validation on all write endpoints (400 on failure) |
 | NFR-04 | Structured JSON error responses for 400 / 404 / 409 / 500 |
 | NFR-05 | Full OpenAPI/Swagger documentation served at `/swagger` |
-| NFR-06 | MongoDB indexes on SKU (unique), Gender, Category, Status, and full-text search |
+| NFR-06 | MongoDB indexes on SKU (unique), CategoryName, Status, and full-text search |
 | NFR-07 | Unit tests for all public and internal handler / validator / domain methods |
 
 ---

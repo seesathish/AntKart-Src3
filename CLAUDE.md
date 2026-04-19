@@ -55,9 +55,12 @@ AK.<Service>/
 - **Database:** MongoDB — `AKProductsDb` / `Products` collection
 - **Architecture:** DDD + Clean Architecture
 - **Patterns:** CQRS (MediatR 12.4.1), FluentValidation pipeline, Specification, Unit of Work
-- **Seed data:** 300 products — 100 Men / 100 Women / 100 Kids, 10 categories × 10 products each
-- **SKU format:** `{MEN|WOM|KID}-{CAT4}-{001..010}`  e.g. `MEN-SHIR-001`
-- **Tests:** 179 passing (domain, commands, queries, validators, specifications, DTO mapping)
+- **Category design:** Data-driven — `CategoryName` (top-level: Men/Women/Kids/Sports/etc.) + `SubCategoryName` (specific: Shirts/Dresses/etc.) are plain strings; no hardcoded enum. Adding a new category is a data change only.
+- **Seed data:** 300 products driven by `CategoryDefinition` record array — 10 sub-categories × 10 products per top-level category. Currently seeded: Men, Women, Kids.
+- **SKU format:** `{CAT_ABBREV}-{SUBCAT_ABBREV}-{001..NNN}` e.g. `MEN-SHIR-001`, `WOM-DRES-001`
+- **New endpoint:** `GET /api/v1/products/categories` — returns distinct top-level category names from DB
+- **Removed endpoints:** `/men`, `/women`, `/kids` — replaced by `?category=Men`, `?category=Women`, `?category=Kids`
+- **Tests:** 190 passing (domain, commands, queries, validators, specifications, DTO mapping)
 - **Swagger:** `http://localhost:5077/swagger`
 - **Design doc:** [AK.Products/PRODUCTS_TECHNICAL_DESIGN.md](AK.Products/PRODUCTS_TECHNICAL_DESIGN.md)
 

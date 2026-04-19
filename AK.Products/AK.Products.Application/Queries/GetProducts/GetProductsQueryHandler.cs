@@ -20,12 +20,13 @@ public sealed class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, 
     {
         IReadOnlyList<Domain.Entities.Product> products;
 
-        if (request.Gender.HasValue)
-            products = await _uow.Products.GetByGenderAsync(request.Gender.Value, ct);
-        else if (!string.IsNullOrWhiteSpace(request.Category))
+        if (!string.IsNullOrWhiteSpace(request.Category))
             products = await _uow.Products.GetByCategoryAsync(request.Category, ct);
         else
             products = await _uow.Products.GetAllAsync(ct);
+
+        if (!string.IsNullOrWhiteSpace(request.SubCategory))
+            products = products.Where(p => p.SubCategoryName == request.SubCategory).ToList().AsReadOnly();
 
         if (!string.IsNullOrWhiteSpace(request.SearchTerm))
         {

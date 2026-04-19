@@ -31,10 +31,10 @@ public sealed class ProductDtoMappingTests
         result.Description.Should().Be(dto.Description);
         result.SKU.Should().Be(dto.SKU);
         result.Brand.Should().Be(dto.Brand);
-        result.Gender.Should().Be("Men");
+        result.CategoryName.Should().Be("Men");
+        result.SubCategoryName.Should().Be("Shirts");
         result.Status.Should().NotBeEmpty();
-        result.CategoryName.Should().Be(dto.CategoryName);
-        result.SubCategoryName.Should().BeNull();
+        result.SubCategoryName.Should().Be(dto.SubCategoryName);
         result.Price.Should().Be(dto.Price);
         result.Currency.Should().Be(dto.Currency);
         result.DiscountPrice.Should().BeNull();

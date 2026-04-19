@@ -15,7 +15,8 @@ public sealed class ProductTests
         product.Should().NotBeNull();
         product.Name.Should().Be("Men's Classic Shirt");
         product.SKU.Should().Be("MEN-SHRT-001");
-        product.Gender.Should().Be(Gender.Men);
+        product.CategoryName.Should().Be("Men");
+        product.SubCategoryName.Should().Be("Shirts");
         product.Status.Should().Be(ProductStatus.Active);
         product.Price.Should().Be(999.99m);
         product.StockQuantity.Should().Be(50);
@@ -25,7 +26,7 @@ public sealed class ProductTests
     public void Create_WithZeroStock_ShouldSetOutOfStockStatus()
     {
         var product = Product.Create("Test", "Desc", "SKU-001", "Brand",
-            Gender.Men, "Shirts", null, 100m, "USD", 0, ["M"], ["White"], null);
+            "Men", "Shirts", 100m, "USD", 0, ["M"], ["White"], null);
         product.Status.Should().Be(ProductStatus.OutOfStock);
     }
 
@@ -33,7 +34,15 @@ public sealed class ProductTests
     public void Create_WithEmptyName_ShouldThrowException()
     {
         var act = () => Product.Create("", "Desc", "SKU-001", "Brand",
-            Gender.Men, "Shirts", null, 100m, "USD", 10, ["M"], ["White"], null);
+            "Men", "Shirts", 100m, "USD", 10, ["M"], ["White"], null);
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Create_WithEmptyCategoryName_ShouldThrowException()
+    {
+        var act = () => Product.Create("Name", "Desc", "SKU-001", "Brand",
+            "", "Shirts", 100m, "USD", 10, ["M"], ["White"], null);
         act.Should().Throw<ArgumentException>();
     }
 
@@ -128,13 +137,16 @@ public sealed class ProductTests
     }
 
     [Theory]
-    [InlineData(Gender.Men)]
-    [InlineData(Gender.Women)]
-    [InlineData(Gender.Kids)]
-    public void Create_ShouldSupportAllGenders(Gender gender)
+    [InlineData("Men", "Shirts")]
+    [InlineData("Women", "Dresses")]
+    [InlineData("Kids", "T-Shirts")]
+    [InlineData("Sports", "Jerseys")]
+    [InlineData("Formal", "Suits")]
+    public void Create_ShouldSupportAnyCategory(string category, string subCategory)
     {
-        var product = Product.Create("Test", "Desc", $"SKU-{gender}", "Brand",
-            gender, "Category", null, 100m, "USD", 10, ["M"], ["White"], null);
-        product.Gender.Should().Be(gender);
+        var product = Product.Create("Test", "Desc", $"SKU-{category}", "Brand",
+            category, subCategory, 100m, "USD", 10, ["M"], ["White"], null);
+        product.CategoryName.Should().Be(category);
+        product.SubCategoryName.Should().Be(subCategory);
     }
 }

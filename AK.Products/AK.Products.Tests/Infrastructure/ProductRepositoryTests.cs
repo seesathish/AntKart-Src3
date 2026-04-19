@@ -1,5 +1,4 @@
 using AK.Products.Domain.Entities;
-using AK.Products.Domain.Enums;
 using AK.Products.Domain.Specifications;
 using AK.Products.Infrastructure.Persistence;
 using AK.Products.Infrastructure.Persistence.Repositories;
@@ -120,22 +119,6 @@ public sealed class ProductRepositoryTests
     }
 
     [Fact]
-    public async Task GetByGenderAsync_ShouldReturnProductsForGender()
-    {
-        var (repo, collection) = CreateRepo();
-        var menProducts = new List<Product> { TestDataFactory.CreateMenProduct() };
-        collection.Setup(c => c.FindAsync(
-            It.IsAny<FilterDefinition<Product>>(),
-            It.IsAny<FindOptions<Product, Product>>(),
-            It.IsAny<CancellationToken>()))
-            .ReturnsAsync(CreateCursor(menProducts).Object);
-
-        var result = await repo.GetByGenderAsync(Gender.Men);
-
-        result.Should().HaveCount(1);
-    }
-
-    [Fact]
     public async Task GetByCategoryAsync_ShouldReturnProductsForCategory()
     {
         var (repo, collection) = CreateRepo();
@@ -194,7 +177,7 @@ public sealed class ProductRepositoryTests
             It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateCursor(products).Object);
 
-        var spec = new ProductSearchSpecification("Shirt", null, Gender.Men, null, skip: 0, take: 10);
+        var spec = new ProductSearchSpecification("Shirt", "Men", "Shirts", null, skip: 0, take: 10);
         var result = await repo.ListAsync(spec);
 
         result.Should().HaveCount(1);

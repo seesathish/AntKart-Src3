@@ -31,10 +31,6 @@ public sealed class MongoDbContext
         products.Indexes.CreateOne(new CreateIndexModel<Domain.Entities.Product>(
             skuIndex, new CreateIndexOptions { Unique = true, Name = "sku_unique" }));
 
-        var genderIndex = Builders<Domain.Entities.Product>.IndexKeys.Ascending(p => p.Gender);
-        products.Indexes.CreateOne(new CreateIndexModel<Domain.Entities.Product>(
-            genderIndex, new CreateIndexOptions { Name = "idx_gender" }));
-
         var categoryIndex = Builders<Domain.Entities.Product>.IndexKeys.Ascending(p => p.CategoryName);
         products.Indexes.CreateOne(new CreateIndexModel<Domain.Entities.Product>(
             categoryIndex, new CreateIndexOptions { Name = "idx_category" }));

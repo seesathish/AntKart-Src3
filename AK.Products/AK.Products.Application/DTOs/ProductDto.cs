@@ -1,5 +1,3 @@
-﻿using AK.Products.Domain.Enums;
-
 namespace AK.Products.Application.DTOs;
 
 public sealed record ProductDto(
@@ -8,7 +6,6 @@ public sealed record ProductDto(
     string Description,
     string SKU,
     string Brand,
-    string Gender,
     string Status,
     string CategoryName,
     string? SubCategoryName,

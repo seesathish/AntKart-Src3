@@ -20,7 +20,7 @@ public sealed class CreateProductCommandHandler : IRequestHandler<CreateProductC
 
         var product = Product.Create(
             dto.Name, dto.Description, dto.SKU, dto.Brand,
-            dto.Gender, dto.CategoryName, dto.SubCategoryName,
+            dto.CategoryName, dto.SubCategoryName,
             dto.Price, dto.Currency, dto.StockQuantity,
             dto.Sizes, dto.Colors, dto.Material);
 

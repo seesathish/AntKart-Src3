@@ -5,9 +5,9 @@ using AK.Products.Application.Commands.DeleteProduct;
 using AK.Products.Application.Commands.UpdateProduct;
 using AK.Products.Application.DTOs;
 using AK.Products.Application.Queries.GetProductById;
+using AK.Products.Application.Queries.GetProductCategories;
 using AK.Products.Application.Queries.GetProducts;
 using AK.Products.Application.Queries.GetProductsByCategory;
-using AK.Products.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -24,8 +24,8 @@ public static class ProductEndpoints
         group.MapGet("/", async (
             [FromQuery] int page,
             [FromQuery] int pageSize,
-            [FromQuery] Gender? gender,
             [FromQuery] string? category,
+            [FromQuery] string? subCategory,
             [FromQuery] string? search,
             [FromQuery] bool? featured,
             IMediator mediator,
@@ -34,8 +34,8 @@ public static class ProductEndpoints
             var query = new GetProductsQuery(
                 Page: page > 0 ? page : 1,
                 PageSize: pageSize > 0 ? pageSize : 20,
-                Gender: gender,
                 Category: category,
+                SubCategory: subCategory,
                 SearchTerm: search,
                 IsFeatured: featured);
             var result = await mediator.Send(query, ct);
@@ -43,7 +43,27 @@ public static class ProductEndpoints
         })
         .AllowAnonymous()
         .WithName("GetProducts")
-        .WithSummary("Get all products with optional filtering and paging");
+        .WithSummary("Get products — filter by ?category=Men&subCategory=Shirts");
+
+        // GET /api/v1/products/categories
+        group.MapGet("/categories", async (IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new GetProductCategoriesQuery(), ct);
+            return Results.Ok(result);
+        })
+        .AllowAnonymous()
+        .WithName("GetProductCategories")
+        .WithSummary("Get all distinct top-level category names from the product catalogue");
+
+        // GET /api/v1/products/featured
+        group.MapGet("/featured", async (IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new GetProductsQuery(IsFeatured: true, PageSize: 50), ct);
+            return Results.Ok(result);
+        })
+        .AllowAnonymous()
+        .WithName("GetFeaturedProducts")
+        .WithSummary("Get all featured products");
 
         // GET /api/v1/products/{id}
         group.MapGet("/{id}", async (string id, IMediator mediator, CancellationToken ct) =>
@@ -63,7 +83,7 @@ public static class ProductEndpoints
         })
         .AllowAnonymous()
         .WithName("GetProductsByCategory")
-        .WithSummary("Get all products by category name");
+        .WithSummary("Get all products by top-level category name (e.g. Men, Women, Kids)");
 
         // POST /api/v1/products
         group.MapPost("/", async (CreateProductDto dto, IMediator mediator, CancellationToken ct) =>
@@ -114,45 +134,5 @@ public static class ProductEndpoints
         .RequireAuthorization("admin")
         .WithName("BulkUpdateProducts")
         .WithSummary("Bulk update multiple products (Admin only)");
-
-        // GET /api/v1/products/men
-        group.MapGet("/men", async (IMediator mediator, CancellationToken ct) =>
-        {
-            var result = await mediator.Send(new GetProductsQuery(Gender: Gender.Men), ct);
-            return Results.Ok(result);
-        })
-        .AllowAnonymous()
-        .WithName("GetMenProducts")
-        .WithSummary("Get all men's products");
-
-        // GET /api/v1/products/women
-        group.MapGet("/women", async (IMediator mediator, CancellationToken ct) =>
-        {
-            var result = await mediator.Send(new GetProductsQuery(Gender: Gender.Women), ct);
-            return Results.Ok(result);
-        })
-        .AllowAnonymous()
-        .WithName("GetWomenProducts")
-        .WithSummary("Get all women's products");
-
-        // GET /api/v1/products/kids
-        group.MapGet("/kids", async (IMediator mediator, CancellationToken ct) =>
-        {
-            var result = await mediator.Send(new GetProductsQuery(Gender: Gender.Kids), ct);
-            return Results.Ok(result);
-        })
-        .AllowAnonymous()
-        .WithName("GetKidsProducts")
-        .WithSummary("Get all kids' products");
-
-        // GET /api/v1/products/featured
-        group.MapGet("/featured", async (IMediator mediator, CancellationToken ct) =>
-        {
-            var result = await mediator.Send(new GetProductsQuery(IsFeatured: true, PageSize: 50), ct);
-            return Results.Ok(result);
-        })
-        .AllowAnonymous()
-        .WithName("GetFeaturedProducts")
-        .WithSummary("Get all featured products");
     }
 }

@@ -15,7 +15,7 @@ public sealed class BulkInsertProductsCommandHandler : IRequestHandler<BulkInser
     {
         var products = request.Products.Select(dto => Product.Create(
             dto.Name, dto.Description, dto.SKU, dto.Brand,
-            dto.Gender, dto.CategoryName, dto.SubCategoryName,
+            dto.CategoryName, dto.SubCategoryName,
             dto.Price, dto.Currency, dto.StockQuantity,
             dto.Sizes, dto.Colors, dto.Material)).ToList();
 

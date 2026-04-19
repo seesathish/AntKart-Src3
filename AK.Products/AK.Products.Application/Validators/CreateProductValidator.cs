@@ -1,4 +1,4 @@
-﻿using AK.Products.Application.DTOs;
+using AK.Products.Application.DTOs;
 using FluentValidation;
 
 namespace AK.Products.Application.Validators;
@@ -17,6 +17,5 @@ public sealed class CreateProductValidator : AbstractValidator<CreateProductDto>
         RuleFor(x => x.CategoryName).NotEmpty().MaximumLength(100);
         RuleFor(x => x.Sizes).NotEmpty().WithMessage("At least one size is required");
         RuleFor(x => x.Colors).NotEmpty().WithMessage("At least one color is required");
-        RuleFor(x => x.Gender).IsInEnum();
     }
 }

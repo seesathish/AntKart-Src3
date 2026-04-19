@@ -1,5 +1,4 @@
 using AK.Products.Domain.Entities;
-using AK.Products.Domain.Enums;
 using FluentAssertions;
 
 namespace AK.Products.Tests.Domain.Entities;
@@ -9,11 +8,10 @@ public sealed class CategoryTests
     [Fact]
     public void Create_WithValidData_ShouldCreateCategory()
     {
-        var cat = Category.Create("Shirts", "shirts", "Men's shirts", Gender.Men);
-        cat.Name.Should().Be("Shirts");
-        cat.Slug.Should().Be("shirts");
-        cat.Description.Should().Be("Men's shirts");
-        cat.TargetGender.Should().Be(Gender.Men);
+        var cat = Category.Create("Men", "men", "Men's clothing");
+        cat.Name.Should().Be("Men");
+        cat.Slug.Should().Be("men");
+        cat.Description.Should().Be("Men's clothing");
         cat.IsActive.Should().BeTrue();
         cat.ParentCategoryId.Should().BeNull();
     }
@@ -21,14 +19,14 @@ public sealed class CategoryTests
     [Fact]
     public void Create_ShouldLowercaseSlug()
     {
-        var cat = Category.Create("Shirts", "MEN-SHIRTS");
-        cat.Slug.Should().Be("men-shirts");
+        var cat = Category.Create("Men", "MEN-CLOTHING");
+        cat.Slug.Should().Be("men-clothing");
     }
 
     [Fact]
     public void Create_WithParentCategoryId_ShouldSetParent()
     {
-        var cat = Category.Create("Casual", "casual", null, null, "parent-123");
+        var cat = Category.Create("Shirts", "shirts", null, "parent-123");
         cat.ParentCategoryId.Should().Be("parent-123");
     }
 
@@ -49,26 +47,25 @@ public sealed class CategoryTests
     [Fact]
     public void Update_ShouldUpdateAllProperties()
     {
-        var cat = Category.Create("Shirts", "shirts");
-        cat.Update("Trousers", "trousers", "Men's trousers", Gender.Women);
-        cat.Name.Should().Be("Trousers");
-        cat.Slug.Should().Be("trousers");
-        cat.Description.Should().Be("Men's trousers");
-        cat.TargetGender.Should().Be(Gender.Women);
+        var cat = Category.Create("Men", "men");
+        cat.Update("Sports", "sports", "Sportswear");
+        cat.Name.Should().Be("Sports");
+        cat.Slug.Should().Be("sports");
+        cat.Description.Should().Be("Sportswear");
     }
 
     [Fact]
     public void Update_ShouldLowercaseSlug()
     {
-        var cat = Category.Create("Shirts", "shirts");
-        cat.Update("Shirts", "SHIRTS-UPDATED", null, null);
-        cat.Slug.Should().Be("shirts-updated");
+        var cat = Category.Create("Men", "men");
+        cat.Update("Men", "MEN-UPDATED", null);
+        cat.Slug.Should().Be("men-updated");
     }
 
     [Fact]
     public void Deactivate_ShouldSetIsActiveFalse()
     {
-        var cat = Category.Create("Shirts", "shirts");
+        var cat = Category.Create("Men", "men");
         cat.Deactivate();
         cat.IsActive.Should().BeFalse();
     }
@@ -76,19 +73,22 @@ public sealed class CategoryTests
     [Fact]
     public void Activate_AfterDeactivate_ShouldSetIsActiveTrue()
     {
-        var cat = Category.Create("Shirts", "shirts");
+        var cat = Category.Create("Men", "men");
         cat.Deactivate();
         cat.Activate();
         cat.IsActive.Should().BeTrue();
     }
 
     [Theory]
-    [InlineData(Gender.Men)]
-    [InlineData(Gender.Women)]
-    [InlineData(Gender.Kids)]
-    public void Create_ShouldSupportAllGenders(Gender gender)
+    [InlineData("Men")]
+    [InlineData("Women")]
+    [InlineData("Kids")]
+    [InlineData("Sports")]
+    [InlineData("Formal")]
+    public void Create_ShouldSupportAnyCategory(string categoryName)
     {
-        var cat = Category.Create("Category", "category", null, gender);
-        cat.TargetGender.Should().Be(gender);
+        var cat = Category.Create(categoryName, categoryName.ToLower());
+        cat.Name.Should().Be(categoryName);
+        cat.IsActive.Should().BeTrue();
     }
 }

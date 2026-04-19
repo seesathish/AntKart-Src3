@@ -2,7 +2,6 @@ using AK.Products.Domain.Entities;
 using AK.Products.Application.Common;
 using AK.Products.Application.Interfaces;
 using AK.Products.Application.Queries.GetProducts;
-using AK.Products.Domain.Enums;
 using AK.Products.Tests.Common;
 using FluentAssertions;
 using Moq;
@@ -43,19 +42,33 @@ public sealed class GetProductsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WithGenderFilter_ShouldFilterByGender()
+    public async Task Handle_WithCategoryFilter_ShouldGetByCategory()
     {
-        var menProducts = new List<Product>
+        var products = new List<Product>
         {
             TestDataFactory.CreateMenProduct("SKU-001"),
             TestDataFactory.CreateMenProduct("SKU-002")
         }.AsReadOnly();
-        _repoMock.Setup(r => r.GetByGenderAsync(Gender.Men, default)).ReturnsAsync(menProducts);
+        _repoMock.Setup(r => r.GetByCategoryAsync("Men", default)).ReturnsAsync(products);
 
-        var result = await _handler.Handle(new GetProductsQuery(Gender: Gender.Men), default);
+        var result = await _handler.Handle(new GetProductsQuery(Category: "Men"), default);
 
         result.Items.Should().HaveCount(2);
-        result.Items.All(p => p.Gender == "Men").Should().BeTrue();
+        result.Items.All(p => p.CategoryName == "Men").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_WithSubCategoryFilter_ShouldFilterInMemory()
+    {
+        var shirts = TestDataFactory.CreateMenProduct("SKU-001");
+        var dresses = TestDataFactory.CreateWomenProduct("SKU-002");
+        var products = new List<Product> { shirts, dresses }.AsReadOnly();
+        _repoMock.Setup(r => r.GetAllAsync(default)).ReturnsAsync(products);
+
+        var result = await _handler.Handle(new GetProductsQuery(SubCategory: "Shirts"), default);
+
+        result.Items.Should().HaveCount(1);
+        result.Items[0].SubCategoryName.Should().Be("Shirts");
     }
 
     [Fact]
@@ -88,22 +101,6 @@ public sealed class GetProductsQueryHandlerTests
         result.TotalPages.Should().Be(3);
         result.HasNextPage.Should().BeTrue();
         result.HasPreviousPage.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task Handle_WithCategoryFilter_ShouldGetByCategory()
-    {
-        var products = new List<Product>
-        {
-            TestDataFactory.CreateMenProduct("SKU-001"),
-            TestDataFactory.CreateMenProduct("SKU-002")
-        }.AsReadOnly();
-        _repoMock.Setup(r => r.GetByCategoryAsync("Shirts", default)).ReturnsAsync(products);
-
-        var result = await _handler.Handle(new GetProductsQuery(Category: "Shirts"), default);
-
-        result.Items.Should().HaveCount(2);
-        result.Items.All(p => p.CategoryName == "Shirts").Should().BeTrue();
     }
 
     [Fact]

@@ -31,12 +31,12 @@ public sealed class GetProductsByCategoryQueryHandlerTests
             TestDataFactory.CreateMenProduct("SKU-001"),
             TestDataFactory.CreateMenProduct("SKU-002")
         }.AsReadOnly();
-        _repoMock.Setup(r => r.GetByCategoryAsync("Shirts", default)).ReturnsAsync(products);
+        _repoMock.Setup(r => r.GetByCategoryAsync("Men", default)).ReturnsAsync(products);
 
-        var result = await _handler.Handle(new GetProductsByCategoryQuery("Shirts"), default);
+        var result = await _handler.Handle(new GetProductsByCategoryQuery("Men"), default);
 
         result.Should().HaveCount(2);
-        result.All(p => p.CategoryName == "Shirts").Should().BeTrue();
+        result.All(p => p.CategoryName == "Men").Should().BeTrue();
     }
 
     [Fact]
@@ -54,27 +54,44 @@ public sealed class GetProductsByCategoryQueryHandlerTests
     public async Task Handle_ShouldMapProductsToDtos()
     {
         var product = TestDataFactory.CreateMenProduct("MEN-SHRT-001");
-        _repoMock.Setup(r => r.GetByCategoryAsync("Shirts", default))
+        _repoMock.Setup(r => r.GetByCategoryAsync("Men", default))
             .ReturnsAsync(new List<Product> { product }.AsReadOnly());
 
-        var result = await _handler.Handle(new GetProductsByCategoryQuery("Shirts"), default);
+        var result = await _handler.Handle(new GetProductsByCategoryQuery("Men"), default);
 
         result.Should().HaveCount(1);
         result[0].Name.Should().Be(product.Name);
         result[0].SKU.Should().Be(product.SKU);
+        result[0].CategoryName.Should().Be("Men");
+        result[0].SubCategoryName.Should().Be("Shirts");
     }
 
     [Fact]
     public async Task Handle_WithActiveDiscount_ShouldEnrichDiscountPrice()
     {
         var product = TestDataFactory.CreateMenProduct("MEN-SHRT-001");
-        _repoMock.Setup(r => r.GetByCategoryAsync("Shirts", default))
+        _repoMock.Setup(r => r.GetByCategoryAsync("Men", default))
             .ReturnsAsync(new List<Product> { product }.AsReadOnly());
         _discountMock.Setup(d => d.GetDiscountAsync(product.Id, default))
             .ReturnsAsync(new DiscountResult(15.0, "Percentage", true));
 
-        var result = await _handler.Handle(new GetProductsByCategoryQuery("Shirts"), default);
+        var result = await _handler.Handle(new GetProductsByCategoryQuery("Men"), default);
 
         result[0].DiscountPrice.Should().Be(ProductMapper.ComputeDiscountedPrice(product.Price, 15.0, "Percentage"));
+    }
+
+    [Theory]
+    [InlineData("Men")]
+    [InlineData("Women")]
+    [InlineData("Kids")]
+    [InlineData("Sports")]
+    public async Task Handle_WithAnyCategory_ShouldCallRepositoryWithThatCategory(string category)
+    {
+        _repoMock.Setup(r => r.GetByCategoryAsync(category, default))
+            .ReturnsAsync(new List<Product>().AsReadOnly());
+
+        await _handler.Handle(new GetProductsByCategoryQuery(category), default);
+
+        _repoMock.Verify(r => r.GetByCategoryAsync(category, default), Times.Once);
     }
 }

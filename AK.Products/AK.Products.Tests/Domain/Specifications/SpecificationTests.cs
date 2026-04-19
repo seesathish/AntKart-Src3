@@ -1,3 +1,4 @@
+using AK.Products.Domain.Entities;
 using AK.Products.Domain.Enums;
 using AK.Products.Domain.Specifications;
 using AK.Products.Tests.Common;
@@ -54,7 +55,7 @@ public sealed class SpecificationTests
     [Fact]
     public void ProductByCategorySpecification_ShouldMatchCorrectCategory()
     {
-        var spec = new ProductByCategorySpecification("Shirts");
+        var spec = new ProductByCategorySpecification("Men");
         var product = TestDataFactory.CreateMenProduct();
         spec.Criteria.Compile()(product).Should().BeTrue();
     }
@@ -62,7 +63,7 @@ public sealed class SpecificationTests
     [Fact]
     public void ProductByCategorySpecification_ShouldNotMatchDifferentCategory()
     {
-        var spec = new ProductByCategorySpecification("Dresses");
+        var spec = new ProductByCategorySpecification("Women");
         var product = TestDataFactory.CreateMenProduct();
         spec.Criteria.Compile()(product).Should().BeFalse();
     }
@@ -80,22 +81,6 @@ public sealed class SpecificationTests
     {
         var product = TestDataFactory.CreateMenProduct();
         var spec = new ProductByIdSpecification("different-id");
-        spec.Criteria.Compile()(product).Should().BeFalse();
-    }
-
-    [Fact]
-    public void ProductByGenderSpecification_ShouldMatchCorrectGender()
-    {
-        var spec = new ProductByGenderSpecification(Gender.Men);
-        var product = TestDataFactory.CreateMenProduct();
-        spec.Criteria.Compile()(product).Should().BeTrue();
-    }
-
-    [Fact]
-    public void ProductByGenderSpecification_ShouldNotMatchDifferentGender()
-    {
-        var spec = new ProductByGenderSpecification(Gender.Women);
-        var product = TestDataFactory.CreateMenProduct();
         spec.Criteria.Compile()(product).Should().BeFalse();
     }
 
@@ -134,15 +119,23 @@ public sealed class SpecificationTests
     [Fact]
     public void ProductSearchSpecification_WithCategoryFilter_ShouldFilterByCategory()
     {
-        var spec = new ProductSearchSpecification(null, "Shirts", null, null);
+        var spec = new ProductSearchSpecification(null, "Men", null, null);
         var product = TestDataFactory.CreateMenProduct();
         spec.Criteria.Compile()(product).Should().BeTrue();
     }
 
     [Fact]
-    public void ProductSearchSpecification_WithGenderFilter_ShouldFilterByGender()
+    public void ProductSearchSpecification_WithSubCategoryFilter_ShouldFilterBySubCategory()
     {
-        var spec = new ProductSearchSpecification(null, null, Gender.Women, null);
+        var spec = new ProductSearchSpecification(null, null, "Shirts", null);
+        var product = TestDataFactory.CreateMenProduct();
+        spec.Criteria.Compile()(product).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ProductSearchSpecification_WithNonMatchingSubCategory_ShouldNotMatch()
+    {
+        var spec = new ProductSearchSpecification(null, null, "Dresses", null);
         var product = TestDataFactory.CreateMenProduct();
         spec.Criteria.Compile()(product).Should().BeFalse();
     }

@@ -1,4 +1,4 @@
-﻿using AK.Products.Domain.Common;
+using AK.Products.Domain.Common;
 using AK.Products.Domain.Enums;
 using AK.Products.Domain.Events;
 using AK.Products.Domain.ValueObjects;
@@ -12,7 +12,6 @@ public sealed class Product : BaseEntity, IAggregateRoot
     public string Description { get; private set; } = string.Empty;
     public string SKU { get; private set; } = string.Empty;
     public string Brand { get; private set; } = string.Empty;
-    public Gender Gender { get; private set; }
     public ProductStatus Status { get; private set; }
     public string CategoryName { get; private set; } = string.Empty;
     public string? SubCategoryName { get; private set; }
@@ -39,12 +38,13 @@ public sealed class Product : BaseEntity, IAggregateRoot
 
     public static Product Create(
         string name, string description, string sku, string brand,
-        Gender gender, string categoryName, string? subCategoryName,
+        string categoryName, string? subCategoryName,
         decimal price, string currency, int stockQuantity,
         List<string> sizes, List<string> colors, string? material = null)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Name is required.", nameof(name));
         if (string.IsNullOrWhiteSpace(sku)) throw new ArgumentException("SKU is required.", nameof(sku));
+        if (string.IsNullOrWhiteSpace(categoryName)) throw new ArgumentException("CategoryName is required.", nameof(categoryName));
 
         var product = new Product
         {
@@ -52,7 +52,6 @@ public sealed class Product : BaseEntity, IAggregateRoot
             Description = description,
             SKU = sku,
             Brand = brand,
-            Gender = gender,
             CategoryName = categoryName,
             SubCategoryName = subCategoryName,
             Price = price,

@@ -1,6 +1,5 @@
-﻿using AK.Products.Application.Interfaces;
+using AK.Products.Application.Interfaces;
 using AK.Products.Domain.Entities;
-using AK.Products.Domain.Enums;
 using AK.Products.Domain.Specifications;
 using MongoDB.Driver;
 using Microsoft.Extensions.Options;
@@ -28,16 +27,18 @@ public sealed class ProductRepository : IProductRepository
         return results.AsReadOnly();
     }
 
-    public async Task<IReadOnlyList<Product>> GetByGenderAsync(Gender gender, CancellationToken ct = default)
-    {
-        var results = await _collection.Find(p => p.Gender == gender).ToListAsync(ct);
-        return results.AsReadOnly();
-    }
-
     public async Task<IReadOnlyList<Product>> GetByCategoryAsync(string category, CancellationToken ct = default)
     {
         var results = await _collection.Find(p => p.CategoryName == category).ToListAsync(ct);
         return results.AsReadOnly();
+    }
+
+    public async Task<IReadOnlyList<string>> GetDistinctCategoriesAsync(CancellationToken ct = default)
+    {
+        var filter = Builders<Product>.Filter.Empty;
+        var results = await _collection.DistinctAsync<string>("CategoryName", filter, null, ct);
+        var list = await results.ToListAsync(ct);
+        return list.OrderBy(c => c).ToList().AsReadOnly();
     }
 
     public async Task<IReadOnlyList<Product>> ListAsync(ISpecification<Product> spec, CancellationToken ct = default)
