@@ -2,6 +2,7 @@ using AK.Order.Application.Common.Interfaces;
 using AK.Order.Application.Features.CreateOrder;
 using AK.Order.Domain.Entities;
 using AK.Order.Tests.Common;
+using MassTransit;
 using OrderEntity = AK.Order.Domain.Entities.Order;
 using FluentAssertions;
 using Moq;
@@ -12,6 +13,7 @@ public class CreateOrderCommandHandlerTests
 {
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IOrderRepository> _repo = new();
+    private readonly Mock<IPublishEndpoint> _publisher = new();
 
     public CreateOrderCommandHandlerTests()
     {
@@ -24,7 +26,7 @@ public class CreateOrderCommandHandlerTests
     [Fact]
     public async Task Handle_ValidCommand_ReturnsOrderDto()
     {
-        var handler = new CreateOrderCommandHandler(_uow.Object);
+        var handler = new CreateOrderCommandHandler(_uow.Object, _publisher.Object);
         var command = new CreateOrderCommand("user-123", TestDataFactory.CreateOrderDto());
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -40,7 +42,7 @@ public class CreateOrderCommandHandlerTests
     [Fact]
     public async Task Handle_ValidCommand_SavesOrder()
     {
-        var handler = new CreateOrderCommandHandler(_uow.Object);
+        var handler = new CreateOrderCommandHandler(_uow.Object, _publisher.Object);
         var command = new CreateOrderCommand("user-123", TestDataFactory.CreateOrderDto());
 
         await handler.Handle(command, CancellationToken.None);
@@ -52,7 +54,7 @@ public class CreateOrderCommandHandlerTests
     [Fact]
     public async Task Handle_ValidCommand_ClearsDomainEvents()
     {
-        var handler = new CreateOrderCommandHandler(_uow.Object);
+        var handler = new CreateOrderCommandHandler(_uow.Object, _publisher.Object);
         var command = new CreateOrderCommand("user-123", TestDataFactory.CreateOrderDto());
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -63,7 +65,7 @@ public class CreateOrderCommandHandlerTests
     [Fact]
     public async Task Handle_ValidCommand_MapsShippingAddress()
     {
-        var handler = new CreateOrderCommandHandler(_uow.Object);
+        var handler = new CreateOrderCommandHandler(_uow.Object, _publisher.Object);
         var command = new CreateOrderCommand("user-123", TestDataFactory.CreateOrderDto());
 
         var result = await handler.Handle(command, CancellationToken.None);

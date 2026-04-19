@@ -1,0 +1,39 @@
+using AK.BuildingBlocks.Messaging.IntegrationEvents;
+
+namespace AK.IntegrationTests.Common;
+
+public static class IntegrationTestData
+{
+    public static readonly Guid TestOrderId = Guid.NewGuid();
+    public static readonly string TestUserId = "user-test-01";
+    public static readonly string TestProductId = "507f1f77bcf86cd799439011";
+
+    public static OrderCreatedIntegrationEvent CreateOrderEvent(
+        Guid? orderId = null,
+        string? userId = null,
+        int quantity = 5) => new(
+            orderId ?? Guid.NewGuid(),
+            userId ?? TestUserId,
+            new List<OrderItemPayload>
+            {
+                new(TestProductId, "MEN-SHIR-001", quantity, 29.99m)
+            },
+            29.99m * quantity);
+
+    public static StockReservedIntegrationEvent CreateStockReservedEvent(Guid orderId, string? userId = null)
+        => new(orderId, userId ?? TestUserId);
+
+    public static StockReservationFailedIntegrationEvent CreateStockFailedEvent(
+        Guid orderId,
+        string reason = "Insufficient stock for: MEN-SHIR-001",
+        string? userId = null)
+        => new(orderId, userId ?? TestUserId, reason);
+
+    public static OrderConfirmedIntegrationEvent CreateOrderConfirmedEvent(Guid orderId, string? userId = null)
+        => new(orderId, userId ?? TestUserId);
+
+    public static OrderCancelledIntegrationEvent CreateOrderCancelledEvent(
+        Guid orderId,
+        string reason = "Insufficient stock")
+        => new(orderId, reason);
+}

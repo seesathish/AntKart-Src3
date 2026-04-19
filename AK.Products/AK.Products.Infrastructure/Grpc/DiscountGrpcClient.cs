@@ -12,17 +12,21 @@ public sealed class DiscountGrpcSettings
     public string Address { get; init; } = string.Empty;
 }
 
-internal sealed class DiscountGrpcClient : IDiscountGrpcClient, IDisposable
+internal sealed class DiscountGrpcClient : IDiscountGrpcClient
 {
-    private readonly GrpcChannel _channel;
     private readonly DiscountProtoService.DiscountProtoServiceClient _client;
     private readonly ILogger<DiscountGrpcClient> _logger;
 
-    public DiscountGrpcClient(IOptions<DiscountGrpcSettings> settings, ILogger<DiscountGrpcClient> logger)
+    public DiscountGrpcClient(
+        IHttpClientFactory httpClientFactory,
+        IOptions<DiscountGrpcSettings> settings,
+        ILogger<DiscountGrpcClient> logger)
     {
         _logger = logger;
-        _channel = GrpcChannel.ForAddress(settings.Value.Address);
-        _client = new DiscountProtoService.DiscountProtoServiceClient(_channel);
+        var httpClient = httpClientFactory.CreateClient("discount-grpc");
+        var channel = GrpcChannel.ForAddress(settings.Value.Address,
+            new GrpcChannelOptions { HttpClient = httpClient });
+        _client = new DiscountProtoService.DiscountProtoServiceClient(channel);
     }
 
     public async Task<DiscountResult?> GetDiscountAsync(string productId, CancellationToken ct = default)
@@ -32,7 +36,6 @@ internal sealed class DiscountGrpcClient : IDiscountGrpcClient, IDisposable
             var response = await _client.GetDiscountAsync(
                 new GetDiscountRequest { ProductId = productId },
                 cancellationToken: ct);
-
             return new DiscountResult(response.Amount, response.DiscountType, response.IsActive);
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound)
@@ -45,6 +48,4 @@ internal sealed class DiscountGrpcClient : IDiscountGrpcClient, IDisposable
             return null;
         }
     }
-
-    public void Dispose() => _channel.Dispose();
 }

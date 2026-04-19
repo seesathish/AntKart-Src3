@@ -1,3 +1,6 @@
+using AK.BuildingBlocks.Messaging;
+using AK.BuildingBlocks.Resilience;
+using AK.ShoppingCart.Application.Consumers;
 using AK.ShoppingCart.Application.Interfaces;
 using AK.ShoppingCart.Infrastructure.Persistence;
 using AK.ShoppingCart.Infrastructure.Persistence.Repositories;
@@ -14,6 +17,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<RedisContext>();
         services.AddScoped<ICartRepository, CartRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        services.AddRedisResilience();
+
+        services.AddRabbitMqMassTransit(configuration, cfg =>
+        {
+            cfg.AddConsumer<ClearCartOnOrderConfirmedConsumer>();
+        });
+
         return services;
     }
 }

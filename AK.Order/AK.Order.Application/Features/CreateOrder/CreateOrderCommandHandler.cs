@@ -1,14 +1,16 @@
+using AK.BuildingBlocks.Messaging.IntegrationEvents;
 using AK.Order.Application.Common.Interfaces;
 using AK.Order.Application.Common.Mapping;
 using AK.Order.Application.Common.DTOs;
 using AK.Order.Domain.Entities;
 using AK.Order.Domain.ValueObjects;
+using MassTransit;
 using MediatR;
 using OrderEntity = AK.Order.Domain.Entities.Order;
 
 namespace AK.Order.Application.Features.CreateOrder;
 
-public sealed class CreateOrderCommandHandler(IUnitOfWork uow)
+public sealed class CreateOrderCommandHandler(IUnitOfWork uow, IPublishEndpoint publisher)
     : IRequestHandler<CreateOrderCommand, OrderDto>
 {
     public async Task<OrderDto> Handle(CreateOrderCommand request, CancellationToken ct)
@@ -25,6 +27,15 @@ public sealed class CreateOrderCommandHandler(IUnitOfWork uow)
         await uow.Orders.AddAsync(order, ct);
         await uow.SaveChangesAsync(ct);
         order.ClearDomainEvents();
+
+        var integrationEvent = new OrderCreatedIntegrationEvent(
+            order.Id,
+            order.UserId,
+            items.Select(i => new OrderItemPayload(i.ProductId, i.SKU, i.Quantity, i.Price)).ToList(),
+            order.TotalAmount);
+
+        await publisher.Publish(integrationEvent, ct);
+
         return OrderMapper.ToDto(order);
     }
 }

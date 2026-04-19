@@ -17,12 +17,19 @@ AntKart/
 ├── AK.Products/          REST Minimal API — product catalogue (MongoDB)
 ├── AK.Discount/          gRPC service — discount coupons (SQLite)
 ├── AK.ShoppingCart/      REST Minimal API — shopping cart (Redis)
-├── AK.Order/             REST Minimal API — order management (PostgreSQL)
+├── AK.Order/             REST Minimal API — order management (PostgreSQL + SAGA)
+├── AK.UserIdentity/      REST Minimal API — Keycloak identity proxy
+├── AK.Gateway/           API Gateway — Ocelot single entry point
 ├── AK.BuildingBlocks/    Shared cross-cutting library (no business logic)
+├── AK.IntegrationTests/  SAGA + event bus tests (no API/Grpc dependency)
 ├── AntKart.sln
 ├── AntKart.postman_collection.json
 ├── docker-compose.yml
 ├── docker-compose.override.yml
+├── EVENTBUS.md           Event bus & SAGA design
+├── RESILIENCE.md         Polly circuit breaker design
+├── INTEGRATION_TESTS.md  Integration test design
+├── OBSERVABILITY.md      ELK observability design
 ├── nuget.config
 └── CLAUDE.md             ← this file
 ```
@@ -100,14 +107,30 @@ AK.<Service>/
 - **Swagger:** `http://localhost:5085/swagger`
 - **Design doc:** [AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md](AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md)
 
+### ✅ AK.Gateway  (API Gateway)
+- **Transport:** HTTP, port 8000 (Docker) / 8000 (dev)
+- **Technology:** Ocelot 23.4.2
+- **Features:** Routing to all 4 REST services, JWT passthrough auth, rate limiting (10-30 RPS per route), QoS circuit breaker
+- **Config:** `ocelot.json` (Docker), `ocelot.Development.json` (dev overrides)
+- **Design doc:** [AK.Gateway/API_GATEWAY.md](AK.Gateway/API_GATEWAY.md)
+
 ### ✅ AK.BuildingBlocks  (Shared Library)
 - `Common/PagedResult<T>`, `Result<T>`
 - `Exceptions/NotFoundException`, `ValidationException`
-- `Logging/SerilogExtensions` — Serilog with console + rolling file
+- `Logging/SerilogExtensions` — Serilog with console + rolling file + Elasticsearch sink
 - `HealthChecks/HealthCheckExtensions` — `/health` endpoint
 - `Middleware/CorrelationIdMiddleware` — `X-Correlation-Id` header
 - `Authentication/AuthenticationExtensions` — `AddKeycloakAuthentication()` + `UseKeycloakAuth()` shared JWT auth wiring
 - `Authentication/KeycloakSettings` — typed config record for Keycloak settings
+- `Messaging/IIntegrationEvent` — base interface for all integration events
+- `Messaging/IntegrationEvents/` — `OrderCreatedIntegrationEvent`, `StockReservedIntegrationEvent`, `StockReservationFailedIntegrationEvent`, `OrderConfirmedIntegrationEvent`, `OrderCancelledIntegrationEvent`, `CartClearedIntegrationEvent`
+- `Messaging/MassTransitExtensions` — `AddRabbitMqMassTransit()` helper (kebab-case, global retry)
+- `Resilience/ResilienceExtensions` — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, `AddNpgsqlResilience()`
+
+### ✅ AK.IntegrationTests  (Event Bus Tests)
+- **Framework:** MassTransit in-memory test harness (no RabbitMQ, no DB, no host)
+- **Tests:** 10 passing — 3 happy path, 3 sad path, 4 event bus flow
+- **Design doc:** [INTEGRATION_TESTS.md](INTEGRATION_TESTS.md)
 
 ---
 
@@ -215,11 +238,18 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | Grpc.AspNetCore | 2.x | Discount Grpc |
 | Swashbuckle.AspNetCore | 7.x | Products API |
 | Serilog.AspNetCore | 7.x | BuildingBlocks |
+| Serilog.Sinks.Elasticsearch | 9.0.3 | BuildingBlocks |
+| MassTransit | 8.3.6 | BuildingBlocks, Order, Products, ShoppingCart |
+| MassTransit.RabbitMQ | 8.3.6 | Infrastructure (event bus services) |
+| MassTransit.EntityFrameworkCore | 8.3.6 | Order Infrastructure (outbox + saga) |
+| Microsoft.Extensions.Http.Resilience | 9.0.0 | BuildingBlocks, Products Infrastructure |
+| Microsoft.Extensions.Resilience | 9.0.0 | BuildingBlocks, Order/ShoppingCart Infrastructure |
+| Ocelot | 23.4.2 | Gateway API |
 | xunit | 2.9.x | Tests |
 | Moq | 4.20.x | Tests |
 | FluentAssertions | 7.x | Tests |
 
-**Do NOT add:** `MediatR.Extensions.Microsoft.DependencyInjection` (removed in v12), `Microsoft.AspNetCore.OpenApi` (conflicts with Swashbuckle).
+**Do NOT add:** `MediatR.Extensions.Microsoft.DependencyInjection` (removed in v12), `Microsoft.AspNetCore.OpenApi` (conflicts with Swashbuckle), `MassTransit.Testing` (not a separate package — test harness is in `MassTransit` itself).
 
 ---
 

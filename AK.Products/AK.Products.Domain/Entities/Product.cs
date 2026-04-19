@@ -98,6 +98,17 @@ public sealed class Product : BaseEntity, IAggregateRoot
         SetUpdated();
     }
 
+    public void DecrementStock(int quantity)
+    {
+        if (quantity <= 0) throw new ArgumentException("Quantity must be positive.", nameof(quantity));
+        if (StockQuantity < quantity)
+            throw new InvalidOperationException(
+                $"Insufficient stock for SKU '{SKU}'. Available: {StockQuantity}, Requested: {quantity}");
+        StockQuantity -= quantity;
+        Status = StockQuantity > 0 ? ProductStatus.Active : ProductStatus.OutOfStock;
+        SetUpdated();
+    }
+
     public void Deactivate() { Status = ProductStatus.Inactive; SetUpdated(); }
 
     public void ClearDomainEvents() => _domainEvents.Clear();

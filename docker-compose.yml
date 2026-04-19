@@ -54,10 +54,17 @@ services:
       - Keycloak__Realm=antkart
       - Keycloak__ClientId=antkart-client
       - Keycloak__ClientSecret=antkart-secret
+      - RabbitMq__Host=rabbitmq
+      - RabbitMq__VirtualHost=/
+      - RabbitMq__Username=guest
+      - RabbitMq__Password=guest
+      - Elasticsearch__Url=http://elasticsearch:9200
     depends_on:
       - mongodb
       - keycloak
       - ak-discount-grpc
+      - rabbitmq
+      - elasticsearch
 
   ak-discount-grpc:
     image: ak-discount-grpc
@@ -104,9 +111,16 @@ services:
       Keycloak__Realm: "antkart"
       Keycloak__ClientId: "antkart-client"
       Keycloak__ClientSecret: "antkart-secret"
+      RabbitMq__Host: "rabbitmq"
+      RabbitMq__VirtualHost: "/"
+      RabbitMq__Username: "guest"
+      RabbitMq__Password: "guest"
+      Elasticsearch__Url: "http://elasticsearch:9200"
     depends_on:
       - redis
       - keycloak
+      - rabbitmq
+      - elasticsearch
 
   postgres:
     image: postgres:16-alpine
@@ -140,9 +154,16 @@ services:
       Keycloak__Realm: "antkart"
       Keycloak__ClientId: "antkart-client"
       Keycloak__ClientSecret: "antkart-secret"
+      RabbitMq__Host: "rabbitmq"
+      RabbitMq__VirtualHost: "/"
+      RabbitMq__Username: "guest"
+      RabbitMq__Password: "guest"
+      Elasticsearch__Url: "http://elasticsearch:9200"
     depends_on:
       - postgres
       - keycloak
+      - rabbitmq
+      - elasticsearch
 
   ak-useridentity-api:
     image: ak-useridentity-api
@@ -162,10 +183,91 @@ services:
       Keycloak__Realm: "antkart"
       Keycloak__ClientId: "antkart-client"
       Keycloak__ClientSecret: "antkart-secret"
+      Elasticsearch__Url: "http://elasticsearch:9200"
     depends_on:
       - keycloak
+      - elasticsearch
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: antcart-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: antcart-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    container_name: antcart-kibana
+    restart: unless-stopped
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - xpack.security.enabled=false
+    depends_on:
+      - elasticsearch
+
+  ak-gateway-api:
+    image: ak-gateway-api
+    build:
+      context: .
+      dockerfile: AK.Gateway/AK.Gateway.API/Dockerfile
+    container_name: ak-gateway-api
+    restart: unless-stopped
+    ports:
+      - "9090:8000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - Keycloak__Authority=http://keycloak:8080/realms/antkart
+      - Keycloak__Audience=antkart-client
+      - Keycloak__RequireHttpsMetadata=false
+      - Keycloak__AdminUrl=http://keycloak:8080
+      - Keycloak__Realm=antkart
+      - Keycloak__ClientId=antkart-client
+      - Keycloak__ClientSecret=antkart-secret
+      - Elasticsearch__Url=http://elasticsearch:9200
+    depends_on:
+      - keycloak
+      - ak-products-api
+      - ak-shoppingcart-api
+      - ak-order-api
+      - ak-useridentity-api
 
 volumes:
   mongodb_data:
   discount_data:
   postgres_data:
+  rabbitmq_data:
+  elasticsearch_data:

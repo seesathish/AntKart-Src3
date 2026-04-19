@@ -1,5 +1,10 @@
+using AK.BuildingBlocks.Messaging;
+using AK.BuildingBlocks.Resilience;
+using AK.Order.Application.Consumers;
 using AK.Order.Application.Common.Interfaces;
+using AK.Order.Application.Sagas;
 using AK.Order.Infrastructure.Persistence;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,6 +24,28 @@ public static class ServiceCollectionExtensions
             opts.UseNpgsql(connStr));
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        services.AddNpgsqlResilience();
+
+        services.AddRabbitMqMassTransit(configuration, cfg =>
+        {
+            cfg.AddSagaStateMachine<OrderSaga, OrderSagaState>()
+               .EntityFrameworkRepository(r =>
+               {
+                   r.ConcurrencyMode = ConcurrencyMode.Optimistic;
+                   r.ExistingDbContext<OrderDbContext>();
+                   r.UsePostgres();
+               });
+
+            cfg.AddEntityFrameworkOutbox<OrderDbContext>(o =>
+            {
+                o.UsePostgres();
+                o.UseBusOutbox();
+            });
+
+            cfg.AddConsumer<OrderConfirmedConsumer>();
+            cfg.AddConsumer<OrderCancelledConsumer>();
+        });
 
         return services;
     }
