@@ -222,6 +222,8 @@ public sealed class Order : Entity, IAggregateRoot
 {
     public string OrderNumber { get; private set; }   // ORD-{yyyyMMdd}-{8-char-GUID}
     public string UserId { get; private set; }
+    public string CustomerEmail { get; private set; } // extracted from JWT at creation
+    public string CustomerName { get; private set; }  // extracted from JWT at creation
     public OrderStatus Status { get; private set; }
     public PaymentStatus PaymentStatus { get; private set; }
     public ShippingAddress ShippingAddress { get; private set; }
@@ -301,7 +303,7 @@ stateDiagram-v2
 |-------|-------------|
 | `OrderCreatedEvent(OrderId, UserId, OrderNumber)` | `Order.Create(...)` |
 | `OrderStatusChangedEvent(OrderId, OldStatus, NewStatus)` | `Order.UpdateStatus(...)` |
-| `OrderCancelledEvent(OrderId, UserId)` | `Order.Cancel()` |
+| `OrderCancelledEvent(OrderId, UserId, CustomerEmail, CustomerName, OrderNumber)` | `Order.Cancel()` |
 
 ### 6.6 Specifications
 
@@ -326,6 +328,8 @@ Each feature is a self-contained slice under `Features/<FeatureName>/`:
 This contrasts with horizontal layering (separate `Commands/`, `Queries/`, `Validators/` folders).
 
 ### 7.2 Features Summary
+
+> **Security:** `CreateOrderCommand` carries `UserId`, `CustomerEmail`, and `CustomerName` — all derived from the JWT at the endpoint layer via `http.GetUserId()`, `http.GetUserEmail()`, and `http.GetUserDisplayName()`. Clients never supply these fields. `CancelOrderCommandHandler` publishes `OrderCancelledIntegrationEvent` directly (not via SAGA) so notification consumers receive the cancellation signal.
 
 | Feature | Type | Returns |
 |---------|------|---------|
@@ -450,6 +454,8 @@ app.MapDefaultHealthChecks()
 | ShipPostalCode | varchar(20) | |
 | ShipCountry | varchar(100) | |
 | ShipPhone | varchar(30) | |
+| CustomerEmail | varchar(256) | Contact info for notifications |
+| CustomerName | varchar(200) | Contact info for notifications |
 
 ### OrderItems Table
 
@@ -466,7 +472,30 @@ app.MapDefaultHealthChecks()
 
 ---
 
-## 11. API Reference
+## 11. Integration Events
+
+### Published by AK.Order
+
+| Event | Trigger | Enriched Fields |
+|-------|---------|-----------------|
+| `OrderCreatedIntegrationEvent` | `CreateOrderCommandHandler` via MassTransit Outbox | `CustomerEmail`, `CustomerName`, `OrderNumber`, `Items`, `TotalAmount` |
+| `OrderConfirmedIntegrationEvent` | `OrderSaga` on `StockReservedIntegrationEvent` | `CustomerEmail`, `CustomerName`, `OrderNumber`, `TotalAmount` |
+| `OrderCancelledIntegrationEvent` | `OrderSaga` on `StockReservationFailedIntegrationEvent`; `CancelOrderCommandHandler` on customer cancel | `UserId`, `CustomerEmail`, `CustomerName`, `OrderNumber`, `Reason` |
+
+All events include `CustomerEmail` and `CustomerName` so downstream consumers (e.g. `AK.Notification`) can send transactional emails without making synchronous API calls.
+
+### Consumed by AK.Order
+
+| Event | Consumer | Action |
+|-------|----------|--------|
+| `StockReservedIntegrationEvent` | `OrderSaga` | Transition to Confirmed |
+| `StockReservationFailedIntegrationEvent` | `OrderSaga` | Transition to Cancelled |
+| `PaymentSucceededIntegrationEvent` | `PaymentSucceededConsumer` | `order.UpdateStatus(Paid)` |
+| `PaymentFailedIntegrationEvent` | `PaymentFailedConsumer` | `order.UpdateStatus(PaymentFailed)` |
+
+---
+
+## 13. API Reference
 
 ### GET /api/orders
 
@@ -580,7 +609,7 @@ Standard health check endpoint.
 
 ---
 
-## 12. Error Handling
+## 14. Error Handling
 
 `ExceptionHandlerMiddleware` maps exceptions to HTTP status codes:
 
@@ -594,7 +623,7 @@ Standard health check endpoint.
 
 ---
 
-## 13. Testing Strategy
+## 15. Testing Strategy
 
 All tests are pure unit tests or EF InMemory integration tests — no network, no real database.
 
@@ -621,7 +650,7 @@ All tests are pure unit tests or EF InMemory integration tests — no network, n
 | ValidationBehavior | `ValidationBehaviorTests.cs` | 3 |
 | OrderRepository (EF InMemory) | `OrderRepositoryTests.cs` | 10 |
 | UnitOfWork (EF InMemory) | `UnitOfWorkTests.cs` | 3 |
-| **Total** | | **106** |
+| **Total** | | **109** |
 
 ### Mock Strategy
 
@@ -631,7 +660,7 @@ All tests are pure unit tests or EF InMemory integration tests — no network, n
 
 ---
 
-## 14. Design Decisions
+## 16. Design Decisions
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
@@ -647,7 +676,7 @@ All tests are pure unit tests or EF InMemory integration tests — no network, n
 
 ---
 
-## 15. Running the Service
+## 17. Running the Service
 
 ### Prerequisites
 
@@ -685,5 +714,5 @@ docker-compose up --build
 
 ```bash
 dotnet test AK.Order/AK.Order.Tests/AK.Order.Tests.csproj
-# 106 tests, all passing
+# 109 tests, all passing
 ```

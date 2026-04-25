@@ -53,6 +53,9 @@ graph TB
 | Id | Guid | Primary key |
 | OrderId | Guid | Reference to the confirmed order |
 | UserId | string | Keycloak user ID |
+| CustomerEmail | string | Extracted from JWT at endpoint layer |
+| CustomerName | string | Extracted from JWT at endpoint layer |
+| OrderNumber | string | Denormalised from order for notification enrichment |
 | Amount | decimal | Payment amount in INR |
 | Currency | string | Default "INR" |
 | Status | PaymentStatus | Current state (see enum below) |
@@ -300,11 +303,11 @@ Call `POST /api/payments/verify` with all three values. The server verifies the 
 
 ### Published by AK.Payments
 
-| Event | When Published | Consumer |
+| Event | When Published | Consumers |
 |-------|---------------|----------|
-| `PaymentInitiatedIntegrationEvent` | Razorpay order created | (logged, no consumer required) |
-| `PaymentSucceededIntegrationEvent` | Signature verified successfully | AK.Order → updates order status to `Paid` |
-| `PaymentFailedIntegrationEvent` | Signature mismatch or gateway error | AK.Order → updates order status to `PaymentFailed` |
+| `PaymentInitiatedIntegrationEvent` | Razorpay order created | (audit only) |
+| `PaymentSucceededIntegrationEvent` | Signature verified successfully | AK.Order → `Paid`; **AK.Notification → payment receipt email** |
+| `PaymentFailedIntegrationEvent` | Signature mismatch or gateway error | AK.Order → `PaymentFailed`; **AK.Notification → payment failure alert** |
 
 All events are published via the **MassTransit EF Core Outbox** — atomically committed with the payment status change.
 
@@ -330,12 +333,19 @@ PaymentSucceededIntegrationEvent(
     Guid PaymentId,
     Guid OrderId,
     string UserId,
+    string CustomerEmail,    // enriched — enables AK.Notification to send receipt email
+    string CustomerName,
+    string OrderNumber,
+    decimal Amount,
     string RazorpayPaymentId)
 
 PaymentFailedIntegrationEvent(
     Guid PaymentId,
     Guid OrderId,
     string UserId,
+    string CustomerEmail,    // enriched — enables AK.Notification to send failure alert
+    string CustomerName,
+    string OrderNumber,
     string Reason)
 ```
 
@@ -379,6 +389,9 @@ New consumers in AK.Order:
 | currency | varchar(10) default 'INR' |
 | status | int |
 | method | int |
+| customer_email | varchar(256) | Contact info for notification events |
+| customer_name | varchar(200) | Contact info for notification events |
+| order_number | varchar(50) | Denormalised for notification enrichment |
 | razorpay_order_id | varchar(50) |
 | razorpay_payment_id | varchar(50) |
 | razorpay_signature | varchar(200) |
@@ -453,8 +466,8 @@ dotnet test AK.Payments/AK.Payments.Tests/AK.Payments.Tests.csproj
 | Queries — GetUserSavedCards | 4 |
 | Validators — VerifyPayment | 6 |
 | Validators — SaveCard | 4 |
-| **Total** | **65** |
+| **Total** | **69** |
 
 All tests are pure unit tests — no database, no HTTP, no Razorpay sandbox calls.
 
-> **Note:** The `SaveCardRequest` endpoint-layer record has no `userId` field — userId is derived from JWT via `HttpContextExtensions.GetUserId()` to prevent client identity spoofing.
+> **Note:** The `InitiatePaymentRequest` and `SaveCardRequest` endpoint-layer records have no `userId`, `customerEmail`, or `customerName` fields — these are derived from JWT via `HttpContextExtensions.GetUserId()`, `GetUserEmail()`, and `GetUserDisplayName()` to prevent client identity spoofing. `OrderNumber` is passed by the client as it comes from a prior order creation response.

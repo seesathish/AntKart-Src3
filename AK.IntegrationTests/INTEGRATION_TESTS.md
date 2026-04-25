@@ -2,7 +2,7 @@
 
 ## Overview
 
-`AK.IntegrationTests` exercises the SAGA choreography, event bus flows, and payment event routing using **MassTransit's in-memory test harness** — no RabbitMQ, no database, no running host. All 28 tests run in ~12 seconds.
+`AK.IntegrationTests` exercises the SAGA choreography, event bus flows, payment event routing, and notification consumer dispatch using **MassTransit's in-memory test harness** — no RabbitMQ, no database, no running host. All 35 tests run in ~12 seconds.
 
 ---
 
@@ -12,8 +12,8 @@
 AK.IntegrationTests/
 ├── AK.IntegrationTests.csproj
 ├── Common/
-│   ├── TestHarnessFactory.cs            ← ServiceProvider builders (4 factory methods)
-│   ├── IntegrationTestData.cs           ← Event factory helpers
+│   ├── TestHarnessFactory.cs            ← ServiceProvider builders (5 factory methods)
+│   ├── IntegrationTestData.cs           ← Event factory helpers (enriched event signatures)
 │   └── PaymentInitiatedAuditConsumer.cs ← Test-only no-op consumer for audit assertions
 ├── Sagas/
 │   ├── OrderSagaHappyPathTests.cs       ← 3 happy-path saga tests
@@ -21,9 +21,11 @@ AK.IntegrationTests/
 ├── EventBus/
 │   ├── EventBusFlowTests.cs             ← 4 order event bus flow tests
 │   └── PaymentEventBusFlowTests.cs      ← 7 payment event bus flow tests
-└── Payments/
-    ├── PaymentFlowHappyPathTests.cs     ← 5 payment happy-path tests
-    └── PaymentFlowSadPathTests.cs       ← 6 payment sad-path tests
+├── Payments/
+│   ├── PaymentFlowHappyPathTests.cs     ← 5 payment happy-path tests
+│   └── PaymentFlowSadPathTests.cs       ← 6 payment sad-path tests
+└── Notification/
+    └── NotificationConsumerTests.cs     ← 7 notification consumer tests
 ```
 
 ---
@@ -53,9 +55,14 @@ TestHarnessFactory.CreateWithPaymentConsumers();
 
 // Full harness — all of the above combined
 TestHarnessFactory.CreateWithAllConsumers();
+
+// Notification harness — all 6 notification consumers (mocked IMediator)
+TestHarnessFactory.CreateWithNotificationConsumers(Mock<IMediator> mediatorMock);
 ```
 
 `CreateWithPaymentConsumers()` and `CreateWithAllConsumers()` register a Moq `IUnitOfWork` whose `GetByIdAsync` returns `null`. Payment consumers handle this with `if (order is null) return`, allowing bus routing to be verified without a real database.
+
+`CreateWithNotificationConsumers()` accepts a pre-configured `Mock<IMediator>` so tests can verify `SendNotificationCommand` was dispatched with the correct channel and template type. The mediator mock is registered as `IMediator` in the scoped DI container.
 
 ---
 
@@ -107,6 +114,18 @@ TestHarnessFactory.CreateWithAllConsumers();
 | `PaymentSucceeded_DoesNotPublishPaymentFailed` | Success path never emits a failure event |
 | `FullE2E_OrderCreated_StockReserved_OrderConfirmed_PaymentSucceeded` | Full happy path; no cancellation in entire flow |
 | `PaymentInitiated_CorrectAmountAndCurrency` | Amount and currency values survive the bus round-trip |
+
+### Notification Consumers (7 tests)
+
+| Test | Verifies |
+|------|---------|
+| `UserRegistered_ConsumerPublishesWelcomeEmail` | `UserRegisteredConsumer` dispatches `SendNotificationCommand` with `WelcomeEmail` template |
+| `OrderCreated_ConsumerPublishesOrderConfirmationEmail` | `OrderCreatedConsumer` dispatches `OrderConfirmation` template to correct recipient |
+| `OrderConfirmed_ConsumerPublishesOrderConfirmedEmail` | `OrderConfirmedConsumer` dispatches `OrderConfirmed` template |
+| `OrderCancelled_ConsumerPublishesOrderCancelledEmail` | `OrderCancelledConsumer` dispatches `OrderCancelled` template |
+| `PaymentSucceeded_ConsumerPublishesPaymentSucceededEmail` | `PaymentSucceededConsumer` dispatches `PaymentSucceeded` template |
+| `PaymentFailed_ConsumerPublishesPaymentFailedEmail` | `PaymentFailedConsumer` dispatches `PaymentFailed` template |
+| `MultipleEvents_EachConsumerReceivesCorrectEvent` | Two concurrent events dispatch two distinct template types without cross-contamination |
 
 ### Payment — Sad Path (6 tests)
 
@@ -284,7 +303,8 @@ curl -s -o /dev/null -w "products:  %{http_code}\n" http://localhost:9090/gatewa
 curl -s -o /dev/null -w "orders:    %{http_code}\n" http://localhost:9090/gateway/health/orders
 curl -s -o /dev/null -w "payments:  %{http_code}\n" http://localhost:9090/gateway/health/payments
 curl -s -o /dev/null -w "cart:      %{http_code}\n" http://localhost:9090/gateway/health/cart
-curl -s -o /dev/null -w "identity:  %{http_code}\n" http://localhost:9090/gateway/health/identity
+curl -s -o /dev/null -w "identity:       %{http_code}\n" http://localhost:9090/gateway/health/identity
+curl -s -o /dev/null -w "notifications: %{http_code}\n" http://localhost:9090/gateway/health/notifications
 ```
 
 All should return `200`.

@@ -190,6 +190,7 @@ sequenceDiagram
     KC-->>UI: 201 Created (Location: /users/{id})
     UI->>KC: POST /admin/realms/antkart/users/{id}/role-mappings/realm<br/>(assign "user" role)
     KC-->>UI: 204 No Content
+    UI->>MQ: Publish UserRegisteredIntegrationEvent {userId, email, fullName}
     UI-->>C: 201 Created
 ```
 
@@ -344,6 +345,20 @@ In Docker Compose, `localhost:8090` is replaced by `keycloak:8080` (internal Doc
 
 ---
 
+## Integration Events
+
+### Published by AK.UserIdentity
+
+| Event | When | Consumer |
+|-------|------|----------|
+| `UserRegisteredIntegrationEvent(UserId, CustomerEmail, CustomerName)` | After successful registration and role assignment | **AK.Notification** → sends welcome email |
+
+`KeycloakService.RegisterAsync` publishes `UserRegisteredIntegrationEvent` via `IPublishEndpoint` (MassTransit) after extracting the new user's UUID from the Keycloak `Location` header. This is publish-only — no consumers are registered in AK.UserIdentity.
+
+**RabbitMq configuration:** `AddRabbitMqMassTransit(config, _ => { })` — empty consumer registration since this service only publishes.
+
+---
+
 ## Error Handling
 
 `ExceptionHandlerMiddleware` maps exceptions to HTTP status codes:
@@ -359,15 +374,15 @@ In Docker Compose, `localhost:8090` is replaced by `keycloak:8080` (internal Doc
 
 ## Tests
 
-**Total:** 15 tests
+**Total:** 17 tests
 
 | Test Class | Count | Coverage |
 |------------|-------|---------|
-| `KeycloakServiceTests` | 5 | Login success/failure, refresh success/failure, getUserInfo |
+| `KeycloakServiceTests` | 9 | Login success/failure, refresh success/failure, getUserInfo success/failure, register publishes event, register conflict |
 | `KeycloakAdminServiceTests` | 4 | GetUsers success/failure, AssignRole success/notFound |
-| `ExceptionHandlerMiddlewareTests` | 5 | No exception (200), 401, 404, 409, 500 |
+| `ExceptionHandlerMiddlewareTests` | 4 | No exception (200), 404, 409, 500 |
 
-All tests use `Moq.Protected` to mock `HttpMessageHandler` — no real HTTP calls, no Keycloak required.
+All tests use `Moq.Protected` to mock `HttpMessageHandler` — no real HTTP calls, no Keycloak required. `KeycloakServiceTests` uses `Mock<IPublishEndpoint>` to verify `UserRegisteredIntegrationEvent` is published on successful registration.
 
 ---
 
