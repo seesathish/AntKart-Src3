@@ -5,8 +5,12 @@ using AK.Order.Domain.ValueObjects;
 
 namespace AK.Order.Domain.Entities;
 
+// Order is the Aggregate Root for the order bounded context.
+// All changes to an order must go through this class — never modify child collections directly.
+// Properties have private setters to enforce that all business logic stays inside this class.
 public sealed class Order : Entity, IAggregateRoot
 {
+    // Private backing field for items — callers can only read via the Items property.
     private readonly List<OrderItem> _items = [];
 
     public string OrderNumber { get; private set; } = string.Empty;
@@ -18,12 +22,18 @@ public sealed class Order : Entity, IAggregateRoot
     public ShippingAddress ShippingAddress { get; private set; } = null!;
     public string? Notes { get; private set; }
 
+    // Computed properties — recalculated on every access from the live items list.
     public IReadOnlyList<OrderItem> Items => _items.AsReadOnly();
     public decimal TotalAmount => _items.Sum(i => i.Price * i.Quantity);
     public int TotalItems => _items.Sum(i => i.Quantity);
 
+    // Private constructor forces all creation through the factory method below.
+    // EF Core also needs a parameterless constructor to materialise entities from the database.
     private Order() { }
 
+    // Factory method: the only valid way to create a new Order.
+    // Validates all invariants, generates the order number, sets initial state, and raises
+    // an OrderCreatedEvent so the SAGA and notification service know an order was placed.
     public static Order Create(
         string userId,
         string customerEmail,
@@ -53,18 +63,25 @@ public sealed class Order : Entity, IAggregateRoot
         };
 
         order._items.AddRange(itemList);
+
+        // Raise domain event — the SAGA (OrderSaga) will pick this up via RabbitMQ
+        // to start the stock reservation process.
         order.AddDomainEvent(new OrderCreatedEvent(order.Id, order.UserId, order.OrderNumber));
         return order;
     }
 
+    // State machine: defines which status transitions are legal.
+    // Attempting an invalid transition (e.g. Delivered → Pending) throws InvalidOperationException,
+    // which the ExceptionHandlerMiddleware maps to HTTP 409 Conflict.
+    // Empty HashSets for Delivered and Cancelled mark them as terminal (no further transitions).
     private static readonly Dictionary<OrderStatus, HashSet<OrderStatus>> _allowedTransitions = new()
     {
         [OrderStatus.Pending]       = [OrderStatus.Confirmed, OrderStatus.Cancelled, OrderStatus.PaymentFailed],
         [OrderStatus.Confirmed]     = [OrderStatus.Processing, OrderStatus.Shipped, OrderStatus.Cancelled],
         [OrderStatus.Processing]    = [OrderStatus.Shipped, OrderStatus.Cancelled],
         [OrderStatus.Shipped]       = [OrderStatus.Delivered],
-        [OrderStatus.Delivered]     = [],
-        [OrderStatus.Cancelled]     = [],
+        [OrderStatus.Delivered]     = [],   // terminal — no further transitions allowed
+        [OrderStatus.Cancelled]     = [],   // terminal
         [OrderStatus.Paid]          = [OrderStatus.Confirmed, OrderStatus.Cancelled],
         [OrderStatus.PaymentFailed] = [OrderStatus.Pending, OrderStatus.Cancelled],
     };
@@ -92,9 +109,13 @@ public sealed class Order : Entity, IAggregateRoot
 
         Status = OrderStatus.Cancelled;
         SetUpdatedAt();
+
+        // Raise domain event — OrderCancelledConsumer in AK.Order and AK.Notification
+        // will update the order status and send a cancellation email respectively.
         AddDomainEvent(new OrderCancelledEvent(Id, UserId, CustomerEmail, CustomerName, OrderNumber));
     }
 
+    // Called by PaymentSucceededConsumer after Razorpay confirms payment.
     public void ConfirmPayment()
     {
         PaymentStatus = PaymentStatus.Paid;
@@ -104,6 +125,7 @@ public sealed class Order : Entity, IAggregateRoot
     public void AddItem(OrderItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
+        // If the same product is added again, increment quantity instead of adding a duplicate line.
         var existing = _items.FirstOrDefault(i => i.ProductId == item.ProductId);
         if (existing is not null)
             existing.IncrementQuantity(item.Quantity);
@@ -113,6 +135,7 @@ public sealed class Order : Entity, IAggregateRoot
         SetUpdatedAt();
     }
 
+    // Format: ORD-20260418-A1B2C3D4 — date + 8 uppercase hex chars from a new GUID.
     private static string GenerateOrderNumber() =>
         $"ORD-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
 }

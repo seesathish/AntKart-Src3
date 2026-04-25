@@ -6,13 +6,27 @@ using AK.Order.API.Middleware;
 using AK.Order.Application.Extensions;
 using AK.Order.Infrastructure.Extensions;
 
+// Program.cs is the application entry point.
+// The order of registration and middleware matters — comments explain why each step is here.
+
 var builder = WebApplication.CreateBuilder(args);
 
+// Replaces the default Microsoft.Extensions.Logging with Serilog.
+// Serilog outputs structured JSON logs to console, rolling file, and Elasticsearch.
+// Must be called before any other service registration so early startup logs are captured.
 builder.AddSerilogLogging();
 
+// AddApplication: MediatR, FluentValidation pipeline, validators, mappers
 builder.Services.AddApplication();
+
+// AddInfrastructure: EF Core (PostgreSQL), repositories, MassTransit (RabbitMQ + SAGA + Outbox)
 builder.Services.AddInfrastructure(builder.Configuration);
+
+// AddKeycloakAuthentication: JWT Bearer middleware, role extraction, admin/authenticated policies
 builder.Services.AddKeycloakAuthentication(builder.Configuration);
+
+// Adds a /health endpoint that returns 200 when the service is running.
+// Docker Compose uses this for depends_on health checks.
 builder.Services.AddDefaultHealthChecks();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -44,16 +58,23 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+// Runs any pending EF Core migrations automatically on startup.
+// Ensures the DB schema is always up to date without manual migration steps.
 await app.ApplyMigrationsAsync();
 
+// Middleware order matters — ExceptionHandlerMiddleware must be registered FIRST
+// so it wraps the entire request pipeline and catches exceptions from all subsequent middleware.
 app.UseMiddleware<ExceptionHandlerMiddleware>();
 
+// Swagger UI only available in Development — not exposed in Docker/production containers.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "AK.Order API v1"));
 }
 
+// UseKeycloakAuth calls UseAuthentication() then UseAuthorization() in the correct order.
+// Must come AFTER ExceptionHandlerMiddleware (so auth errors are caught) and BEFORE endpoint mapping.
 app.UseKeycloakAuth();
 
 app.MapOrderEndpoints();
@@ -61,4 +82,6 @@ app.MapDefaultHealthChecks();
 
 app.Run();
 
+// Partial class declaration makes the test project able to reference Program as a type
+// for WebApplicationFactory integration tests (even though we don't use those here).
 public partial class Program { }

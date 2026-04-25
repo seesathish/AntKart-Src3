@@ -15,6 +15,8 @@ public static class OrderEndpoints
 {
     public static void MapOrderEndpoints(this WebApplication app)
     {
+        // All order endpoints require at least a valid JWT (authenticated policy).
+        // Individual endpoints below may require the "admin" policy for elevated operations.
         var group = app.MapGroup("/api/orders")
             .WithTags("Orders")
             .RequireAuthorization("authenticated");
@@ -58,7 +60,9 @@ public static class OrderEndpoints
         })
         .WithName("GetMyOrders");
 
-        // POST /api/orders — userId, email, name injected from JWT (not accepted from request body)
+        // POST /api/orders — userId, email, and name are extracted from the JWT, NOT the request body.
+        // This prevents IDOR: a malicious client cannot create an order under a different user's ID
+        // by supplying a different userId in the JSON body.
         group.MapPost("/", async (HttpContext http, CreateOrderDto orderDto, IMediator mediator) =>
         {
             var userId = http.GetUserId();
@@ -70,6 +74,7 @@ public static class OrderEndpoints
         .WithName("CreateOrder");
 
         // PUT /api/orders/{id}/status — admin only
+        // Status transitions are admin-controlled (e.g. marking an order as Shipped).
         group.MapPut("/{id:guid}/status", async (Guid id, UpdateOrderStatusRequest req, IMediator mediator) =>
         {
             var order = await mediator.Send(new UpdateOrderStatusCommand(id, req.NewStatus));

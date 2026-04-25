@@ -5,7 +5,8 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:8080/api/products?page=1&pageSize=1\")",
       "Bash(curl -s \"http://localhost:8080/api/products?page=1&pageSize=1\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:8080/health\")",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:8080/swagger\")"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:8080/swagger\")",
+      "Bash(dotnet test *)"
     ]
   }
 }

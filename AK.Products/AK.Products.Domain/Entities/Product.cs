@@ -5,17 +5,32 @@ using AK.Products.Domain.ValueObjects;
 
 namespace AK.Products.Domain.Entities;
 
+// Product is the Aggregate Root for the products bounded context.
+// All properties use private setters — you can never set product.Price = 99 from outside.
+// All mutations must go through the public methods (Update, SetDiscount, DecrementStock, etc.)
+// which enforce business rules and raise domain events.
+//
+// Category design: CategoryName and SubCategoryName are plain strings (not enums).
+// Adding a new category (e.g. "Electronics") is purely a data change — no code deployment needed.
 public sealed class Product : BaseEntity, IAggregateRoot
 {
     public string Name { get; private set; } = string.Empty;
     public string Description { get; private set; } = string.Empty;
+
+    // SKU format: {CAT_ABBREV}-{SUBCAT_ABBREV}-{001..NNN}  e.g. MEN-SHIR-001
     public string SKU { get; private set; } = string.Empty;
     public string Brand { get; private set; } = string.Empty;
     public ProductStatus Status { get; private set; }
+
+    // Data-driven categories — no enum. Allows adding new categories without code changes.
     public string CategoryName { get; private set; } = string.Empty;
     public string? SubCategoryName { get; private set; }
+
     public decimal Price { get; private set; }
     public string Currency { get; private set; } = "USD";
+
+    // DiscountPrice is computed by AK.Discount (via gRPC) and set here for query responses.
+    // Null means no active discount exists for this product.
     public decimal? DiscountPrice { get; private set; }
     public int StockQuantity { get; private set; }
     public List<string> Sizes { get; private set; } = new();
@@ -30,8 +45,13 @@ public sealed class Product : BaseEntity, IAggregateRoot
     private readonly List<IDomainEvent> _domainEvents = new();
     public IReadOnlyCollection<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
+    // Private constructor: forces all creation through the factory method.
+    // MongoDB and EF Core also require a parameterless constructor for deserialisation.
     private Product() { }
 
+    // Factory method: the only valid way to create a new Product.
+    // Validates required fields, auto-derives the initial status from stock,
+    // and raises ProductCreatedEvent.
     public static Product Create(
         string name, string description, string sku, string brand,
         string categoryName, string? subCategoryName,
@@ -53,6 +73,7 @@ public sealed class Product : BaseEntity, IAggregateRoot
             Price = price,
             Currency = currency,
             StockQuantity = stockQuantity,
+            // Automatically set to OutOfStock if no inventory is supplied.
             Status = stockQuantity > 0 ? ProductStatus.Active : ProductStatus.OutOfStock,
             Sizes = sizes,
             Colors = colors,
@@ -86,6 +107,8 @@ public sealed class Product : BaseEntity, IAggregateRoot
 
     public void SetFeatured(bool isFeatured) { IsFeatured = isFeatured; SetUpdated(); }
 
+    // Incremental running average — avoids storing all individual ratings.
+    // New average = (old_avg × old_count + new_rating) / (old_count + 1)
     public void AddReview(double rating)
     {
         Rating = ((Rating * ReviewCount) + rating) / (ReviewCount + 1);
@@ -93,6 +116,9 @@ public sealed class Product : BaseEntity, IAggregateRoot
         SetUpdated();
     }
 
+    // Called by ReserveStockConsumer when an order is placed.
+    // Throws if stock is insufficient — the caller then publishes StockReservationFailed.
+    // Automatically transitions to OutOfStock status if stock reaches zero.
     public void DecrementStock(int quantity)
     {
         if (quantity <= 0) throw new ArgumentException("Quantity must be positive.", nameof(quantity));
@@ -106,6 +132,7 @@ public sealed class Product : BaseEntity, IAggregateRoot
 
     public void Deactivate() { Status = ProductStatus.Inactive; SetUpdated(); }
 
+    // Called after domain events have been dispatched to prevent replaying them.
     public void ClearDomainEvents() => _domainEvents.Clear();
 
     public Money GetPrice() => new(Price, Currency);
