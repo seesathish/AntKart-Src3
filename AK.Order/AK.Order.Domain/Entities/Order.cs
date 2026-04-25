@@ -51,11 +51,25 @@ public sealed class Order : Entity, IAggregateRoot
         return order;
     }
 
+    private static readonly Dictionary<OrderStatus, HashSet<OrderStatus>> _allowedTransitions = new()
+    {
+        [OrderStatus.Pending]       = [OrderStatus.Confirmed, OrderStatus.Cancelled, OrderStatus.PaymentFailed],
+        [OrderStatus.Confirmed]     = [OrderStatus.Processing, OrderStatus.Shipped, OrderStatus.Cancelled],
+        [OrderStatus.Processing]    = [OrderStatus.Shipped, OrderStatus.Cancelled],
+        [OrderStatus.Shipped]       = [OrderStatus.Delivered],
+        [OrderStatus.Delivered]     = [],
+        [OrderStatus.Cancelled]     = [],
+        [OrderStatus.Paid]          = [OrderStatus.Confirmed, OrderStatus.Cancelled],
+        [OrderStatus.PaymentFailed] = [OrderStatus.Pending, OrderStatus.Cancelled],
+    };
+
     public void UpdateStatus(OrderStatus newStatus)
     {
-        if (Status == OrderStatus.Cancelled)
-            throw new InvalidOperationException("Cannot update status of a cancelled order.");
         if (newStatus == Status) return;
+
+        if (!_allowedTransitions.TryGetValue(Status, out var allowed) || !allowed.Contains(newStatus))
+            throw new InvalidOperationException(
+                $"Cannot transition order from {Status} to {newStatus}.");
 
         var oldStatus = Status;
         Status = newStatus;

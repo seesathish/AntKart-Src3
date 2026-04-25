@@ -21,4 +21,5 @@ RUN dotnet publish "AK.Discount.Grpc.csproj" -c Release -o /app/publish /p:UseAp
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+USER $APP_UID
 ENTRYPOINT ["dotnet", "AK.Discount.Grpc.dll"]

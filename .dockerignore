@@ -1,0 +1,12 @@
+.git
+.vs
+.vscode
+coverage-results/
+**/*.Tests/
+**/bin/
+**/obj/
+*.md
+*.postman_collection.json
+docker-compose*.yml
+keycloak/
+.dockerignore

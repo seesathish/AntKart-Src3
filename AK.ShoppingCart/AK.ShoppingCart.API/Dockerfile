@@ -21,4 +21,5 @@ RUN dotnet publish "AK.ShoppingCart.API.csproj" -c Release -o /app/publish /p:Us
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+USER $APP_UID
 ENTRYPOINT ["dotnet", "AK.ShoppingCart.API.dll"]

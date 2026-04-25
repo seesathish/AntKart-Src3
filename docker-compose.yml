@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
-    container_name: antcart-keycloak
+    container_name: antkart-keycloak
     restart: unless-stopped
     command: start-dev --import-realm
     environment:
@@ -23,7 +21,7 @@ services:
 
   mongodb:
     image: mongo:latest
-    container_name: antcart-mongodb
+    container_name: antkart-mongodb
     restart: unless-stopped
     ports:
       - "27017:27017"
@@ -31,18 +29,25 @@ services:
       - mongodb_data:/data/db
     environment:
       MONGO_INITDB_DATABASE: AKProductsDb
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   ak-products-api:
     image: ak-products-api
     build:
       context: .
       dockerfile: AK.Products/AK.Products.API/Dockerfile
-    container_name: ak-products-api
+    container_name: antkart-products-api
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      - SEED_DATABASE=true
       - MongoDbSettings__ConnectionString=mongodb://mongodb:27017
       - MongoDbSettings__DatabaseName=AKProductsDb
       - MongoDbSettings__ProductsCollection=Products
@@ -60,18 +65,23 @@ services:
       - RabbitMq__Password=guest
       - Elasticsearch__Url=http://elasticsearch:9200
     depends_on:
-      - mongodb
-      - keycloak
-      - ak-discount-grpc
-      - rabbitmq
-      - elasticsearch
+      mongodb:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      ak-discount-grpc:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
 
   ak-discount-grpc:
     image: ak-discount-grpc
     build:
       context: .
       dockerfile: AK.Discount/AK.Discount.Grpc/Dockerfile
-    container_name: ak-discount-grpc
+    container_name: antkart-discount-grpc
     restart: unless-stopped
     ports:
       - "8081:8080"
@@ -81,21 +91,27 @@ services:
     volumes:
       - discount_data:/app/data
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
 
   redis:
     image: redis:7-alpine
-    container_name: antcart-redis
+    container_name: antkart-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   ak-shoppingcart-api:
     image: ak-shoppingcart-api
     build:
       context: .
       dockerfile: AK.ShoppingCart/AK.ShoppingCart.API/Dockerfile
-    container_name: ak-shoppingcart-api
+    container_name: antkart-shoppingcart-api
     restart: unless-stopped
     ports:
       - "8082:8080"
@@ -117,14 +133,18 @@ services:
       RabbitMq__Password: "guest"
       Elasticsearch__Url: "http://elasticsearch:9200"
     depends_on:
-      - redis
-      - keycloak
-      - rabbitmq
-      - elasticsearch
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
 
   postgres:
     image: postgres:16-alpine
-    container_name: antcart-postgres
+    container_name: antkart-postgres
     restart: unless-stopped
     ports:
       - "5432:5432"
@@ -134,13 +154,18 @@ services:
       POSTGRES_DB: AKOrdersDb
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   ak-order-api:
     image: ak-order-api
     build:
       context: .
       dockerfile: AK.Order/AK.Order.API/Dockerfile
-    container_name: ak-order-api
+    container_name: antkart-order-api
     restart: unless-stopped
     ports:
       - "8083:8080"
@@ -160,17 +185,21 @@ services:
       RabbitMq__Password: "guest"
       Elasticsearch__Url: "http://elasticsearch:9200"
     depends_on:
-      - postgres
-      - keycloak
-      - rabbitmq
-      - elasticsearch
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
 
   ak-payments-api:
     image: ak-payments-api
     build:
       context: .
       dockerfile: AK.Payments/AK.Payments.API/Dockerfile
-    container_name: ak-payments-api
+    container_name: antkart-payments-api
     restart: unless-stopped
     ports:
       - "8085:8080"
@@ -192,17 +221,21 @@ services:
       RabbitMq__Password: "guest"
       Elasticsearch__Url: "http://elasticsearch:9200"
     depends_on:
-      - postgres
-      - keycloak
-      - rabbitmq
-      - elasticsearch
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
 
   ak-useridentity-api:
     image: ak-useridentity-api
     build:
       context: .
       dockerfile: AK.UserIdentity/AK.UserIdentity.API/Dockerfile
-    container_name: ak-useridentity-api
+    container_name: antkart-useridentity-api
     restart: unless-stopped
     ports:
       - "8084:8080"
@@ -217,12 +250,14 @@ services:
       Keycloak__ClientSecret: "antkart-secret"
       Elasticsearch__Url: "http://elasticsearch:9200"
     depends_on:
-      - keycloak
-      - elasticsearch
+      keycloak:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
 
   rabbitmq:
     image: rabbitmq:3.13-management
-    container_name: antcart-rabbitmq
+    container_name: antkart-rabbitmq
     restart: unless-stopped
     ports:
       - "5672:5672"
@@ -241,7 +276,7 @@ services:
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
-    container_name: antcart-elasticsearch
+    container_name: antkart-elasticsearch
     restart: unless-stopped
     environment:
       - discovery.type=single-node
@@ -261,7 +296,7 @@ services:
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.13.0
-    container_name: antcart-kibana
+    container_name: antkart-kibana
     restart: unless-stopped
     ports:
       - "5601:5601"
@@ -269,14 +304,15 @@ services:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - xpack.security.enabled=false
     depends_on:
-      - elasticsearch
+      elasticsearch:
+        condition: service_healthy
 
   ak-gateway-api:
     image: ak-gateway-api
     build:
       context: .
       dockerfile: AK.Gateway/AK.Gateway.API/Dockerfile
-    container_name: ak-gateway-api
+    container_name: antkart-gateway-api
     restart: unless-stopped
     ports:
       - "9090:8000"
@@ -292,12 +328,18 @@ services:
       - Keycloak__ClientSecret=antkart-secret
       - Elasticsearch__Url=http://elasticsearch:9200
     depends_on:
-      - keycloak
-      - ak-products-api
-      - ak-shoppingcart-api
-      - ak-order-api
-      - ak-useridentity-api
-      - ak-payments-api
+      keycloak:
+        condition: service_healthy
+      ak-products-api:
+        condition: service_started
+      ak-shoppingcart-api:
+        condition: service_started
+      ak-order-api:
+        condition: service_started
+      ak-useridentity-api:
+        condition: service_started
+      ak-payments-api:
+        condition: service_started
 
 volumes:
   mongodb_data:

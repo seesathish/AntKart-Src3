@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
 namespace AK.BuildingBlocks.Authentication;
@@ -26,7 +27,7 @@ public static class AuthenticationExtensions
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
-                    ValidateAudience = false, // Keycloak uses azp claim, not aud, for client tokens
+                    ValidateAudience = false, // Keycloak uses azp claim; validated manually in OnTokenValidated
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true
                 };
@@ -37,6 +38,17 @@ public static class AuthenticationExtensions
                         var identity = ctx.Principal?.Identity as System.Security.Claims.ClaimsIdentity;
                         if (identity is null) return Task.CompletedTask;
 
+                        // Validate azp (authorized party) — ensures token was issued for this client
+                        var azp = ctx.Principal?.FindFirst("azp")?.Value;
+                        if (!string.IsNullOrEmpty(settings.Audience) &&
+                            !string.IsNullOrEmpty(azp) &&
+                            azp != settings.Audience)
+                        {
+                            ctx.Fail($"Token azp '{azp}' does not match expected client '{settings.Audience}'.");
+                            return Task.CompletedTask;
+                        }
+
+                        // Map Keycloak realm_access.roles → ClaimTypes.Role
                         var realmAccess = ctx.Principal?.FindFirst("realm_access")?.Value;
                         if (realmAccess is null) return Task.CompletedTask;
 
@@ -54,7 +66,12 @@ public static class AuthenticationExtensions
                                 }
                             }
                         }
-                        catch { /* ignore malformed realm_access */ }
+                        catch (System.Text.Json.JsonException ex)
+                        {
+                            var logger = ctx.HttpContext.RequestServices
+                                .GetRequiredService<ILogger<JwtBearerEvents>>();
+                            logger.LogWarning(ex, "Failed to parse realm_access claim");
+                        }
 
                         return Task.CompletedTask;
                     }

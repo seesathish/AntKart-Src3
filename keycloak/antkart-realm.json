@@ -19,11 +19,19 @@
       "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": true,
       "authorizationServicesEnabled": false,
-      "redirectUris": ["*"],
-      "webOrigins": ["*"],
+      "redirectUris": [
+        "http://localhost:9090/*",
+        "http://localhost:8000/*",
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:9090",
+        "http://localhost:8000",
+        "http://localhost:3000"
+      ],
       "protocol": "openid-connect",
       "attributes": {
-        "post.logout.redirect.uris": "*"
+        "post.logout.redirect.uris": "http://localhost:9090/*##http://localhost:8000/*"
       },
       "protocolMappers": [
         {

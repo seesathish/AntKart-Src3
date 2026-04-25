@@ -28,9 +28,9 @@ public class UpdateOrderStatusCommandHandlerTests
         _repo.Setup(r => r.UpdateAsync(It.IsAny<OrderEntity>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         var handler = new UpdateOrderStatusCommandHandler(_uow.Object);
-        var result = await handler.Handle(new UpdateOrderStatusCommand(order.Id, OrderStatus.Processing), CancellationToken.None);
+        var result = await handler.Handle(new UpdateOrderStatusCommand(order.Id, OrderStatus.Confirmed), CancellationToken.None);
 
-        result.Status.Should().Be("Processing");
+        result.Status.Should().Be("Confirmed");
     }
 
     [Fact]

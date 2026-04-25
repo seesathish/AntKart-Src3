@@ -61,8 +61,9 @@ public static class ResilienceExtensions
             pipeline.AddRetry(new Polly.Retry.RetryStrategyOptions
             {
                 MaxRetryAttempts = 3,
-                Delay = TimeSpan.FromMilliseconds(500),
-                BackoffType = DelayBackoffType.Constant
+                Delay = TimeSpan.FromMilliseconds(200),
+                BackoffType = DelayBackoffType.Exponential,
+                UseJitter = true
             });
 
             pipeline.AddTimeout(TimeSpan.FromSeconds(30));

@@ -54,10 +54,6 @@ public static class PaymentEndpoints
             return Results.Ok(payments);
         }).WithName("GetMyPayments");
 
-        app.MapPost("/api/payments/webhook", () => Results.Ok())
-            .WithName("PaymentWebhook")
-            .WithTags("Payments")
-            .AllowAnonymous();
     }
 }
 

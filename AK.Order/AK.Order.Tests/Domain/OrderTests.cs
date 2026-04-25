@@ -86,8 +86,8 @@ public class OrderTests
     public void UpdateStatus_ValidTransition_UpdatesStatus()
     {
         var order = TestDataFactory.CreateOrder();
-        order.UpdateStatus(OrderStatus.Processing);
-        order.Status.Should().Be(OrderStatus.Processing);
+        order.UpdateStatus(OrderStatus.Confirmed);
+        order.Status.Should().Be(OrderStatus.Confirmed);
         order.UpdatedAt.Should().NotBeNull();
     }
 
@@ -96,7 +96,7 @@ public class OrderTests
     {
         var order = TestDataFactory.CreateOrder();
         order.ClearDomainEvents();
-        order.UpdateStatus(OrderStatus.Processing);
+        order.UpdateStatus(OrderStatus.Confirmed);
         order.DomainEvents.Should().ContainSingle(e => e is OrderStatusChangedEvent);
     }
 
@@ -140,6 +140,8 @@ public class OrderTests
     public void Cancel_DeliveredOrder_ThrowsInvalidOperationException()
     {
         var order = TestDataFactory.CreateOrder();
+        order.UpdateStatus(OrderStatus.Confirmed);
+        order.UpdateStatus(OrderStatus.Shipped);
         order.UpdateStatus(OrderStatus.Delivered);
         var act = () => order.Cancel();
         act.Should().Throw<InvalidOperationException>().WithMessage("*delivered*");

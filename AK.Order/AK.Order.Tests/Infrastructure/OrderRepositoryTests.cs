@@ -79,12 +79,12 @@ public class OrderRepositoryTests : IDisposable
         await _repo.AddAsync(order);
         await _db.SaveChangesAsync();
 
-        order.UpdateStatus(OrderStatus.Processing);
+        order.UpdateStatus(OrderStatus.Confirmed);
         await _repo.UpdateAsync(order);
         await _db.SaveChangesAsync();
 
         var fetched = await _repo.GetByIdAsync(order.Id);
-        fetched!.Status.Should().Be(OrderStatus.Processing);
+        fetched!.Status.Should().Be(OrderStatus.Confirmed);
     }
 
     [Fact]
