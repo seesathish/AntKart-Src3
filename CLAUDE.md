@@ -127,6 +127,7 @@ AK.<Service>/
 - `Middleware/CorrelationIdMiddleware` — `X-Correlation-Id` header
 - `Authentication/AuthenticationExtensions` — `AddKeycloakAuthentication()` + `UseKeycloakAuth()` shared JWT auth wiring
 - `Authentication/KeycloakSettings` — typed config record for Keycloak settings
+- `Authentication/HttpContextExtensions` — `GetUserId()` extracts `sub` (Keycloak UUID) from JWT; throws `UnauthorizedAccessException` if missing
 - `Messaging/IIntegrationEvent` — base interface for all integration events
 - `Messaging/IntegrationEvents/` — `OrderCreatedIntegrationEvent`, `StockReservedIntegrationEvent`, `StockReservationFailedIntegrationEvent`, `OrderConfirmedIntegrationEvent`, `OrderCancelledIntegrationEvent`, `CartClearedIntegrationEvent`
 - `Messaging/MassTransitExtensions` — `AddRabbitMqMassTransit()` helper (kebab-case, global retry)
@@ -149,6 +150,32 @@ AK.<Service>/
 - **Tests:** 28 passing (domain, commands, validators)
 - **Swagger:** `http://localhost:5086/swagger`
 - **Design doc:** [AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md](AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md)
+
+---
+
+## Security Conventions
+
+### User Identity — Never Trust the Client
+- **Never** accept `userId` as a URL path parameter or request body field for user-scoped operations
+- **Always** derive the authenticated user's ID from the JWT via `http.GetUserId()` (BuildingBlocks `HttpContextExtensions`)
+- `GetUserId()` reads the `sub` claim (Keycloak UUID); falls back to `preferred_username`; throws `UnauthorizedAccessException` if neither is present
+- `UnauthorizedAccessException` maps to HTTP 403 in all `ExceptionHandlerMiddleware` implementations
+
+### Route Patterns for User-Scoped Data
+| Service | Pattern | Example |
+|---------|---------|---------|
+| ShoppingCart | `/api/v1/cart` (no userId in path) | `GET /api/v1/cart` |
+| Order | `/api/orders/me` for current user | `GET /api/orders/me` |
+| Payments | `/api/payments/me` for current user | `GET /api/payments/me` |
+| SavedCards | `/api/payments/cards` (no userId in path) | `GET /api/payments/cards` |
+
+### Ownership Checks
+- Order `GET /{id}` and `DELETE /{id}`: return 403 if `order.UserId != http.GetUserId()` and caller is not admin
+- `PUT /{id}/status` requires `.RequireAuthorization("admin")`
+- SavedCard `DELETE /{id}`: handler verifies ownership against JWT userId before deleting
+
+### Request DTOs at Endpoint Layer
+- `InitiatePaymentRequest` (PaymentEndpoints) and `SaveCardRequest` (SavedCardEndpoints) are endpoint-layer records with no `userId` field — prevents clients from spoofing identity in the request body
 
 ---
 
@@ -214,6 +241,7 @@ Tests         ← Application, Infrastructure, Domain (no API/Grpc)
 | Exception | HTTP Status | gRPC Status |
 |-----------|-------------|-------------|
 | `FluentValidation.ValidationException` | 400 | `InvalidArgument` |
+| `UnauthorizedAccessException` | 403 | `PermissionDenied` |
 | `KeyNotFoundException` | 404 | `NotFound` |
 | `InvalidOperationException` | 409 | `AlreadyExists` |
 | `Exception` (catch-all) | 500 | `Internal` |

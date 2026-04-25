@@ -1,3 +1,4 @@
+using AK.BuildingBlocks.Authentication;
 using AK.Payments.Application.Commands.DeleteSavedCard;
 using AK.Payments.Application.Commands.SaveCard;
 using AK.Payments.Application.Queries.GetUserSavedCards;
@@ -13,22 +14,39 @@ public static class SavedCardEndpoints
             .WithTags("SavedCards")
             .RequireAuthorization("authenticated");
 
-        group.MapGet("/user/{userId}", async (string userId, IMediator mediator) =>
+        // GET /api/payments/cards — current user's saved cards
+        group.MapGet("/", async (HttpContext http, IMediator mediator) =>
         {
+            var userId = http.GetUserId();
             var cards = await mediator.Send(new GetUserSavedCardsQuery(userId));
             return Results.Ok(cards);
-        }).WithName("GetUserSavedCards");
+        }).WithName("GetMySavedCards");
 
-        group.MapPost("/save", async (SaveCardCommand command, IMediator mediator) =>
+        // POST /api/payments/cards/save — userId injected from JWT
+        group.MapPost("/save", async (HttpContext http, SaveCardRequest req, IMediator mediator) =>
         {
+            var userId = http.GetUserId();
+            var command = new SaveCardCommand(
+                userId, req.RazorpayCustomerId, req.RazorpayPaymentId,
+                req.CustomerName, req.CustomerEmail, req.CustomerContact);
             var card = await mediator.Send(command);
             return Results.Created($"/api/payments/cards/{card.Id}", card);
         }).WithName("SaveCard");
 
-        group.MapDelete("/{id:guid}", async (Guid id, string userId, IMediator mediator) =>
+        // DELETE /api/payments/cards/{id} — userId from JWT for ownership verification in handler
+        group.MapDelete("/{id:guid}", async (Guid id, HttpContext http, IMediator mediator) =>
         {
+            var userId = http.GetUserId();
             await mediator.Send(new DeleteSavedCardCommand(id, userId));
             return Results.NoContent();
         }).WithName("DeleteSavedCard");
     }
 }
+
+// userId is not accepted from the client — always derived from JWT
+public sealed record SaveCardRequest(
+    string RazorpayCustomerId,
+    string RazorpayPaymentId,
+    string CustomerName,
+    string CustomerEmail,
+    string CustomerContact);

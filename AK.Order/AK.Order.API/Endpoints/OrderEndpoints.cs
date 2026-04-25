@@ -1,3 +1,4 @@
+using AK.BuildingBlocks.Authentication;
 using AK.Order.Application.Common.DTOs;
 using AK.Order.Application.Features.CancelOrder;
 using AK.Order.Application.Features.CreateOrder;
@@ -18,48 +19,73 @@ public static class OrderEndpoints
             .WithTags("Orders")
             .RequireAuthorization("authenticated");
 
+        // GET /api/orders — admin sees all (optional ?userId filter); regular users see only their own
         group.MapGet("/", async (
+            HttpContext http,
             IMediator mediator,
             int page = 1,
             int pageSize = 20,
             string? userId = null,
             OrderStatus? status = null) =>
         {
-            var result = await mediator.Send(new GetOrdersQuery(page, pageSize, userId, status));
+            var isAdmin = http.User.IsInRole("admin");
+            var effectiveUserId = isAdmin ? userId : http.GetUserId();
+            var result = await mediator.Send(new GetOrdersQuery(page, pageSize, effectiveUserId, status));
             return Results.Ok(result);
         })
         .WithName("GetOrders");
 
-        group.MapGet("/{id:guid}", async (Guid id, IMediator mediator) =>
+        // GET /api/orders/{id} — owner or admin
+        group.MapGet("/{id:guid}", async (Guid id, HttpContext http, IMediator mediator) =>
         {
             var order = await mediator.Send(new GetOrderByIdQuery(id));
-            return order is null ? Results.NotFound() : Results.Ok(order);
+            if (order is null) return Results.NotFound();
+
+            var isAdmin = http.User.IsInRole("admin");
+            if (!isAdmin && order.UserId != http.GetUserId())
+                return Results.Forbid();
+
+            return Results.Ok(order);
         })
         .WithName("GetOrderById");
 
-        group.MapGet("/user/{userId}", async (string userId, IMediator mediator, int page = 1, int pageSize = 20) =>
+        // GET /api/orders/me — current user's orders (paged)
+        group.MapGet("/me", async (HttpContext http, IMediator mediator, int page = 1, int pageSize = 20) =>
         {
+            var userId = http.GetUserId();
             var result = await mediator.Send(new GetOrdersByUserQuery(userId, page, pageSize));
             return Results.Ok(result);
         })
-        .WithName("GetOrdersByUser");
+        .WithName("GetMyOrders");
 
-        group.MapPost("/", async (CreateOrderCommand command, IMediator mediator) =>
+        // POST /api/orders — userId injected from JWT (not accepted from request body)
+        group.MapPost("/", async (HttpContext http, CreateOrderDto orderDto, IMediator mediator) =>
         {
-            var order = await mediator.Send(command);
+            var userId = http.GetUserId();
+            var order = await mediator.Send(new CreateOrderCommand(userId, orderDto));
             return Results.Created($"/api/orders/{order.Id}", order);
         })
         .WithName("CreateOrder");
 
+        // PUT /api/orders/{id}/status — admin only
         group.MapPut("/{id:guid}/status", async (Guid id, UpdateOrderStatusRequest req, IMediator mediator) =>
         {
             var order = await mediator.Send(new UpdateOrderStatusCommand(id, req.NewStatus));
             return Results.Ok(order);
         })
+        .RequireAuthorization("admin")
         .WithName("UpdateOrderStatus");
 
-        group.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) =>
+        // DELETE /api/orders/{id} — owner or admin
+        group.MapDelete("/{id:guid}", async (Guid id, HttpContext http, IMediator mediator) =>
         {
+            var order = await mediator.Send(new GetOrderByIdQuery(id));
+            if (order is null) return Results.NotFound();
+
+            var isAdmin = http.User.IsInRole("admin");
+            if (!isAdmin && order.UserId != http.GetUserId())
+                return Results.Forbid();
+
             await mediator.Send(new CancelOrderCommand(id));
             return Results.NoContent();
         })

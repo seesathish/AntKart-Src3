@@ -29,6 +29,13 @@ public sealed class ExceptionHandlerMiddleware
             var errors = ex.Errors.Select(e => new { e.PropertyName, e.ErrorMessage });
             await context.Response.WriteAsync(JsonSerializer.Serialize(new { errors }));
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning("Forbidden: {Message}", ex.Message);
+            context.Response.StatusCode = (int)HttpStatusCode.Forbidden;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new { error = ex.Message }));
+        }
         catch (KeyNotFoundException ex)
         {
             _logger.LogWarning("Not found: {Message}", ex.Message);

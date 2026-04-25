@@ -1,8 +1,10 @@
+using AK.BuildingBlocks.Authentication;
 using AK.Payments.Application.Commands.InitiatePayment;
 using AK.Payments.Application.Commands.VerifyPayment;
 using AK.Payments.Application.Queries.GetPaymentById;
 using AK.Payments.Application.Queries.GetPaymentByOrderId;
 using AK.Payments.Application.Queries.GetUserPayments;
+using AK.Payments.Domain.Enums;
 using MediatR;
 
 namespace AK.Payments.API.Endpoints;
@@ -15,8 +17,13 @@ public static class PaymentEndpoints
             .WithTags("Payments")
             .RequireAuthorization("authenticated");
 
-        group.MapPost("/initiate", async (InitiatePaymentCommand command, IMediator mediator) =>
+        // POST /api/payments/initiate — userId injected from JWT
+        group.MapPost("/initiate", async (HttpContext http, InitiatePaymentRequest req, IMediator mediator) =>
         {
+            var userId = http.GetUserId();
+            var command = new InitiatePaymentCommand(
+                req.OrderId, userId, req.Amount, req.Method,
+                req.SavedCardToken, req.CustomerEmail, req.CustomerContact);
             var result = await mediator.Send(command);
             return Results.Ok(result);
         }).WithName("InitiatePayment");
@@ -39,11 +46,13 @@ public static class PaymentEndpoints
             return payment is null ? Results.NotFound() : Results.Ok(payment);
         }).WithName("GetPaymentByOrderId");
 
-        group.MapGet("/user/{userId}", async (string userId, IMediator mediator) =>
+        // GET /api/payments/me — current user's payment history
+        group.MapGet("/me", async (HttpContext http, IMediator mediator) =>
         {
+            var userId = http.GetUserId();
             var payments = await mediator.Send(new GetUserPaymentsQuery(userId));
             return Results.Ok(payments);
-        }).WithName("GetUserPayments");
+        }).WithName("GetMyPayments");
 
         app.MapPost("/api/payments/webhook", () => Results.Ok())
             .WithName("PaymentWebhook")
@@ -51,3 +60,12 @@ public static class PaymentEndpoints
             .AllowAnonymous();
     }
 }
+
+// userId is not accepted from the client — it is always derived from the JWT
+public sealed record InitiatePaymentRequest(
+    Guid OrderId,
+    decimal Amount,
+    PaymentMethod Method,
+    string? SavedCardToken = null,
+    string? CustomerEmail = null,
+    string? CustomerContact = null);

@@ -159,56 +159,56 @@ echo ""
 
 # ============================================================
 echo "=== [AK.ShoppingCart] ==="
-# Routes: POST /{userId}/items, GET /{userId}, PUT /{userId}/items/{productId}
-#         DELETE /{userId}/items/{productId}, DELETE /{userId}
+# Routes: POST /items, GET /, PUT /items/{productId}
+#         DELETE /items/{productId}, DELETE /
 # ============================================================
 CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/health)
 check "Health check" $CODE 200
 
-CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/api/v1/cart/user1)
-check "GET /cart/{userId} (no auth -> 401)" $CODE 401
+CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/api/v1/cart)
+check "GET /cart (no auth -> 401)" $CODE 401
 
 # Add item first (POST /{userId}/items)
-CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:8082/api/v1/cart/user1/items" \
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:8082/api/v1/cart/items" \
   -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
   -d "{\"productId\":\"$PRODUCT_ID\",\"productName\":\"Test Shirt\",\"sku\":\"MEN-SHIR-001\",\"price\":29.99,\"quantity\":2}")
-check "POST /cart/{userId}/items (user auth)" $CODE 200
+check "POST /cart/items (user auth)" $CODE 200
 
-CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $USER_TOKEN" http://localhost:8082/api/v1/cart/user1)
-check "GET /cart/{userId} (user auth, has items)" $CODE 200
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $USER_TOKEN" http://localhost:8082/api/v1/cart)
+check "GET /cart (user auth, has items)" $CODE 200
 
-CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:8082/api/v1/cart/adminuser/items" \
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:8082/api/v1/cart/items" \
   -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
   -d '{"productId":"prod-admin-1","productName":"Admin Item","sku":"ADM-ITEM-001","price":99.99,"quantity":1}')
-check "POST /cart/{userId}/items (admin can add)" $CODE 200
+check "POST /cart/items (admin adds to own cart)" $CODE 200
 
-CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8082/api/v1/cart/adminuser)
-check "GET /cart/{userId} (admin can read)" $CODE 200
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8082/api/v1/cart)
+check "GET /cart (admin reads own cart)" $CODE 200
 
 # Update quantity
-CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "http://localhost:8082/api/v1/cart/user1/items/$PRODUCT_ID" \
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "http://localhost:8082/api/v1/cart/items/$PRODUCT_ID" \
   -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
   -d '{"quantity":5}')
-check "PUT /cart/{userId}/items/{productId} (update qty)" $CODE 200
+check "PUT /cart/items/{productId} (update qty)" $CODE 200
 
 # Remove single item
-CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "http://localhost:8082/api/v1/cart/user1/items/$PRODUCT_ID" \
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "http://localhost:8082/api/v1/cart/items/$PRODUCT_ID" \
   -H "Authorization: Bearer $USER_TOKEN")
-check "DELETE /cart/{userId}/items/{productId} (remove item)" $CODE 200
+check "DELETE /cart/items/{productId} (remove item)" $CODE 200
 
 # Clear cart
-CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "http://localhost:8082/api/v1/cart/user1" \
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "http://localhost:8082/api/v1/cart" \
   -H "Authorization: Bearer $USER_TOKEN")
-check "DELETE /cart/{userId} (clear, user auth)" $CODE 204
+check "DELETE /cart (clear, user auth)" $CODE 204
 
-CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "http://localhost:8082/api/v1/cart/adminuser" \
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "http://localhost:8082/api/v1/cart" \
   -H "Authorization: Bearer $ADMIN_TOKEN")
-check "DELETE /cart/{userId} (clear, admin)" $CODE 204
+check "DELETE /cart (clear, admin)" $CODE 204
 echo ""
 
 # ============================================================
 echo "=== [AK.Order] ==="
-# Routes: GET /api/orders, GET /api/orders/{guid}, GET /api/orders/user/{userId}
+# Routes: GET /api/orders, GET /api/orders/{guid}, GET /api/orders/me
 #         POST /api/orders, PUT /api/orders/{guid}/status, DELETE /api/orders/{guid}
 # ============================================================
 CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8083/health)
@@ -222,7 +222,7 @@ check "GET /api/orders (user auth)" $CODE 200
 
 NEW_ORDER=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8083/api/orders \
   -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
-  -d "{\"userId\":\"user1\",\"order\":{\"shippingAddress\":{\"fullName\":\"John Doe\",\"addressLine1\":\"123 Main St\",\"city\":\"New York\",\"state\":\"NY\",\"postalCode\":\"10001\",\"country\":\"USA\",\"phone\":\"555-1234\"},\"items\":[{\"productId\":\"$PRODUCT_ID\",\"productName\":\"Test Product\",\"sku\":\"MEN-SHIR-001\",\"price\":29.99,\"quantity\":1}]}}")
+  -d "{\"shippingAddress\":{\"fullName\":\"John Doe\",\"addressLine1\":\"123 Main St\",\"city\":\"New York\",\"state\":\"NY\",\"postalCode\":\"10001\",\"country\":\"USA\",\"phone\":\"555-1234\"},\"items\":[{\"productId\":\"$PRODUCT_ID\",\"productName\":\"Test Product\",\"sku\":\"MEN-SHIR-001\",\"price\":29.99,\"quantity\":1}]}")
 ORDER_CODE=$(echo "$NEW_ORDER" | tail -1)
 ORDER_ID=$(echo "$NEW_ORDER" | head -1 | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 check "POST /api/orders (create, user auth)" $ORDER_CODE 201
@@ -232,8 +232,8 @@ if [ -n "$ORDER_ID" ]; then
   CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $USER_TOKEN" "http://localhost:8083/api/orders/$ORDER_ID")
   check "GET /api/orders/{id} (user auth)" $CODE 200
 
-  CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $USER_TOKEN" "http://localhost:8083/api/orders/user/user1")
-  check "GET /api/orders/user/{userId} (user auth)" $CODE 200
+  CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $USER_TOKEN" "http://localhost:8083/api/orders/me")
+  check "GET /api/orders/me (user auth)" $CODE 200
 
   CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "http://localhost:8083/api/orders/$ORDER_ID/status" \
     -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
@@ -260,25 +260,25 @@ check "Health check" $CODE 200
 # Auth guard — no token
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8085/api/payments/initiate \
   -H "Content-Type: application/json" \
-  -d '{"orderId":"00000000-0000-0000-0000-000000000001","userId":"user1","amount":29.99,"currency":"INR","method":1}')
+  -d '{"orderId":"00000000-0000-0000-0000-000000000001","amount":29.99,"method":1}')
 check "POST /api/payments/initiate (no auth -> 401)" $CODE 401
 
 # Validation — missing amount (user auth)
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8085/api/payments/initiate \
   -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
-  -d '{"orderId":"00000000-0000-0000-0000-000000000001","userId":"user1","currency":"INR","method":1}')
+  -d '{"orderId":"00000000-0000-0000-0000-000000000001","method":1}')
 check "POST /api/payments/initiate (missing amount -> 400)" $CODE 400
 
 # Validation — zero amount
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8085/api/payments/initiate \
   -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
-  -d '{"orderId":"00000000-0000-0000-0000-000000000001","userId":"user1","amount":0,"currency":"INR","method":1}')
+  -d '{"orderId":"00000000-0000-0000-0000-000000000001","amount":0,"method":1}')
 check "POST /api/payments/initiate (zero amount -> 400)" $CODE 400
 
 # Create a fresh order for payment testing
 PAY_ORDER=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8083/api/orders \
   -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
-  -d "{\"userId\":\"user1\",\"order\":{\"shippingAddress\":{\"fullName\":\"Pay Test\",\"addressLine1\":\"1 Pay St\",\"city\":\"Mumbai\",\"state\":\"MH\",\"postalCode\":\"400001\",\"country\":\"IN\",\"phone\":\"+91-9999999999\"},\"items\":[{\"productId\":\"$PRODUCT_ID\",\"productName\":\"Test Product\",\"sku\":\"MEN-SHIR-001\",\"price\":29.99,\"quantity\":1}]}}")
+  -d "{\"shippingAddress\":{\"fullName\":\"Pay Test\",\"addressLine1\":\"1 Pay St\",\"city\":\"Mumbai\",\"state\":\"MH\",\"postalCode\":\"400001\",\"country\":\"IN\",\"phone\":\"+91-9999999999\"},\"items\":[{\"productId\":\"$PRODUCT_ID\",\"productName\":\"Test Product\",\"sku\":\"MEN-SHIR-001\",\"price\":29.99,\"quantity\":1}]}")
 PAY_ORDER_CODE=$(echo "$PAY_ORDER" | tail -1)
 PAY_ORDER_ID=$(echo "$PAY_ORDER" | head -1 | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 echo "  Payment test order: $PAY_ORDER_ID (HTTP $PAY_ORDER_CODE)"
@@ -287,7 +287,7 @@ echo "  Payment test order: $PAY_ORDER_ID (HTTP $PAY_ORDER_CODE)"
 if [ -n "$PAY_ORDER_ID" ]; then
   PAY_RESP=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8085/api/payments/initiate \
     -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
-    -d "{\"orderId\":\"$PAY_ORDER_ID\",\"userId\":\"user1\",\"amount\":29.99,\"currency\":\"INR\",\"method\":1}")
+    -d "{\"orderId\":\"$PAY_ORDER_ID\",\"amount\":29.99,\"method\":1}")
   PAY_CODE=$(echo "$PAY_RESP" | tail -1)
   PAY_BODY=$(echo "$PAY_RESP" | head -1)
   PAY_ID=$(echo "$PAY_BODY" | grep -o '"paymentId":"[^"]*"' | cut -d'"' -f4)
@@ -312,13 +312,13 @@ fi
 
 # Get user payments — positive
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $USER_TOKEN" \
-  "http://localhost:8085/api/payments/user/user1")
-check "GET /api/payments/user/{userId} (user auth)" $CODE 200
+  "http://localhost:8085/api/payments/me")
+check "GET /api/payments/me (user auth)" $CODE 200
 
 # Get user payments — no auth (negative)
 CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-  "http://localhost:8085/api/payments/user/user1")
-check "GET /api/payments/user/{userId} (no auth -> 401)" $CODE 401
+  "http://localhost:8085/api/payments/me")
+check "GET /api/payments/me (no auth -> 401)" $CODE 401
 
 # Verify with invalid signature (negative)
 if [ -n "$PAY_ORDER_ID" ] && [ -n "$RZP_ORDER_ID" ]; then
@@ -330,24 +330,24 @@ fi
 
 # Saved cards — no auth (negative)
 CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-  "http://localhost:8085/api/payments/cards/user/user1")
-check "GET /api/payments/cards/user/{userId} (no auth -> 401)" $CODE 401
+  "http://localhost:8085/api/payments/cards")
+check "GET /api/payments/cards (no auth -> 401)" $CODE 401
 
 # Saved cards — user auth (positive, returns empty list)
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $USER_TOKEN" \
-  "http://localhost:8085/api/payments/cards/user/user1")
-check "GET /api/payments/cards/user/{userId} (user auth)" $CODE 200
+  "http://localhost:8085/api/payments/cards")
+check "GET /api/payments/cards (user auth)" $CODE 200
 
 # Save card — missing tokenId (negative)
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8085/api/payments/cards/save \
   -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
-  -d '{"userId":"user1","razorpayCustomerId":"cust_test","cardNetwork":"Visa","last4":"1111","cardType":"credit","cardName":"Test Card"}')
-check "POST /api/payments/cards/save (missing tokenId -> 400)" $CODE 400
+  -d '{"razorpayCustomerId":"cust_test","cardNetwork":"Visa","last4":"1111","cardType":"credit","cardName":"Test Card"}')
+check "POST /api/payments/cards/save (missing razorpayPaymentId -> 400)" $CODE 400
 
 # Save card — no auth (negative)
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8085/api/payments/cards/save \
   -H "Content-Type: application/json" \
-  -d '{"userId":"user1","razorpayCustomerId":"cust_test","razorpayTokenId":"tok_test","cardNetwork":"Visa","last4":"1111","cardType":"credit","cardName":"Test Card"}')
+  -d '{"razorpayCustomerId":"cust_test","razorpayPaymentId":"pay_test","customerName":"Test User","customerEmail":"test@test.com","customerContact":"9999999999"}')
 check "POST /api/payments/cards/save (no auth -> 401)" $CODE 401
 
 # Cleanup: cancel the payment test order
@@ -378,7 +378,7 @@ check "20x concurrent Products GET" "$C_FAIL" "0"
 
 echo "  Launching 10x parallel Cart add (user1)..."
 for i in $(seq 1 10); do
-  (CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:8082/api/v1/cart/user1/items" \
+  (CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:8082/api/v1/cart/items" \
     -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
     -d "{\"productId\":\"prod-conc-$i\",\"productName\":\"Item $i\",\"sku\":\"CON-ITEM-00$i\",\"price\":9.99,\"quantity\":1}")
    echo $CODE > "$TMPDIR/ca_$i") &
@@ -438,7 +438,7 @@ check "5x concurrent UserIdentity /me" "$UI_FAIL" "0"
 
 rm -rf "$TMPDIR"
 # Cleanup concurrent test cart
-curl -s -o /dev/null -X DELETE "http://localhost:8082/api/v1/cart/user1" -H "Authorization: Bearer $USER_TOKEN"
+curl -s -o /dev/null -X DELETE "http://localhost:8082/api/v1/cart" -H "Authorization: Bearer $USER_TOKEN"
 echo ""
 
 echo "=============================="
