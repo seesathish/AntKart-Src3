@@ -62,8 +62,8 @@ AK.<Service>/
 - **SKU format:** `{CAT_ABBREV}-{SUBCAT_ABBREV}-{001..NNN}` e.g. `MEN-SHIR-001`, `WOM-DRES-001`
 - **New endpoint:** `GET /api/v1/products/categories` — returns distinct top-level category names from DB
 - **Removed endpoints:** `/men`, `/women`, `/kids` — replaced by `?category=Men`, `?category=Women`, `?category=Kids`
-- **Tests:** 190 passing (domain, commands, queries, validators, specifications, DTO mapping)
-- **Swagger:** `http://localhost:5077/swagger`
+- **Tests:** 202 passing (domain, commands, queries, validators, specifications, DTO mapping, GetProductCategories handler, ReserveStockConsumer)
+- **Swagger:** `http://localhost:5077/swagger` (Development only)
 - **Design doc:** [AK.Products/PRODUCTS_TECHNICAL_DESIGN.md](AK.Products/PRODUCTS_TECHNICAL_DESIGN.md)
 
 ### ✅ AK.Discount  (gRPC)
@@ -86,7 +86,7 @@ AK.<Service>/
 - **Cart behaviour:** Adding existing product increments quantity; quantity=0 removes item
 - **Serialisation:** `System.Text.Json` snapshot pattern (domain → CartSnapshot DTO → Redis)
 - **Tests:** 88 passing (domain, commands, queries, validators, behaviors, infrastructure)
-- **Swagger:** `http://localhost:5079/swagger`
+- **Swagger:** `http://localhost:5079/swagger` (Development only)
 - **Design doc:** [AK.ShoppingCart/SHOPPING_CART_TECHNICAL_DESIGN.md](AK.ShoppingCart/SHOPPING_CART_TECHNICAL_DESIGN.md)
 
 ### ✅ AK.Order  (REST Minimal API)
@@ -97,8 +97,9 @@ AK.<Service>/
 - **Operations:** Create order, get order by ID, list orders (paged, filtered), list by user, update status, cancel
 - **Order number format:** `ORD-{yyyyMMdd}-{8-char-GUID-uppercase}` e.g. `ORD-20260418-A1B2C3D4`
 - **Domain events:** `OrderCreatedEvent`, `OrderStatusChangedEvent`, `OrderCancelledEvent`
+- **Order status state machine:** `_allowedTransitions` dictionary enforces valid transitions — Pending→Confirmed|Cancelled|PaymentFailed, Confirmed→Processing|Shipped|Cancelled, Processing→Shipped|Cancelled, Shipped→Delivered, Delivered/Cancelled are terminal (no further transitions). `UpdateStatus()` throws `InvalidOperationException` for invalid transitions.
 - **Tests:** 106 passing (domain, features, validators, behaviors, infrastructure with EF InMemory)
-- **Swagger:** `http://localhost:5080/swagger`
+- **Swagger:** `http://localhost:5080/swagger` (Development only)
 - **Design doc:** [AK.Order/ORDER_TECHNICAL_DESIGN.md](AK.Order/ORDER_TECHNICAL_DESIGN.md)
 
 ### ✅ AK.UserIdentity  (REST Minimal API — Keycloak Proxy)
@@ -109,7 +110,7 @@ AK.<Service>/
 - **Endpoints:** POST /login, POST /register, POST /refresh, GET /me, GET /admin/users, POST /admin/users/{id}/roles
 - **Auth:** JWT Bearer validated against Keycloak OIDC discovery endpoint
 - **Tests:** 15 passing (KeycloakService, KeycloakAdminService, ExceptionHandlerMiddleware — all mocked HTTP)
-- **Swagger:** `http://localhost:5085/swagger`
+- **Swagger:** `http://localhost:5085/swagger` (Development only)
 - **Design doc:** [AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md](AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md)
 
 ### ✅ AK.Gateway  (API Gateway)
@@ -125,13 +126,13 @@ AK.<Service>/
 - `Logging/SerilogExtensions` — Serilog with console + rolling file + Elasticsearch sink
 - `HealthChecks/HealthCheckExtensions` — `/health` endpoint
 - `Middleware/CorrelationIdMiddleware` — `X-Correlation-Id` header
-- `Authentication/AuthenticationExtensions` — `AddKeycloakAuthentication()` + `UseKeycloakAuth()` shared JWT auth wiring
+- `Authentication/AuthenticationExtensions` — `AddKeycloakAuthentication()` + `UseKeycloakAuth()` shared JWT auth wiring; validates `azp` claim against `settings.Audience` (`antkart-client`) to prevent cross-client token reuse; logs `JsonException` on malformed `realm_access` claim
 - `Authentication/KeycloakSettings` — typed config record for Keycloak settings
-- `Authentication/HttpContextExtensions` — `GetUserId()` extracts `sub` (Keycloak UUID) from JWT; throws `UnauthorizedAccessException` if missing
+- `Authentication/HttpContextExtensions` — `GetUserId()` extracts `sub` (Keycloak UUID) from JWT; falls back to `preferred_username`; throws `UnauthorizedAccessException` if neither is present
 - `Messaging/IIntegrationEvent` — base interface for all integration events
 - `Messaging/IntegrationEvents/` — `OrderCreatedIntegrationEvent`, `StockReservedIntegrationEvent`, `StockReservationFailedIntegrationEvent`, `OrderConfirmedIntegrationEvent`, `OrderCancelledIntegrationEvent`, `CartClearedIntegrationEvent`
 - `Messaging/MassTransitExtensions` — `AddRabbitMqMassTransit()` helper (kebab-case, global retry)
-- `Resilience/ResilienceExtensions` — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, `AddNpgsqlResilience()`
+- `Resilience/ResilienceExtensions` — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, `AddNpgsqlResilience()` (Npgsql uses exponential backoff + jitter to prevent thundering herd on DB reconnect)
 
 ### ✅ AK.IntegrationTests  (Event Bus Tests)
 - **Framework:** MassTransit in-memory test harness (no RabbitMQ, no DB, no host)
@@ -147,8 +148,9 @@ AK.<Service>/
 - **Operations:** Initiate payment, verify signature, saved cards CRUD, user payment history
 - **Saved cards:** PCI-compliant — Razorpay token IDs only, never raw card numbers
 - **Integration events:** Publishes `PaymentInitiatedIntegrationEvent`, `PaymentSucceededIntegrationEvent`, `PaymentFailedIntegrationEvent`; AK.Order consumes succeeded/failed to update order status
-- **Tests:** 28 passing (domain, commands, validators)
-- **Swagger:** `http://localhost:5086/swagger`
+- **Tests:** 65 passing (domain, commands, queries, validators — SaveCard, DeleteSavedCard, GetPaymentById, GetPaymentByOrderId, GetUserPayments, GetUserSavedCards, VerifyPayment, SaveCard validators)
+- **Swagger:** `http://localhost:5086/swagger` (Development only)
+- **Removed:** Unimplemented `/api/payments/webhook` stub endpoint was removed
 - **Design doc:** [AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md](AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md)
 
 ---
@@ -377,9 +379,14 @@ When asked to build a new service `AK.<Name>`, follow this order:
 
 - Build context is always the **repo root** (`.`)
 - Dockerfiles live inside the API/Grpc project folder
+- **No `version:` key** — `docker-compose.yml` and `docker-compose.override.yml` use Compose v2 format (no top-level `version:` field)
+- **Container naming:** All `container_name` values use `antkart-` prefix (e.g. `antkart-mongodb`, `antkart-keycloak`) — never `antcart-` or `ak-`
+- **Healthchecks:** `mongodb`, `redis`, `postgres-orders`, `postgres-payments` all define `healthcheck:` blocks; dependent services use `condition: service_healthy` in `depends_on`
+- **Non-root containers:** All Dockerfiles include `USER $APP_UID` before `ENTRYPOINT` — uses .NET 9 base image UID 1654
+- **`.dockerignore`:** Repo root `.dockerignore` excludes `.git`, `**/*.Tests/`, `**/bin/`, `**/obj/`, `*.md`, `coverage-results/`, etc. — keep it up to date when adding new build-irrelevant directories
+- **Seeding in Docker:** Products seed runs when `IsDevelopment()` OR `SEED_DATABASE=true` env var is set. The compose file sets `SEED_DATABASE: "true"` on `antkart-products-api` because `ASPNETCORE_ENVIRONMENT=Production` in Docker
 - SQLite DB for Discount must persist via a named volume (`discount_data:/app/data`)
-- MongoDB must be running for Products to seed on startup
-- Services that depend on MongoDB must have `depends_on: - mongodb` in compose
+- Services that depend on infrastructure must use `condition: service_healthy` (for services with healthchecks) or `condition: service_started` in `depends_on`
 
 ---
 

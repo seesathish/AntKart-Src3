@@ -194,13 +194,13 @@ docker-compose up --build
 | Keycloak Admin | http://localhost:8090 |
 | RabbitMQ Management | http://localhost:15672  (guest/guest) |
 | Kibana | http://localhost:5601 |
-| AK.Products Swagger | http://localhost:8080/swagger |
+| AK.Products Swagger | http://localhost:8080/swagger (Development only) |
 | AK.Discount gRPC | http://localhost:8081 |
-| AK.ShoppingCart Swagger | http://localhost:8082/swagger |
-| AK.Order Swagger | http://localhost:8083/swagger |
-| AK.UserIdentity Swagger | http://localhost:8084/swagger |
+| AK.ShoppingCart Swagger | http://localhost:8082/swagger (Development only) |
+| AK.Order Swagger | http://localhost:8083/swagger (Development only) |
+| AK.UserIdentity Swagger | http://localhost:8084/swagger (Development only) |
 
-> **Keycloak auto-import:** The `antkart` realm is imported from `keycloak/antkart-realm.json` on first start. Pre-seeded users: `admin/admin123` (admin), `user1/user123` (user).
+> **Keycloak auto-import:** The `antkart` realm is imported from `keycloak/antkart-realm.json` on first start. Pre-seeded users: `admin/admin123` (admin+user), `user1/user123` (user), `admin2/Admin2Pass!` (admin+user).
 
 ### Startup order
 
@@ -232,24 +232,21 @@ curl -s -X POST http://localhost:8083/api/orders \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d "{
-    \"userId\": \"user1\",
-    \"order\": {
-      \"shippingAddress\": {
-        \"fullName\": \"John Doe\",
-        \"addressLine1\": \"123 Main St\",
-        \"city\": \"Springfield\",
-        \"state\": \"IL\",
-        \"postalCode\": \"62701\",
-        \"country\": \"US\"
-      },
-      \"items\": [{
-        \"productId\": \"$PRODUCT_ID\",
-        \"sku\": \"$SKU\",
-        \"productName\": \"Test Product\",
-        \"quantity\": 1,
-        \"unitPrice\": $PRICE
-      }]
-    }
+    \"shippingAddress\": {
+      \"fullName\": \"John Doe\",
+      \"addressLine1\": \"123 Main St\",
+      \"city\": \"Springfield\",
+      \"state\": \"IL\",
+      \"postalCode\": \"62701\",
+      \"country\": \"US\"
+    },
+    \"items\": [{
+      \"productId\": \"$PRODUCT_ID\",
+      \"sku\": \"$SKU\",
+      \"productName\": \"Test Product\",
+      \"quantity\": 1,
+      \"price\": $PRICE
+    }]
   }"
 
 # 4. Watch RabbitMQ: http://localhost:15672
@@ -295,11 +292,11 @@ dotnet test
 
 | Project | Tests |
 |---------|-------|
-| AK.Products.Tests | 190 |
+| AK.Products.Tests | 202 |
 | AK.Discount.Tests | 53 |
 | AK.ShoppingCart.Tests | 88 |
 | AK.Order.Tests | 106 |
 | AK.UserIdentity.Tests | 15 |
 | AK.IntegrationTests | 28 |
-| AK.Payments.Tests | 28 |
-| **Total** | **508** |
+| AK.Payments.Tests | 65 |
+| **Total** | **557** |

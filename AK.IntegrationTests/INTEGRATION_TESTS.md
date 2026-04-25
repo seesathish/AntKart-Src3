@@ -170,14 +170,14 @@ Wait until healthy (check `docker-compose ps`):
 
 | Container | Health |
 |-----------|--------|
-| `antcart-rabbitmq` | healthy |
-| `antcart-elasticsearch` | healthy |
-| `antcart-postgres` | up |
-| `antcart-mongodb` | up |
-| `antcart-keycloak` | up |
-| `ak-order-api` | up |
-| `ak-payments-api` | up |
-| `ak-gateway-api` | up |
+| `antkart-rabbitmq` | healthy |
+| `antkart-elasticsearch` | healthy |
+| `antkart-postgres` | up |
+| `antkart-mongodb` | up |
+| `antkart-keycloak` | up |
+| `antkart-order-api` | up |
+| `antkart-payments-api` | up |
+| `antkart-gateway-api` | up |
 
 ---
 
@@ -199,16 +199,13 @@ ORDER=$(curl -s -X POST http://localhost:9090/gateway/orders \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
-    "userId": "user1",
-    "order": {
-      "shippingAddress": {
-        "fullName": "Jane Doe", "addressLine1": "42 Commerce St",
-        "city": "Austin", "state": "TX",
-        "postalCode": "73301", "country": "US", "phone": "+1-512-555-0199"
-      },
-      "items": [{"productId": "<id>", "productName": "T-Shirt",
-                 "sKU": "MEN-SHIR-001", "price": 29.99, "quantity": 1}]
-    }
+    "shippingAddress": {
+      "fullName": "Jane Doe", "addressLine1": "42 Commerce St",
+      "city": "Austin", "state": "TX",
+      "postalCode": "73301", "country": "US", "phone": "+1-512-555-0199"
+    },
+    "items": [{"productId": "<id>", "productName": "T-Shirt",
+               "sku": "MEN-SHIR-001", "price": 29.99, "quantity": 1}]
   }')
 
 ORDER_ID=$(echo $ORDER | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
@@ -238,7 +235,7 @@ done
 PAYMENT=$(curl -s -X POST http://localhost:9090/gateway/payments/initiate \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d "{\"orderId\": \"$ORDER_ID\", \"userId\": \"user1\",
+  -d "{\"orderId\": \"$ORDER_ID\",
        \"amount\": 29.99, \"currency\": \"INR\", \"method\": \"Card\"}")
 
 echo $PAYMENT
@@ -353,21 +350,18 @@ BAD_ORDER=$(curl -s -X POST http://localhost:9090/gateway/orders \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d "{
-    \"userId\": \"user1\",
-    \"order\": {
-      \"shippingAddress\": {
-        \"fullName\": \"Jane Doe\", \"addressLine1\": \"42 Commerce St\",
-        \"city\": \"Austin\", \"state\": \"TX\",
-        \"postalCode\": \"73301\", \"country\": \"US\", \"phone\": \"+1-512-555-0199\"
-      },
-      \"items\": [{
-        \"productId\": \"$PRODUCT_ID\",
-        \"productName\": \"T-Shirt\",
-        \"sKU\": \"MEN-SHIR-001\",
-        \"price\": 29.99,
-        \"quantity\": $OVER_QTY
-      }]
-    }
+    \"shippingAddress\": {
+      \"fullName\": \"Jane Doe\", \"addressLine1\": \"42 Commerce St\",
+      \"city\": \"Austin\", \"state\": \"TX\",
+      \"postalCode\": \"73301\", \"country\": \"US\", \"phone\": \"+1-512-555-0199\"
+    },
+    \"items\": [{
+      \"productId\": \"$PRODUCT_ID\",
+      \"productName\": \"T-Shirt\",
+      \"sku\": \"MEN-SHIR-001\",
+      \"price\": 29.99,
+      \"quantity\": $OVER_QTY
+    }]
   }")
 
 BAD_ORDER_ID=$(echo $BAD_ORDER | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
@@ -418,7 +412,7 @@ Follow Steps 1–3 from the happy path above to obtain a `$ORDER_ID` with status
 PAYMENT=$(curl -s -X POST http://localhost:9090/gateway/payments/initiate \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d "{\"orderId\": \"$ORDER_ID\", \"userId\": \"user1\",
+  -d "{\"orderId\": \"$ORDER_ID\",
        \"amount\": 29.99, \"currency\": \"INR\", \"method\": \"Card\"}")
 
 echo $PAYMENT
@@ -476,14 +470,14 @@ Open **http://localhost:15672** → Exchanges → `PaymentFailedIntegrationEvent
 curl -s -o /dev/null -w "POST /gateway/orders (no token): %{http_code}\n" \
   -X POST http://localhost:9090/gateway/orders \
   -H "Content-Type: application/json" \
-  -d '{"userId":"user1","order":{}}'
+  -d '{}'
 # Expected: 401
 
 # POST /gateway/payments/initiate — no Authorization header
 curl -s -o /dev/null -w "POST /gateway/payments/initiate (no token): %{http_code}\n" \
   -X POST http://localhost:9090/gateway/payments/initiate \
   -H "Content-Type: application/json" \
-  -d '{"orderId":"dummy","userId":"user1","amount":1,"currency":"INR","method":"Card"}'
+  -d '{"orderId":"dummy","amount":1,"currency":"INR","method":"Card"}'
 # Expected: 401
 ```
 
@@ -506,16 +500,13 @@ curl -s -o /dev/null -w "POST /gateway/orders (user token): %{http_code}\n" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d "{
-    \"userId\": \"user1\",
-    \"order\": {
-      \"shippingAddress\": {
-        \"fullName\": \"Jane Doe\", \"addressLine1\": \"42 Commerce St\",
-        \"city\": \"Austin\", \"state\": \"TX\",
-        \"postalCode\": \"73301\", \"country\": \"US\", \"phone\": \"+1-512-555-0199\"
-      },
-      \"items\": [{\"productId\": \"$PRODUCT_ID\", \"productName\": \"T-Shirt\",
-                   \"sKU\": \"MEN-SHIR-001\", \"price\": 29.99, \"quantity\": 1}]
-    }
+    \"shippingAddress\": {
+      \"fullName\": \"Jane Doe\", \"addressLine1\": \"42 Commerce St\",
+      \"city\": \"Austin\", \"state\": \"TX\",
+      \"postalCode\": \"73301\", \"country\": \"US\", \"phone\": \"+1-512-555-0199\"
+    },
+    \"items\": [{\"productId\": \"$PRODUCT_ID\", \"productName\": \"T-Shirt\",
+                 \"sku\": \"MEN-SHIR-001\", \"price\": 29.99, \"quantity\": 1}]
   }"
 # Expected: 201
 
@@ -524,7 +515,7 @@ curl -s -o /dev/null -w "POST /gateway/payments/initiate (user token): %{http_co
   -X POST http://localhost:9090/gateway/payments/initiate \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d "{\"orderId\": \"$ORDER_ID\", \"userId\": \"user1\",
+  -d "{\"orderId\": \"$ORDER_ID\",
        \"amount\": 29.99, \"currency\": \"INR\", \"method\": \"Card\"}"
 # Expected: 200
 ```
@@ -543,11 +534,8 @@ curl -s -w "\nHTTP_STATUS:%{http_code}" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
-    "userId": "user1",
-    "order": {
-      "items": [{"productId": "any-id", "productName": "T-Shirt",
-                 "sKU": "MEN-SHIR-001", "price": 29.99, "quantity": 1}]
-    }
+    "items": [{"productId": "any-id", "productName": "T-Shirt",
+               "sku": "MEN-SHIR-001", "price": 29.99, "quantity": 1}]
   }'
 # Expected: HTTP_STATUS:400
 # Body: validation errors listing shippingAddress as required
@@ -560,7 +548,7 @@ curl -s -w "\nHTTP_STATUS:%{http_code}" \
   -X POST http://localhost:9090/gateway/payments/initiate \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d "{\"orderId\": \"$ORDER_ID\", \"userId\": \"user1\",
+  -d "{\"orderId\": \"$ORDER_ID\",
        \"amount\": 0, \"currency\": \"INR\", \"method\": \"Card\"}"
 # Expected: HTTP_STATUS:400
 # Body: validation error — amount must be greater than 0
@@ -573,7 +561,7 @@ curl -s -w "\nHTTP_STATUS:%{http_code}" \
   -X POST http://localhost:9090/gateway/payments/initiate \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"userId": "user1", "amount": 29.99, "currency": "INR", "method": "Card"}'
+  -d '{"amount": 29.99, "currency": "INR", "method": "Card"}'
 # Expected: HTTP_STATUS:400
 # Body: validation error — orderId is required
 ```

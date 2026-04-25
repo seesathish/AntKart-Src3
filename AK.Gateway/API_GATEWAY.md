@@ -57,7 +57,7 @@ AK.Gateway/
 |-------------------|------------|---------------|
 | `GET /api/products` | `ak-products-api:8080` | No |
 | `GET/POST /api/products/{id}` | `ak-products-api:8080` | POST: Yes |
-| `GET/POST /api/cart/{userId}` | `ak-shoppingcart-api:8080` | Yes |
+| `GET/POST/PUT/DELETE /api/v1/cart` | `ak-shoppingcart-api:8080` | Yes |
 | `GET/POST /api/orders` | `ak-order-api:8080` | Yes |
 | `GET /api/orders/{id}` | `ak-order-api:8080` | Yes |
 | `POST /api/auth/**` | `ak-useridentity-api:8080` | No |

@@ -633,7 +633,7 @@ Seeding is idempotent: if `count >= 300`, the seeder does nothing.
 
 ## 15. API Reference
 
-### Base URL: `http://localhost:5000`
+### Base URL: `http://localhost:5077` (dev) / `http://localhost:8080` (Docker)
 
 #### Read Endpoints
 
@@ -657,7 +657,7 @@ POST   /api/v1/products/bulk-insert  → 200 { inserted: N }
 PUT    /api/v1/products/bulk-update  → 200 { updated: N }
 ```
 
-#### Swagger UI: `http://localhost:5000/swagger`
+#### Swagger UI: `http://localhost:5077/swagger` (Development only)
 
 ---
 
@@ -694,8 +694,10 @@ graph TB
 | `GetProductsByCategoryQueryHandlerTests` | 5 | Category match, empty, mapping, discount, parameterised |
 | `CreateProductValidatorTests` | 17 | All validation rules |
 | `UpdateProductValidatorTests` | 6 | All update rules |
+| `GetProductCategoriesQueryHandlerTests` | 4 | Distinct categories, empty, delegates to repo, CT |
+| `ReserveStockConsumerTests` | 8 | Sufficient/insufficient stock, not found, partial failure, multi-item |
 
-**Total: 190 tests**
+**Total: 202 tests**
 
 ### Test Tooling
 
@@ -731,8 +733,8 @@ builder.Services.AddInfrastructure(cfg);  // MongoDb, Repositories, UoW, Seeder
 builder.Services.AddSwaggerGen(...);
 
 app.UseMiddleware<ExceptionHandlerMiddleware>();
-app.UseSwagger(); app.UseSwaggerUI();      // Dev only
-await app.SeedDatabaseAsync();             // Dev only — 300 records
+app.UseSwagger(); app.UseSwaggerUI();      // Development environment only
+await app.SeedDatabaseAsync();             // when IsDevelopment() OR SEED_DATABASE=true env var
 app.MapProductEndpoints();
 ```
 

@@ -95,6 +95,35 @@
         }
       ],
       "realmRoles": ["user"]
+    },
+    {
+      "username": "admin2",
+      "email": "admin2@antkart.com",
+      "firstName": "Admin",
+      "lastName": "Two",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Admin2Pass!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["admin", "user"]
+    },
+    {
+      "username": "service-account-antkart-client",
+      "enabled": true,
+      "serviceAccountClientId": "antkart-client",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "query-users",
+          "view-realm"
+        ]
+      }
     }
   ]
 }

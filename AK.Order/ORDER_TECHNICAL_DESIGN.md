@@ -293,6 +293,8 @@ stateDiagram-v2
     Cancelled --> [*] : SAGA complete
 ```
 
+**Status State Machine:** `UpdateStatus()` enforces valid transitions via `_allowedTransitions` dictionary. Valid: Pending→Confirmed|Cancelled|PaymentFailed, Confirmed→Processing|Shipped|Cancelled, Processing→Shipped|Cancelled, Shipped→Delivered. Terminal states: Delivered, Cancelled (no further transitions). Throws `InvalidOperationException` for invalid transitions.
+
 ### 6.5 Domain Events
 
 | Event | Raised When |
@@ -337,8 +339,7 @@ This contrasts with horizontal layering (separate `Commands/`, `Queries/`, `Vali
 ### 7.3 Validation Rules
 
 **CreateOrder:**
-- `UserId`: NotEmpty, MaxLength(100)
-- `Order.Items`: NotEmpty (at least 1 item)
+- `Items`: NotEmpty (at least 1 item)
 - Each item: `ProductId` NotEmpty, `ProductName` NotEmpty MaxLength(200), `SKU` NotEmpty MaxLength(50), `Price > 0`, `Quantity > 0`
 - `ShippingAddress.FullName`: NotEmpty MaxLength(200)
 - `ShippingAddress.AddressLine1`: NotEmpty MaxLength(500)
@@ -497,9 +498,9 @@ Returns a single order by UUID.
 
 ---
 
-### GET /api/orders/user/{userId}
+### GET /api/orders/me
 
-Returns paged orders for a specific user.
+Returns paged orders for the current authenticated user (userId derived from JWT).
 
 **Query params:** `page`, `pageSize`
 
@@ -511,33 +512,32 @@ Returns paged orders for a specific user.
 
 Creates a new order.
 
+> userId is derived from JWT Bearer token.
+
 **Request body:**
 ```json
 {
-  "userId": "user-123",
-  "order": {
-    "items": [
-      {
-        "productId": "prod-001",
-        "productName": "Classic T-Shirt",
-        "sku": "MEN-SHIR-001",
-        "price": 29.99,
-        "quantity": 2,
-        "imageUrl": null
-      }
-    ],
-    "shippingAddress": {
-      "fullName": "John Doe",
-      "addressLine1": "123 Main St",
-      "addressLine2": null,
-      "city": "Springfield",
-      "state": "IL",
-      "postalCode": "62701",
-      "country": "US",
-      "phone": "+1-555-0100"
-    },
-    "notes": "Please handle with care"
-  }
+  "shippingAddress": {
+    "fullName": "John Doe",
+    "addressLine1": "123 Main St",
+    "addressLine2": null,
+    "city": "Springfield",
+    "state": "IL",
+    "postalCode": "62701",
+    "country": "US",
+    "phone": "+1-555-0100"
+  },
+  "items": [
+    {
+      "productId": "prod-001",
+      "productName": "Classic T-Shirt",
+      "sku": "MEN-SHIR-001",
+      "price": 29.99,
+      "quantity": 2,
+      "imageUrl": null
+    }
+  ],
+  "notes": "optional"
 }
 ```
 
@@ -554,7 +554,7 @@ Updates the status of an order.
 { "newStatus": 1 }
 ```
 
-Status values: `0=Pending, 1=Processing, 2=Shipped, 3=Delivered, 4=Cancelled`
+Status values (use integer): `Pending=1, Confirmed=2, Processing=3, Shipped=4, Delivered=5, Cancelled=6, Paid=7, PaymentFailed=8`
 
 **Response 200:** `OrderDto`
 **Response 404:** Order not found
@@ -587,6 +587,7 @@ Standard health check endpoint.
 | Exception | HTTP Status | Body |
 |-----------|-------------|------|
 | `FluentValidation.ValidationException` | 400 | `{ "errors": [{ "propertyName": "...", "errorMessage": "..." }] }` |
+| `UnauthorizedAccessException` | 403 | `{ "error": "..." }` |
 | `KeyNotFoundException` | 404 | `{ "error": "..." }` |
 | `InvalidOperationException` | 409 | `{ "error": "..." }` |
 | Any other `Exception` | 500 | `{ "error": "An unexpected error occurred." }` |

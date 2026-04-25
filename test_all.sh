@@ -237,7 +237,7 @@ if [ -n "$ORDER_ID" ]; then
 
   CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "http://localhost:8083/api/orders/$ORDER_ID/status" \
     -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
-    -d '{"newStatus":3}')
+    -d '{"newStatus":1}')
   check "PUT /api/orders/{id}/status (admin)" $CODE 200
 
   CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "http://localhost:8083/api/orders/$ORDER_ID" \

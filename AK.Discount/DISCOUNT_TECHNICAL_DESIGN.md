@@ -616,12 +616,17 @@ All tests are pure unit tests using `Mock<ICouponRepository>`. No database, no g
 
 | Area | Tests | Scenarios |
 |------|-------|-----------|
-| Domain | `CouponTests` (3) | Default values, Percentage type, FlatAmount type |
+| Domain | `CouponTests` (18) | Default values, Percentage type, FlatAmount type, property validation, edge cases |
 | Query — GetByProductId | 2 | Existing product → CouponDto; missing → null |
+| Query — GetAllDiscounts | 2 | Paged results; empty collection |
 | Command — CreateDiscount | 2 | Happy path; duplicate coupon code → InvalidOperationException |
 | Command — UpdateDiscount | 2 | Existing ID → updated DTO; missing ID → KeyNotFoundException |
 | Command — DeleteDiscount | 2 | Existing ID → true; missing ID → KeyNotFoundException |
-| **Total** | **11** | |
+| Validators — CreateCouponValidator | 10 | All field rules: ProductId, ProductName, CouponCode, Amount, DiscountType, ValidTo |
+| Validators — UpdateCouponValidator | 5 | All update field rules |
+| Validators — DeleteDiscountValidator | 2 | Id required, invalid Id |
+| DTO Mapping — CouponMapper | 8 | Domain → DTO mapping, all fields, null handling |
+| **Total** | **53** | |
 
 ### 16.3 Running Tests
 
@@ -696,13 +701,15 @@ Stage 2 — publish: dotnet publish -c Release
 Stage 3 — final:   aspnet runtime + published output
 ```
 
+The Dockerfile adds `RUN mkdir -p /app/data && chown -R $APP_UID:$APP_UID /app/data` before `USER $APP_UID` to ensure the non-root user can write the SQLite database to the volume-mounted `/app/data` directory.
+
 ### 18.2 docker-compose Services
 
 | Service | Image | Port (host→container) | Storage |
 |---------|-------|-----------------------|---------|
-| `mongodb` | `mongo:latest` | 27017→27017 | `mongodb_data` volume |
-| `ak-products-api` | `ak-products-api` (built) | 8080→8080 | — |
-| `ak-discount-grpc` | `ak-discount-grpc` (built) | 8081→8080 | `discount_data` volume (SQLite) |
+| `antkart-mongodb` | `mongo:latest` | 27017→27017 | `mongodb_data` volume |
+| `antkart-products-api` | `antkart-products-api` (built) | 8080→8080 | — |
+| `antkart-discount-grpc` | `antkart-discount-grpc` (built) | 8081→8080 | `discount_data` volume (SQLite) |
 
 ### 18.3 Running with Docker Compose
 

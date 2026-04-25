@@ -385,10 +385,10 @@ All events are `public sealed record` types. They are cleared via `Cart.ClearDom
 
 | Command | Input | Output | Handler Behaviour |
 |---------|-------|--------|-------------------|
-| `AddToCartCommand` | `string UserId`, `AddCartItemDto Item` | `CartDto` | Gets or creates cart via `IUnitOfWork.Carts.GetAsync` / `Cart.Create`; calls `AddItem`; saves; returns mapped DTO |
-| `RemoveFromCartCommand` | `string UserId`, `string ProductId` | `CartDto` | Gets cart (404 if missing); calls `RemoveItem` (404 if item absent); saves; returns DTO |
-| `UpdateCartItemCommand` | `string UserId`, `string ProductId`, `int Quantity` | `CartDto` | Gets cart (404 if missing); calls `UpdateItemQuantity`; saves; returns DTO |
-| `ClearCartCommand` | `string UserId` | `bool` | Checks existence; if absent returns `false`; calls `Clear`; saves; returns `true` |
+| `AddToCartCommand` | `AddCartItemDto Item` (userId injected at endpoint from JWT) | `CartDto` | Gets or creates cart via `IUnitOfWork.Carts.GetAsync` / `Cart.Create`; calls `AddItem`; saves; returns mapped DTO |
+| `RemoveFromCartCommand` | `string ProductId` (userId injected at endpoint from JWT) | `CartDto` | Gets cart (404 if missing); calls `RemoveItem` (404 if item absent); saves; returns DTO |
+| `UpdateCartItemCommand` | `string ProductId`, `int Quantity` (userId injected at endpoint from JWT) | `CartDto` | Gets cart (404 if missing); calls `UpdateItemQuantity`; saves; returns DTO |
+| `ClearCartCommand` | (userId injected at endpoint from JWT) | `bool` | Checks existence; if absent returns `false`; calls `Clear`; saves; returns `true` |
 
 ### 7.2 CQRS Queries
 
@@ -429,7 +429,6 @@ sequenceDiagram
 
 | Field | Rules |
 |-------|-------|
-| `UserId` | `NotEmpty`, `MaxLength(100)` |
 | `Item.ProductId` | `NotEmpty` |
 | `Item.ProductName` | `NotEmpty`, `MaxLength(200)` |
 | `Item.SKU` | `NotEmpty`, `MaxLength(50)` |
@@ -440,7 +439,6 @@ sequenceDiagram
 
 | Field | Rules |
 |-------|-------|
-| `UserId` | `NotEmpty` |
 | `ProductId` | `NotEmpty` |
 | `Quantity` | `GreaterThanOrEqualTo(0)` — allows 0 to signal removal |
 
@@ -604,15 +602,17 @@ All endpoints are grouped under `/api/v1/cart` and registered via `CartEndpoints
 
 | Method | Route | Handler | Success Response |
 |--------|-------|---------|-----------------|
-| GET    | `/api/v1/cart/{userId}` | `GetCartQuery` | 200 `CartDto` / 404 if not found |
-| POST   | `/api/v1/cart/{userId}/items` | `AddToCartCommand` | 200 `CartDto` |
-| PUT    | `/api/v1/cart/{userId}/items/{productId}` | `UpdateCartItemCommand` | 200 `CartDto` |
-| DELETE | `/api/v1/cart/{userId}/items/{productId}` | `RemoveFromCartCommand` | 200 `CartDto` |
-| DELETE | `/api/v1/cart/{userId}` | `ClearCartCommand` | 204 No Content |
+| GET    | `/api/v1/cart` | `GetCartQuery` | 200 `CartDto` / 404 if not found |
+| POST   | `/api/v1/cart/items` | `AddToCartCommand` | 200 `CartDto` |
+| PUT    | `/api/v1/cart/items/{productId}` | `UpdateCartItemCommand` | 200 `CartDto` |
+| DELETE | `/api/v1/cart/items/{productId}` | `RemoveFromCartCommand` | 200 `CartDto` |
+| DELETE | `/api/v1/cart` | `ClearCartCommand` | 204 No Content |
+
+> userId is derived from JWT Bearer token — not accepted in path or body.
 
 ### 9.2 Endpoint Binding
 
-- `userId` and `productId` are bound from route segments.
+- `productId` is bound from route segment. userId is derived from JWT via `HttpContextExtensions.GetUserId()` — never accepted as a path or body parameter.
 - Request bodies (`AddCartItemDto`, `UpdateCartItemDto`) are bound from the JSON body.
 - Validation failures are caught by `ValidationBehavior` before handlers run.
 
@@ -643,6 +643,7 @@ Registered first in the middleware pipeline. Maps exceptions to HTTP status code
 | Exception | HTTP Status Code |
 |-----------|-----------------|
 | `FluentValidation.ValidationException` | 400 Bad Request |
+| `UnauthorizedAccessException` | 403 Forbidden |
 | `KeyNotFoundException` | 404 Not Found |
 | `InvalidOperationException` | 409 Conflict |
 | `Exception` (catch-all) | 500 Internal Server Error |
@@ -831,18 +832,18 @@ Benefits:
 #### Read Endpoints
 
 ```
-GET /api/v1/cart/{userId}
+GET /api/v1/cart
 ```
 
-Returns `CartDto` for the user, or `404` if no cart exists.
+Returns `CartDto` for the authenticated user, or `404` if no cart exists.
 
 #### Write Endpoints
 
 ```
-POST   /api/v1/cart/{userId}/items              → 200 CartDto
-PUT    /api/v1/cart/{userId}/items/{productId}  → 200 CartDto
-DELETE /api/v1/cart/{userId}/items/{productId}  → 200 CartDto
-DELETE /api/v1/cart/{userId}                    → 204 No Content
+POST   /api/v1/cart/items              → 200 CartDto
+PUT    /api/v1/cart/items/{productId}  → 200 CartDto
+DELETE /api/v1/cart/items/{productId}  → 200 CartDto
+DELETE /api/v1/cart                    → 204 No Content
 ```
 
 #### Health Check
@@ -859,11 +860,11 @@ Returns `200 OK` with `{"status": "Healthy"}` when the service is running.
 GET /swagger
 ```
 
-Available in both Development and Production environments.
+Available in Development environment only.
 
 #### Request Bodies
 
-**POST `/api/v1/cart/{userId}/items`**
+**POST `/api/v1/cart/items`**
 ```json
 {
   "productId": "prod-001",
@@ -875,7 +876,7 @@ Available in both Development and Production environments.
 }
 ```
 
-**PUT `/api/v1/cart/{userId}/items/{productId}`**
+**PUT `/api/v1/cart/items/{productId}`**
 ```json
 {
   "quantity": 3
@@ -1010,17 +1011,17 @@ _uow.Setup(u => u.SaveChangesAsync(default)).ReturnsAsync(1);
 ```yaml
 redis:
   image: redis:7-alpine
-  container_name: antcart-redis
+  container_name: antkart-redis
   restart: unless-stopped
   ports:
     - "6379:6379"
 
-ak-shoppingcart-api:
-  image: ak-shoppingcart-api
+antkart-shoppingcart-api:
+  image: antkart-shoppingcart-api
   build:
     context: .
     dockerfile: AK.ShoppingCart/AK.ShoppingCart.API/Dockerfile
-  container_name: ak-shoppingcart-api
+  container_name: antkart-shoppingcart-api
   restart: unless-stopped
   ports:
     - "8082:8080"
@@ -1051,6 +1052,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 WORKDIR /app
 COPY --from=build /app/publish .
 EXPOSE 8080
+USER $APP_UID
 ENTRYPOINT ["dotnet", "AK.ShoppingCart.API.dll"]
 ```
 

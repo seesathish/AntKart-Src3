@@ -222,7 +222,7 @@ sequenceDiagram
     P-->>C: SavedCardDto {id, last4, cardNetwork, isDefault}
 
     Note over C,RZP: Subsequent Order Payment with Saved Card
-    C->>P: GET /api/payments/cards/user/{userId}
+    C->>P: GET /api/payments/cards
     P-->>C: [SavedCardDto, ...]
 
     C->>P: POST /api/payments/initiate<br/>{orderId, amount, method: SavedCard, savedCardToken: "token_xxx"}
@@ -231,7 +231,7 @@ sequenceDiagram
     P-->>C: {paymentId, razorpayOrderId, razorpayKeyId, amount}
 
     Note over C,RZP: Delete Saved Card
-    C->>P: DELETE /api/payments/cards/{id}?userId={userId}
+    C->>P: DELETE /api/payments/cards/{id}
     P->>RZP: Delete token from Razorpay vault
     RZP-->>P: 200 OK
     P-->>C: 204 No Content
@@ -359,11 +359,10 @@ New consumers in AK.Order:
 | POST | /api/payments/verify | Bearer | Verify signature, mark succeeded or failed |
 | GET | /api/payments/{id} | Bearer | Get payment by ID |
 | GET | /api/payments/order/{orderId} | Bearer | Get payment for an order |
-| GET | /api/payments/user/{userId} | Bearer | List payments for a user |
-| POST | /api/payments/webhook | None | Razorpay webhook receiver (no-op stub) |
-| GET | /api/payments/cards/user/{userId} | Bearer | List saved cards |
+| GET | /api/payments/me | Bearer | List payments for the authenticated user (userId from JWT) |
+| GET | /api/payments/cards | Bearer | List saved cards for the authenticated user (userId from JWT) |
 | POST | /api/payments/cards/save | Bearer | Save a card after successful payment |
-| DELETE | /api/payments/cards/{id}?userId= | Bearer | Delete a saved card |
+| DELETE | /api/payments/cards/{id} | Bearer | Delete a saved card (userId from JWT, ownership verified) |
 
 ---
 
@@ -446,8 +445,16 @@ dotnet test AK.Payments/AK.Payments.Tests/AK.Payments.Tests.csproj
 | Domain — SavedCard entity | 5 |
 | Commands — InitiatePayment | 5 |
 | Commands — VerifyPayment | 4 |
-| Validators | 4 |
-| Queries (via domain) | 1 |
-| **Total** | **28** |
+| Commands — SaveCard | 6 |
+| Commands — DeleteSavedCard | 6 |
+| Queries — GetPaymentById | 3 |
+| Queries — GetPaymentByOrderId | 3 |
+| Queries — GetUserPayments | 4 |
+| Queries — GetUserSavedCards | 4 |
+| Validators — VerifyPayment | 6 |
+| Validators — SaveCard | 4 |
+| **Total** | **65** |
 
 All tests are pure unit tests — no database, no HTTP, no Razorpay sandbox calls.
+
+> **Note:** The `SaveCardRequest` endpoint-layer record has no `userId` field — userId is derived from JWT via `HttpContextExtensions.GetUserId()` to prevent client identity spoofing.

@@ -73,10 +73,13 @@ AK.UserIdentity/
 |----------|----------|--------------|
 | `admin`  | `admin123` | admin, user |
 | `user1`  | `user123`  | user        |
+| `admin2` | `Admin2Pass!` | admin, user |
 
 ### Realm Import
 
 The realm is auto-imported from `keycloak/antkart-realm.json` on Keycloak container startup via `--import-realm` flag. No manual setup is required after `docker-compose up`.
+
+**Service account:** `service-account-antkart-client` is granted `realm-management` roles (`manage-users`, `view-users`, `query-users`, `view-realm`) in the realm JSON — required for the register and admin user list endpoints to call the Keycloak Admin REST API.
 
 ---
 
@@ -347,7 +350,7 @@ In Docker Compose, `localhost:8090` is replaced by `keycloak:8080` (internal Doc
 
 | Exception | HTTP Status |
 |-----------|-------------|
-| `UnauthorizedAccessException` | 401 |
+| `UnauthorizedAccessException` | 403 |
 | `KeyNotFoundException` | 404 |
 | `InvalidOperationException` | 409 |
 | `Exception` (catch-all) | 500 |
