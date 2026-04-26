@@ -38,25 +38,41 @@ public static class PaymentEndpoints
             return Results.Ok(result);
         }).WithName("VerifyPayment");
 
-        group.MapGet("/{id:guid}", async (Guid id, IMediator mediator) =>
-        {
-            var payment = await mediator.Send(new GetPaymentByIdQuery(id));
-            return payment is null ? Results.NotFound() : Results.Ok(payment);
-        }).WithName("GetPaymentById");
-
-        group.MapGet("/order/{orderId:guid}", async (Guid orderId, IMediator mediator) =>
-        {
-            var payment = await mediator.Send(new GetPaymentByOrderIdQuery(orderId));
-            return payment is null ? Results.NotFound() : Results.Ok(payment);
-        }).WithName("GetPaymentByOrderId");
-
-        // GET /api/payments/me — current user's payment history
+        // GET /api/payments/me — must come before /{id:guid} (literal routes before patterns)
         group.MapGet("/me", async (HttpContext http, IMediator mediator) =>
         {
             var userId = http.GetUserId();
             var payments = await mediator.Send(new GetUserPaymentsQuery(userId));
             return Results.Ok(payments);
         }).WithName("GetMyPayments");
+
+        // GET /api/payments/{id} — ownership check: user can only fetch their own payment.
+        // Admin can fetch any payment. Returns 403 if a regular user requests another user's payment.
+        group.MapGet("/{id:guid}", async (Guid id, HttpContext http, IMediator mediator) =>
+        {
+            var payment = await mediator.Send(new GetPaymentByIdQuery(id));
+            if (payment is null) return Results.NotFound();
+
+            var isAdmin = http.User.IsInRole("admin");
+            if (!isAdmin && payment.UserId != http.GetUserId())
+                return Results.Forbid();
+
+            return Results.Ok(payment);
+        }).WithName("GetPaymentById");
+
+        // GET /api/payments/order/{orderId} — ownership check: user can only fetch payment for
+        // their own order. Admin can fetch any. Returns 403 if orderId belongs to another user.
+        group.MapGet("/order/{orderId:guid}", async (Guid orderId, HttpContext http, IMediator mediator) =>
+        {
+            var payment = await mediator.Send(new GetPaymentByOrderIdQuery(orderId));
+            if (payment is null) return Results.NotFound();
+
+            var isAdmin = http.User.IsInRole("admin");
+            if (!isAdmin && payment.UserId != http.GetUserId())
+                return Results.Forbid();
+
+            return Results.Ok(payment);
+        }).WithName("GetPaymentByOrderId");
 
     }
 }

@@ -37,6 +37,18 @@ public static class OrderEndpoints
         })
         .WithName("GetOrders");
 
+        // GET /api/orders/me — current user's orders (paged).
+        // Registered before /{id:guid} so the literal "me" segment is matched first.
+        // The :guid constraint would also prevent "me" from matching /{id:guid}, but
+        // explicit ordering makes intent clear and is safer if the constraint is ever loosened.
+        group.MapGet("/me", async (HttpContext http, IMediator mediator, int page = 1, int pageSize = 20) =>
+        {
+            var userId = http.GetUserId();
+            var result = await mediator.Send(new GetOrdersByUserQuery(userId, page, pageSize));
+            return Results.Ok(result);
+        })
+        .WithName("GetMyOrders");
+
         // GET /api/orders/{id} — owner or admin
         group.MapGet("/{id:guid}", async (Guid id, HttpContext http, IMediator mediator) =>
         {
@@ -50,15 +62,6 @@ public static class OrderEndpoints
             return Results.Ok(order);
         })
         .WithName("GetOrderById");
-
-        // GET /api/orders/me — current user's orders (paged)
-        group.MapGet("/me", async (HttpContext http, IMediator mediator, int page = 1, int pageSize = 20) =>
-        {
-            var userId = http.GetUserId();
-            var result = await mediator.Send(new GetOrdersByUserQuery(userId, page, pageSize));
-            return Results.Ok(result);
-        })
-        .WithName("GetMyOrders");
 
         // POST /api/orders — userId, email, and name are extracted from the JWT, NOT the request body.
         // This prevents IDOR: a malicious client cannot create an order under a different user's ID
