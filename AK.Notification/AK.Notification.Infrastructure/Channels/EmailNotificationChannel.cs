@@ -1,6 +1,7 @@
 using AK.Notification.Application.Channels;
 using AK.Notification.Domain.Enums;
 using MailKit.Net.Smtp;
+using MailKit.Security;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
@@ -38,8 +39,13 @@ internal sealed class EmailNotificationChannel(
 
         // SmtpClient is created per message (not reused) so it's properly disposed
         // and connection state doesn't leak between notifications.
+        // Port 465 = implicit SSL (SslOnConnect); port 587 = STARTTLS; port 1025 (Mailhog) = plain.
+        var socketOptions = settings.EnableSsl
+            ? (settings.Port == 465 ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls)
+            : SecureSocketOptions.None;
+
         using var smtp = new SmtpClient();
-        await smtp.ConnectAsync(settings.Host, settings.Port, settings.EnableSsl, ct);
+        await smtp.ConnectAsync(settings.Host, settings.Port, socketOptions, ct);
 
         // Skip authentication for local Mailhog (no username/password configured).
         if (!string.IsNullOrEmpty(settings.Username))
