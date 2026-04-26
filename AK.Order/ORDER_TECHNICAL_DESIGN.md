@@ -122,7 +122,7 @@ AK.Order/
 ├── AK.Order.Application/
 │   ├── Common/
 │   │   ├── Behaviors/
-│   │   │   └── ValidationBehavior.cs
+│   │   │   (ValidationBehavior moved to AK.BuildingBlocks.Behaviors)
 │   │   ├── DTOs/
 │   │   │   ├── OrderDto.cs
 │   │   │   ├── OrderItemDto.cs
@@ -181,7 +181,7 @@ AK.Order/
 │   ├── Endpoints/
 │   │   └── OrderEndpoints.cs
 │   ├── Middleware/
-│   │   └── ExceptionHandlerMiddleware.cs
+│   │   (ExceptionHandlerMiddleware moved to AK.BuildingBlocks.Middleware)
 │   ├── Program.cs
 │   ├── appsettings.json
 │   ├── appsettings.Development.json

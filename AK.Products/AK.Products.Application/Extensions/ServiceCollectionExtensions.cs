@@ -1,4 +1,4 @@
-﻿using AK.Products.Application.Behaviors;
+﻿using AK.BuildingBlocks.Behaviors;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;

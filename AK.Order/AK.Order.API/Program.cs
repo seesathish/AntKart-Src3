@@ -2,7 +2,7 @@ using AK.BuildingBlocks.Authentication;
 using AK.BuildingBlocks.HealthChecks;
 using AK.BuildingBlocks.Logging;
 using AK.Order.API.Endpoints;
-using AK.Order.API.Middleware;
+using AK.BuildingBlocks.Middleware;
 using AK.Order.Application.Extensions;
 using AK.Order.Infrastructure.Extensions;
 

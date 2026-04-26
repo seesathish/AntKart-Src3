@@ -3,7 +3,7 @@ using AK.BuildingBlocks.HealthChecks;
 using AK.BuildingBlocks.Logging;
 using AK.Products.API.Endpoints;
 using AK.Products.API.Extensions;
-using AK.Products.API.Middleware;
+using AK.BuildingBlocks.Middleware;
 using AK.Products.Application.Extensions;
 using AK.Products.Infrastructure.Extensions;
 

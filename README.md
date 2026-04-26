@@ -304,8 +304,8 @@ dotnet test
 | AK.Discount.Tests | 53 |
 | AK.ShoppingCart.Tests | 88 |
 | AK.Order.Tests | 109 |
-| AK.UserIdentity.Tests | 17 |
+| AK.UserIdentity.Tests | 20 |
 | AK.IntegrationTests | 35 |
 | AK.Payments.Tests | 69 |
 | AK.Notification.Tests | 37 |
-| **Total** | **610** |
+| **Total** | **613** |

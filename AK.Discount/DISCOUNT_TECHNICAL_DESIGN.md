@@ -130,7 +130,7 @@ AntKart/
 │   │
 │   ├── AK.Discount.Application/
 │   │   └── AK.Discount.Application/
-│   │       ├── Behaviors/       ValidationBehavior.cs
+│   │       ├── Behaviors/       (ValidationBehavior moved to AK.BuildingBlocks.Behaviors)
 │   │       ├── Commands/
 │   │       │   ├── CreateDiscount/
 │   │       │   ├── UpdateDiscount/
@@ -390,7 +390,7 @@ For each SKU (e.g. `MEN-SHIR-001`):
 
 ```csharp
 builder.Services.AddGrpc(opts => opts.Interceptors.Add<ExceptionInterceptor>());
-builder.Services.AddDiscountApplication();
+builder.Services.AddApplication();
 builder.Services.AddDiscountInfrastructure(configuration);
 builder.Services.AddDefaultHealthChecks();
 ```

@@ -173,7 +173,7 @@ AK.Products/
 │   ├── AK.Products.Application/
 │   │   └── AK.Products.Application/
 │   │       ├── Behaviors/
-│   │       │   └── ValidationBehavior.cs  # MediatR pipeline validation
+│   │       │   (ValidationBehavior moved to AK.BuildingBlocks.Behaviors)
 │   │       ├── Commands/
 │   │       │   ├── CreateProduct/         # Command + Handler
 │   │       │   ├── UpdateProduct/
@@ -222,7 +222,7 @@ AK.Products/
 │           ├── Extensions/
 │           │   └── WebApplicationExtensions.cs
 │           ├── Middleware/
-│           │   └── ExceptionHandlerMiddleware.cs
+│           │   (ExceptionHandlerMiddleware moved to AK.BuildingBlocks.Middleware)
 │           ├── Program.cs
 │           ├── appsettings.json
 │           └── appsettings.Development.json

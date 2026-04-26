@@ -1,3 +1,5 @@
+using AK.Payments.Domain.Common;
+
 namespace AK.Payments.Domain.Events;
 
-public sealed record PaymentCreatedEvent(Guid PaymentId, Guid OrderId, string UserId);
+public sealed record PaymentCreatedEvent(Guid PaymentId, Guid OrderId, string UserId) : IDomainEvent;

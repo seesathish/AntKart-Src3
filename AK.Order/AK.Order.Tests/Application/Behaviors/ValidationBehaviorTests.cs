@@ -1,4 +1,4 @@
-using AK.Order.Application.Common.Behaviors;
+using AK.BuildingBlocks.Behaviors;
 using AK.Order.Application.Features.CreateOrder;
 using AK.Order.Tests.Common;
 using FluentAssertions;

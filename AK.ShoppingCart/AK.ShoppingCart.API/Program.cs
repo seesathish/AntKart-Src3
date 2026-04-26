@@ -2,7 +2,7 @@ using AK.BuildingBlocks.Authentication;
 using AK.BuildingBlocks.HealthChecks;
 using AK.BuildingBlocks.Logging;
 using AK.ShoppingCart.API.Endpoints;
-using AK.ShoppingCart.API.Middleware;
+using AK.BuildingBlocks.Middleware;
 using AK.ShoppingCart.Application.Extensions;
 using AK.ShoppingCart.Infrastructure.Extensions;
 

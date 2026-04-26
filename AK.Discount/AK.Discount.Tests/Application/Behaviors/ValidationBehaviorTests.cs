@@ -1,4 +1,4 @@
-using AK.Discount.Application.Behaviors;
+using AK.BuildingBlocks.Behaviors;
 using FluentAssertions;
 using FluentValidation;
 using MediatR;

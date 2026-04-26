@@ -3,7 +3,7 @@ using AK.BuildingBlocks.HealthChecks;
 using AK.BuildingBlocks.Logging;
 using AK.Payments.API.Endpoints;
 using AK.Payments.API.Extensions;
-using AK.Payments.API.Middleware;
+using AK.BuildingBlocks.Middleware;
 using AK.Payments.Application.Extensions;
 using AK.Payments.Infrastructure.Extensions;
 

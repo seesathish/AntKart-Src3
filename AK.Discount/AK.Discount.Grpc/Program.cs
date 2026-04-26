@@ -12,7 +12,7 @@ builder.Services.AddGrpc(opts =>
     opts.Interceptors.Add<AuthInterceptor>();
     opts.Interceptors.Add<ExceptionInterceptor>();
 });
-builder.Services.AddDiscountApplication();
+builder.Services.AddApplication();
 builder.Services.AddDiscountInfrastructure(builder.Configuration);
 builder.Services.AddDefaultHealthChecks();
 builder.Services.AddSingleton<ExceptionInterceptor>();

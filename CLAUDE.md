@@ -110,7 +110,7 @@ AK.<Service>/
 - **Roles:** `user` (standard), `admin` (full access)
 - **Endpoints:** POST /login, POST /register, POST /refresh, GET /me, GET /admin/users, POST /admin/users/{id}/roles
 - **Auth:** JWT Bearer validated against Keycloak OIDC discovery endpoint
-- **Tests:** 17 passing (KeycloakService, KeycloakAdminService, ExceptionHandlerMiddleware — all mocked HTTP; includes RegisterAsync publish + conflict tests)
+- **Tests:** 20 passing (KeycloakService, KeycloakAdminService, ExceptionHandlerMiddleware — all mocked HTTP; includes RegisterAsync publish + conflict tests, GetAdminTokenAsync, AssignRole step-2 failure, GetUsers missing optional fields)
 - **Swagger:** `http://localhost:5085/swagger` (Development only)
 - **Design doc:** [AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md](AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md)
 
@@ -131,7 +131,9 @@ AK.<Service>/
 - `Authentication/KeycloakSettings` — typed config record for Keycloak settings
 - `Authentication/HttpContextExtensions` — `GetUserId()` extracts `sub` from JWT; `GetUserEmail()` reads `email`/`ClaimTypes.Email`; `GetUserDisplayName()` reads `name`/`given_name`+`family_name`/`preferred_username`
 - `Messaging/IIntegrationEvent` — base interface for all integration events
-- `Messaging/IntegrationEvents/` — `OrderCreatedIntegrationEvent` (enriched: CustomerEmail, CustomerName, OrderNumber), `OrderConfirmedIntegrationEvent` (enriched), `OrderCancelledIntegrationEvent` (enriched + UserId), `PaymentSucceededIntegrationEvent` (enriched), `PaymentFailedIntegrationEvent` (enriched), `UserRegisteredIntegrationEvent` (new — published by AK.UserIdentity on registration), `StockReservedIntegrationEvent`, `StockReservationFailedIntegrationEvent`, `CartClearedIntegrationEvent`, `PaymentInitiatedIntegrationEvent`
+- `Messaging/IntegrationEvents/` — `OrderCreatedIntegrationEvent` (enriched: CustomerEmail, CustomerName, OrderNumber), `OrderConfirmedIntegrationEvent` (enriched), `OrderCancelledIntegrationEvent` (enriched + UserId), `PaymentSucceededIntegrationEvent` (enriched), `PaymentFailedIntegrationEvent` (enriched), `UserRegisteredIntegrationEvent` (published by AK.UserIdentity on registration), `StockReservedIntegrationEvent`, `StockReservationFailedIntegrationEvent`, `PaymentInitiatedIntegrationEvent` (consumed by `PaymentInitiatedAuditConsumer` in integration tests)
+- `Behaviors/ValidationBehavior<TRequest, TResponse>` — shared MediatR pipeline behavior; all services (except UserIdentity) wire this from BuildingBlocks; replaces 6 deleted per-service copies
+- `Middleware/ExceptionHandlerMiddleware` — shared exception→HTTP mapper used by ShoppingCart, Order, Payments, Notification, Products; UserIdentity keeps its own (maps `UnauthorizedAccessException` → 401, not 403)
 - `Messaging/MassTransitExtensions` — `AddRabbitMqMassTransit()` helper (kebab-case, global retry)
 - `Resilience/ResilienceExtensions` — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, `AddNpgsqlResilience()` (Npgsql uses exponential backoff + jitter to prevent thundering herd on DB reconnect)
 
@@ -148,6 +150,7 @@ AK.<Service>/
 - **Patterns:** CQRS (MediatR 12.4.1), FluentValidation pipeline, Repository, Unit of Work, EF Core Outbox
 - **Operations:** Initiate payment, verify signature, saved cards CRUD, user payment history
 - **Saved cards:** PCI-compliant — Razorpay token IDs only, never raw card numbers
+- **Domain events:** `PaymentCreatedEvent`, `PaymentSucceededEvent`, `PaymentFailedEvent` — all implement `IDomainEvent` (defined in `AK.Payments.Domain.Common`); `Entity` base class holds a typed `List<IDomainEvent>` (not `object`)
 - **Integration events:** Publishes `PaymentInitiatedIntegrationEvent`, `PaymentSucceededIntegrationEvent`, `PaymentFailedIntegrationEvent`; AK.Order consumes succeeded/failed to update order status
 - **Tests:** 69 passing (domain, commands, queries, validators — SaveCard, DeleteSavedCard, GetPaymentById, GetPaymentByOrderId, GetUserPayments, GetUserSavedCards, VerifyPayment, SaveCard validators)
 - **Swagger:** `http://localhost:5086/swagger` (Development only)

@@ -1,21 +1,22 @@
 using FluentValidation;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Text.Json;
 
-namespace AK.Order.API.Middleware;
+namespace AK.BuildingBlocks.Middleware;
 
-// Global exception handler: sits at the top of the request pipeline and converts
-// domain/application exceptions into appropriate HTTP responses.
+// Global exception → HTTP status mapper. Place at the top of every REST service pipeline.
+// Domain and application code just throws; this class owns the HTTP translation.
 //
-// This keeps error handling in one place — handlers and domain entities just throw
-// standard exceptions; they don't need to know about HTTP status codes.
+//   ValidationException (FluentValidation)  → 400 Bad Request
+//   UnauthorizedAccessException             → 403 Forbidden   (IDOR / ownership check failed)
+//   KeyNotFoundException                    → 404 Not Found
+//   InvalidOperationException               → 409 Conflict    (business rule violation)
+//   Exception (catch-all)                   → 500 Internal Server Error
 //
-// Exception → HTTP status mapping:
-//   ValidationException (FluentValidation)  → 400 Bad Request  (invalid input)
-//   UnauthorizedAccessException             → 403 Forbidden    (IDOR / ownership check failed)
-//   KeyNotFoundException                    → 404 Not Found    (entity doesn't exist)
-//   InvalidOperationException               → 409 Conflict     (business rule violation, e.g. bad state transition)
-//   Any other Exception                     → 500 Internal Server Error
+// Note: AK.UserIdentity keeps its own middleware because it maps UnauthorizedAccessException
+// to 401 (not 403) and does not use FluentValidation.
 public sealed class ExceptionHandlerMiddleware(RequestDelegate next, ILogger<ExceptionHandlerMiddleware> logger)
 {
     public async Task InvokeAsync(HttpContext context)
@@ -34,8 +35,6 @@ public sealed class ExceptionHandlerMiddleware(RequestDelegate next, ILogger<Exc
         }
         catch (UnauthorizedAccessException ex)
         {
-            // Thrown by HttpContextExtensions.GetUserId() when the JWT has no 'sub' claim,
-            // or by ownership checks in OrderEndpoints when a user tries to access another user's order.
             logger.LogWarning("Forbidden: {Message}", ex.Message);
             context.Response.StatusCode = (int)HttpStatusCode.Forbidden;
             context.Response.ContentType = "application/json";
@@ -50,8 +49,6 @@ public sealed class ExceptionHandlerMiddleware(RequestDelegate next, ILogger<Exc
         }
         catch (InvalidOperationException ex)
         {
-            // Used for business rule violations such as invalid order status transitions
-            // or cancelling a delivered order.
             logger.LogWarning("Business rule violation: {Message}", ex.Message);
             context.Response.StatusCode = (int)HttpStatusCode.Conflict;
             context.Response.ContentType = "application/json";
@@ -59,8 +56,6 @@ public sealed class ExceptionHandlerMiddleware(RequestDelegate next, ILogger<Exc
         }
         catch (Exception ex)
         {
-            // Catch-all: log the full exception (including stack trace) at Error level,
-            // but only return a generic message to the caller to avoid leaking internals.
             logger.LogError(ex, "Unhandled exception");
             context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
             context.Response.ContentType = "application/json";

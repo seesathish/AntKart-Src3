@@ -3,7 +3,7 @@ using AK.BuildingBlocks.HealthChecks;
 using AK.BuildingBlocks.Logging;
 using AK.Notification.API.Endpoints;
 using AK.Notification.API.Extensions;
-using AK.Notification.API.Middleware;
+using AK.BuildingBlocks.Middleware;
 using AK.Notification.Application.Extensions;
 using AK.Notification.Infrastructure.Extensions;
 

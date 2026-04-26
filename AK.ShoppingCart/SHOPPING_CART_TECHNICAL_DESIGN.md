@@ -110,7 +110,7 @@ graph TB
     DOMAIN["AK.ShoppingCart.Domain\nCart Aggregate · CartItem\nDomain Events"]:::domain
     INFRA["AK.ShoppingCart.Infrastructure\nRedisContext · CartRepository\nUnitOfWork · RedisSettings"]:::infra
     REDIS[("Redis\nAKCart:cart:{userId}\nTTL: 30 days sliding")]:::db
-    MQ["RabbitMQ\nPublishes CartClearedIntegrationEvent"]:::infra
+    MQ["RabbitMQ\nPublishes StockReservedIntegrationEvent"]:::infra
 
     CLIENT -->|HTTP/REST| API
     API -->|IMediator.Send| APP
@@ -173,7 +173,7 @@ AK.ShoppingCart/
 ├── AK.ShoppingCart.Application/
 │   ├── AK.ShoppingCart.Application.csproj
 │   ├── Behaviors/
-│   │   └── ValidationBehavior.cs     # MediatR pipeline validation
+│   │   (ValidationBehavior moved to AK.BuildingBlocks.Behaviors)
 │   ├── Commands/
 │   │   ├── AddToCart/
 │   │   │   ├── AddToCartCommand.cs
@@ -224,7 +224,7 @@ AK.ShoppingCart/
 │   ├── Endpoints/
 │   │   └── CartEndpoints.cs          # All 5 routes
 │   ├── Middleware/
-│   │   └── ExceptionHandlerMiddleware.cs
+│   │   (ExceptionHandlerMiddleware moved to AK.BuildingBlocks.Middleware)
 │   ├── Program.cs
 │   ├── appsettings.json
 │   └── appsettings.Development.json
