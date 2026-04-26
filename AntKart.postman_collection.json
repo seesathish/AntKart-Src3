@@ -2,453 +2,129 @@
   "info": {
     "_postman_id": "antkart-microservices-collection",
     "name": "AntKart Microservices",
-    "description": "Unified Postman collection for all AntKart microservices.\n\n**Services:**\n- AK.Products REST API — http://localhost:5077\n- AK.Discount gRPC — localhost:5001 (use grpcurl or Postman gRPC tab)\n- AK.ShoppingCart REST API — http://localhost:5079\n\n**Collection Variables:**\n- `productsUrl` — Products API base URL (default: http://localhost:5077)\n- `discountGrpc` — Discount gRPC host (default: localhost:5001)\n- `cartUrl` — ShoppingCart API base URL (default: http://localhost:5079)\n- `productId` — MongoDB ObjectId of a product (set after creating)\n- `cartUserId` — User ID for cart operations (default: user-001)\n- `cartProductId` — Product ID for cart item operations",
+    "description": "Unified Postman collection for all AntKart microservices.\n\n**Services (Local Dev / Docker Compose):**\n- AK.Products   REST  — localhost:5077 / localhost:8080\n- AK.Discount   gRPC  — localhost:5001 / localhost:8081\n- AK.ShoppingCart REST — localhost:5079 / localhost:8082\n- AK.Order      REST  — localhost:5080 / localhost:8083\n- AK.UserIdentity REST — localhost:5085 / localhost:8084\n- AK.Payments   REST  — localhost:5086 / localhost:8085\n- AK.Notification REST — localhost:5087 / localhost:8086\n- AK.Gateway    REST  — localhost:8000 / localhost:9090\n- Keycloak Admin      — localhost:8090 (Docker only)\n- Mailhog UI          — localhost:8025 (Docker only)\n- RabbitMQ UI         — localhost:15672 (Docker only, guest/guest)\n\n**Import environments:**\n- `AntKart.Local.postman_environment.json` — direct service ports\n- `AntKart.Docker.postman_environment.json` — Docker Compose mapped ports\n\n**Quick start:**\n1. Import this collection + your chosen environment file\n2. Run `POST Login (User)` — {{accessToken}} is saved automatically\n3. All protected requests use `Bearer {{accessToken}}`\n\n**Security:** userId is never sent in URL paths or request bodies — always derived from the JWT by each service.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    {
-      "key": "productsUrl",
-      "value": "http://localhost:5077",
-      "type": "string"
-    },
-    {
-      "key": "discountGrpc",
-      "value": "localhost:5001",
-      "type": "string"
-    },
-    {
-      "key": "cartUrl",
-      "value": "http://localhost:5079",
-      "type": "string"
-    },
-    {
-      "key": "productId",
-      "value": "replace-with-actual-id",
-      "type": "string"
-    },
-    {
-      "key": "discountId",
-      "value": "1",
-      "type": "string"
-    },
-    {
-      "key": "cartUserId",
-      "value": "user-001",
-      "type": "string"
-    },
-    {
-      "key": "cartProductId",
-      "value": "replace-with-product-id",
-      "type": "string"
-    },
-    {
-      "key": "orderUrl",
-      "value": "http://localhost:5080",
-      "type": "string"
-    },
-    {
-      "key": "orderId",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "identityUrl",
-      "value": "http://localhost:5085",
-      "type": "string"
-    },
-    {
-      "key": "accessToken",
-      "value": "",
-      "type": "string",
-      "description": "JWT access token — set automatically by the Login request test script"
-    },
-    {
-      "key": "keycloakUrl",
-      "value": "http://localhost:8090",
-      "type": "string"
-    },
-    {
-      "key": "paymentsUrl",
-      "value": "http://localhost:5086",
-      "type": "string"
-    },
-    {
-      "key": "paymentId",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "razorpayOrderId",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "razorpayPaymentId",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "razorpaySignature",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "razorpayCustomerId",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "cardId",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "userId",
-      "value": "user1",
-      "type": "string"
-    }
+    { "key": "productsUrl",      "value": "http://localhost:5077", "type": "string" },
+    { "key": "discountGrpc",     "value": "localhost:5001",        "type": "string" },
+    { "key": "cartUrl",          "value": "http://localhost:5079", "type": "string" },
+    { "key": "orderUrl",         "value": "http://localhost:5080", "type": "string" },
+    { "key": "identityUrl",      "value": "http://localhost:5085", "type": "string" },
+    { "key": "paymentsUrl",      "value": "http://localhost:5086", "type": "string" },
+    { "key": "notificationUrl",  "value": "http://localhost:5087", "type": "string" },
+    { "key": "gatewayUrl",       "value": "http://localhost:8000", "type": "string" },
+    { "key": "keycloakUrl",      "value": "http://localhost:8090", "type": "string" },
+    { "key": "accessToken",      "value": "", "type": "string",   "description": "JWT access token — set automatically by the Login request test script" },
+    { "key": "productId",        "value": "replace-with-actual-id", "type": "string" },
+    { "key": "discountId",       "value": "1",  "type": "string" },
+    { "key": "cartProductId",    "value": "replace-with-product-id", "type": "string" },
+    { "key": "orderId",          "value": "", "type": "string" },
+    { "key": "paymentId",        "value": "", "type": "string" },
+    { "key": "razorpayOrderId",  "value": "", "type": "string" },
+    { "key": "razorpayPaymentId","value": "", "type": "string" },
+    { "key": "razorpaySignature","value": "", "type": "string" },
+    { "key": "razorpayCustomerId","value": "", "type": "string" },
+    { "key": "cardId",           "value": "", "type": "string" },
+    { "key": "notificationId",   "value": "", "type": "string" }
   ],
   "item": [
     {
       "name": "AK.Products API",
-      "description": "Product catalogue microservice — REST/HTTP on port 5077.\nSwagger UI: http://localhost:5077/swagger",
+      "description": "Product catalogue microservice — REST/HTTP.\nSwagger UI: {{productsUrl}}/swagger\nCategory design: data-driven strings — CategoryName (Men/Women/Kids/Sports) + SubCategoryName (Shirts/Dresses/etc.).",
       "item": [
         {
           "name": "Products — Read",
           "item": [
             {
-              "name": "GET All Products (Default Paging)",
+              "name": "GET All Products (paged)",
               "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products?page=1&pageSize=20",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products"
-                  ],
-                  "query": [
-                    {
-                      "key": "page",
-                      "value": "1"
-                    },
-                    {
-                      "key": "pageSize",
-                      "value": "20"
-                    }
-                  ]
-                }
+                "method": "GET", "header": [],
+                "url": { "raw": "{{productsUrl}}/api/v1/products?page=1&pageSize=20", "host": ["{{productsUrl}}"], "path": ["api","v1","products"], "query": [{"key":"page","value":"1"},{"key":"pageSize","value":"20"}] }
               }
             },
             {
-              "name": "GET All Products (Page 2)",
+              "name": "GET Products — Filter by Category (Men)",
               "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products?page=2&pageSize=10",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products"
-                  ],
-                  "query": [
-                    {
-                      "key": "page",
-                      "value": "2"
-                    },
-                    {
-                      "key": "pageSize",
-                      "value": "10"
-                    }
-                  ]
-                }
+                "method": "GET", "header": [],
+                "url": { "raw": "{{productsUrl}}/api/v1/products?category=Men&page=1&pageSize=20", "host": ["{{productsUrl}}"], "path": ["api","v1","products"], "query": [{"key":"category","value":"Men"},{"key":"page","value":"1"},{"key":"pageSize","value":"20"}] }
               }
             },
             {
-              "name": "GET Product by ID",
+              "name": "GET Products — Filter by Category (Women)",
               "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products/{{productId}}",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products",
-                    "{{productId}}"
-                  ]
-                }
+                "method": "GET", "header": [],
+                "url": { "raw": "{{productsUrl}}/api/v1/products?category=Women&page=1&pageSize=20", "host": ["{{productsUrl}}"], "path": ["api","v1","products"], "query": [{"key":"category","value":"Women"},{"key":"page","value":"1"},{"key":"pageSize","value":"20"}] }
               }
             },
             {
-              "name": "GET Men's Products",
+              "name": "GET Products — Filter by Category (Kids)",
               "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products/men",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products",
-                    "men"
-                  ]
-                }
+                "method": "GET", "header": [],
+                "url": { "raw": "{{productsUrl}}/api/v1/products?category=Kids&page=1&pageSize=20", "host": ["{{productsUrl}}"], "path": ["api","v1","products"], "query": [{"key":"category","value":"Kids"},{"key":"page","value":"1"},{"key":"pageSize","value":"20"}] }
               }
             },
             {
-              "name": "GET Women's Products",
+              "name": "GET Products — Filter by SubCategory (Shirts)",
               "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products/women",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products",
-                    "women"
-                  ]
-                }
+                "method": "GET", "header": [],
+                "url": { "raw": "{{productsUrl}}/api/v1/products?subCategory=Shirts&page=1&pageSize=20", "host": ["{{productsUrl}}"], "path": ["api","v1","products"], "query": [{"key":"subCategory","value":"Shirts"},{"key":"page","value":"1"},{"key":"pageSize","value":"20"}] }
               }
             },
             {
-              "name": "GET Kids' Products",
+              "name": "GET Products — Filter by SubCategory (Dresses)",
               "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products/kids",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products",
-                    "kids"
-                  ]
-                }
+                "method": "GET", "header": [],
+                "url": { "raw": "{{productsUrl}}/api/v1/products?subCategory=Dresses&page=1&pageSize=20", "host": ["{{productsUrl}}"], "path": ["api","v1","products"], "query": [{"key":"subCategory","value":"Dresses"},{"key":"page","value":"1"},{"key":"pageSize","value":"20"}] }
               }
             },
             {
-              "name": "GET Featured Products",
+              "name": "GET Products — Filter by Category + SubCategory (Men Shirts)",
               "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products/featured",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products",
-                    "featured"
-                  ]
-                }
+                "method": "GET", "header": [],
+                "url": { "raw": "{{productsUrl}}/api/v1/products?category=Men&subCategory=Shirts&page=1&pageSize=20", "host": ["{{productsUrl}}"], "path": ["api","v1","products"], "query": [{"key":"category","value":"Men"},{"key":"subCategory","value":"Shirts"},{"key":"page","value":"1"},{"key":"pageSize","value":"20"}] }
               }
             },
             {
-              "name": "GET Products by Category (Shirts)",
+              "name": "GET Products by SubCategory route (Shirts)",
               "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products/category/Shirts",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products",
-                    "category",
-                    "Shirts"
-                  ]
-                }
-              }
-            },
-            {
-              "name": "GET Products by Category (Dresses)",
-              "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products/category/Dresses",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products",
-                    "category",
-                    "Dresses"
-                  ]
-                }
-              }
-            },
-            {
-              "name": "GET Products — Filter by Gender (Men)",
-              "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products?gender=1&page=1&pageSize=20",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products"
-                  ],
-                  "query": [
-                    {
-                      "key": "gender",
-                      "value": "1"
-                    },
-                    {
-                      "key": "page",
-                      "value": "1"
-                    },
-                    {
-                      "key": "pageSize",
-                      "value": "20"
-                    }
-                  ]
-                }
-              }
-            },
-            {
-              "name": "GET Products — Filter by Gender (Women)",
-              "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products?gender=2&page=1&pageSize=20",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products"
-                  ],
-                  "query": [
-                    {
-                      "key": "gender",
-                      "value": "2"
-                    },
-                    {
-                      "key": "page",
-                      "value": "1"
-                    },
-                    {
-                      "key": "pageSize",
-                      "value": "20"
-                    }
-                  ]
-                }
-              }
-            },
-            {
-              "name": "GET Products — Filter by Gender (Kids)",
-              "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products?gender=3&page=1&pageSize=20",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products"
-                  ],
-                  "query": [
-                    {
-                      "key": "gender",
-                      "value": "3"
-                    },
-                    {
-                      "key": "page",
-                      "value": "1"
-                    },
-                    {
-                      "key": "pageSize",
-                      "value": "20"
-                    }
-                  ]
-                }
+                "method": "GET", "header": [],
+                "url": { "raw": "{{productsUrl}}/api/v1/products/category/Shirts", "host": ["{{productsUrl}}"], "path": ["api","v1","products","category","Shirts"] }
               }
             },
             {
               "name": "GET Products — Search by Keyword",
               "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products?search=shirt&page=1&pageSize=20",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products"
-                  ],
-                  "query": [
-                    {
-                      "key": "search",
-                      "value": "shirt"
-                    },
-                    {
-                      "key": "page",
-                      "value": "1"
-                    },
-                    {
-                      "key": "pageSize",
-                      "value": "20"
-                    }
-                  ]
-                }
+                "method": "GET", "header": [],
+                "url": { "raw": "{{productsUrl}}/api/v1/products?search=shirt&page=1&pageSize=20", "host": ["{{productsUrl}}"], "path": ["api","v1","products"], "query": [{"key":"search","value":"shirt"},{"key":"page","value":"1"},{"key":"pageSize","value":"20"}] }
+              }
+            },
+            {
+              "name": "GET Featured Products",
+              "request": {
+                "method": "GET", "header": [],
+                "url": { "raw": "{{productsUrl}}/api/v1/products/featured", "host": ["{{productsUrl}}"], "path": ["api","v1","products","featured"] }
+              }
+            },
+            {
+              "name": "GET Product Categories",
+              "request": {
+                "method": "GET", "header": [],
+                "url": { "raw": "{{productsUrl}}/api/v1/products/categories", "host": ["{{productsUrl}}"], "path": ["api","v1","products","categories"] }
+              }
+            },
+            {
+              "name": "GET Product by ID",
+              "request": {
+                "method": "GET", "header": [],
+                "url": { "raw": "{{productsUrl}}/api/v1/products/{{productId}}", "host": ["{{productsUrl}}"], "path": ["api","v1","products","{{productId}}"] }
               }
             },
             {
               "name": "GET Products — Health Check",
               "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{productsUrl}}/health",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "health"
-                  ]
-                }
+                "method": "GET", "header": [],
+                "url": { "raw": "{{productsUrl}}/health", "host": ["{{productsUrl}}"], "path": ["health"] }
               }
             }
           ]
@@ -457,253 +133,65 @@
           "name": "Products — Write",
           "item": [
             {
-              "name": "POST Create Product (Men)",
+              "name": "POST Create Product (Men — Shirts)",
               "request": {
                 "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  },
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{accessToken}}",
-                    "type": "text"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"Men's Premium Oxford Shirt\",\n  \"description\": \"A premium quality Oxford shirt for men made with 100% cotton.\",\n  \"sku\": \"MEN-OXF-NEW-001\",\n  \"brand\": \"ArrowMen\",\n  \"gender\": 1,\n  \"categoryName\": \"Shirts\",\n  \"price\": 1299.99,\n  \"currency\": \"USD\",\n  \"stockQuantity\": 50,\n  \"sizes\": [\"S\", \"M\", \"L\", \"XL\"],\n  \"colors\": [\"White\", \"Blue\", \"Grey\"],\n  \"material\": \"Cotton\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                },
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products"
-                  ]
-                }
+                "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+                "body": { "mode": "raw", "raw": "{\n  \"name\": \"Men's Premium Oxford Shirt\",\n  \"description\": \"A premium quality Oxford shirt for men made with 100% cotton.\",\n  \"sku\": \"MEN-OXF-NEW-001\",\n  \"brand\": \"ArrowMen\",\n  \"categoryName\": \"Men\",\n  \"subCategoryName\": \"Shirts\",\n  \"price\": 1299.99,\n  \"currency\": \"INR\",\n  \"stockQuantity\": 50,\n  \"sizes\": [\"S\", \"M\", \"L\", \"XL\"],\n  \"colors\": [\"White\", \"Blue\", \"Grey\"],\n  \"material\": \"Cotton\"\n}", "options": {"raw":{"language":"json"}} },
+                "url": { "raw": "{{productsUrl}}/api/v1/products", "host": ["{{productsUrl}}"], "path": ["api","v1","products"] }
               }
             },
             {
-              "name": "POST Create Product (Women)",
+              "name": "POST Create Product (Women — Dresses)",
               "request": {
                 "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  },
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{accessToken}}",
-                    "type": "text"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"Women's Floral Maxi Dress\",\n  \"description\": \"Elegant floral maxi dress crafted from premium chiffon fabric.\",\n  \"sku\": \"WOM-FLOR-NEW-001\",\n  \"brand\": \"Biba\",\n  \"gender\": 2,\n  \"categoryName\": \"Dresses\",\n  \"price\": 2499.99,\n  \"currency\": \"USD\",\n  \"stockQuantity\": 30,\n  \"sizes\": [\"XS\", \"S\", \"M\", \"L\"],\n  \"colors\": [\"Rose Pink\", \"Ivory\"],\n  \"material\": \"Chiffon\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                },
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products"
-                  ]
-                }
+                "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+                "body": { "mode": "raw", "raw": "{\n  \"name\": \"Women's Floral Maxi Dress\",\n  \"description\": \"Elegant floral maxi dress crafted from premium chiffon fabric.\",\n  \"sku\": \"WOM-FLOR-NEW-001\",\n  \"brand\": \"Biba\",\n  \"categoryName\": \"Women\",\n  \"subCategoryName\": \"Dresses\",\n  \"price\": 2499.99,\n  \"currency\": \"INR\",\n  \"stockQuantity\": 30,\n  \"sizes\": [\"XS\", \"S\", \"M\", \"L\"],\n  \"colors\": [\"Rose Pink\", \"Ivory\"],\n  \"material\": \"Chiffon\"\n}", "options": {"raw":{"language":"json"}} },
+                "url": { "raw": "{{productsUrl}}/api/v1/products", "host": ["{{productsUrl}}"], "path": ["api","v1","products"] }
               }
             },
             {
-              "name": "POST Create Product (Kids)",
+              "name": "POST Create Product (Kids — T-Shirts)",
               "request": {
                 "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  },
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{accessToken}}",
-                    "type": "text"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"Kids Superhero Printed Tee\",\n  \"description\": \"Fun superhero printed t-shirt for kids.\",\n  \"sku\": \"KID-HERO-NEW-001\",\n  \"brand\": \"H&M Kids\",\n  \"gender\": 3,\n  \"categoryName\": \"T-Shirts\",\n  \"price\": 499.99,\n  \"currency\": \"USD\",\n  \"stockQuantity\": 100,\n  \"sizes\": [\"4-5Y\", \"5-6Y\", \"6-7Y\"],\n  \"colors\": [\"Red\", \"Blue\"],\n  \"material\": \"Soft Cotton\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                },
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products"
-                  ]
-                }
+                "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+                "body": { "mode": "raw", "raw": "{\n  \"name\": \"Kids Superhero Printed Tee\",\n  \"description\": \"Fun superhero printed t-shirt for kids.\",\n  \"sku\": \"KID-HERO-NEW-001\",\n  \"brand\": \"H&M Kids\",\n  \"categoryName\": \"Kids\",\n  \"subCategoryName\": \"T-Shirts\",\n  \"price\": 499.99,\n  \"currency\": \"INR\",\n  \"stockQuantity\": 100,\n  \"sizes\": [\"4-5Y\", \"5-6Y\", \"6-7Y\"],\n  \"colors\": [\"Red\", \"Blue\"],\n  \"material\": \"Soft Cotton\"\n}", "options": {"raw":{"language":"json"}} },
+                "url": { "raw": "{{productsUrl}}/api/v1/products", "host": ["{{productsUrl}}"], "path": ["api","v1","products"] }
               }
             },
             {
               "name": "PUT Update Product",
               "request": {
                 "method": "PUT",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  },
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{accessToken}}",
-                    "type": "text"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"Men's Premium Oxford Shirt — Updated\",\n  \"description\": \"Updated description with new fabric.\",\n  \"brand\": \"ArrowMen\",\n  \"price\": 1499.99,\n  \"stockQuantity\": 75,\n  \"material\": \"Egyptian Cotton\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                },
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products/{{productId}}",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products",
-                    "{{productId}}"
-                  ]
-                }
+                "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+                "body": { "mode": "raw", "raw": "{\n  \"name\": \"Men's Premium Oxford Shirt — Updated\",\n  \"description\": \"Updated description with new fabric.\",\n  \"brand\": \"ArrowMen\",\n  \"price\": 1499.99,\n  \"stockQuantity\": 75,\n  \"material\": \"Egyptian Cotton\"\n}", "options": {"raw":{"language":"json"}} },
+                "url": { "raw": "{{productsUrl}}/api/v1/products/{{productId}}", "host": ["{{productsUrl}}"], "path": ["api","v1","products","{{productId}}"] }
               }
             },
             {
               "name": "DELETE Product",
               "request": {
                 "method": "DELETE",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{accessToken}}",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products/{{productId}}",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products",
-                    "{{productId}}"
-                  ]
-                }
+                "header": [{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+                "url": { "raw": "{{productsUrl}}/api/v1/products/{{productId}}", "host": ["{{productsUrl}}"], "path": ["api","v1","products","{{productId}}"] }
               }
             },
             {
               "name": "POST Bulk Insert Products",
               "request": {
                 "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  },
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{accessToken}}",
-                    "type": "text"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "[\n  {\n    \"name\": \"Women's Silk Evening Dress\",\n    \"description\": \"Elegant silk evening dress.\",\n    \"sku\": \"WOM-SILK-BULK-001\",\n    \"brand\": \"Biba\",\n    \"gender\": 2,\n    \"categoryName\": \"Dresses\",\n    \"price\": 3999.99,\n    \"currency\": \"USD\",\n    \"stockQuantity\": 20,\n    \"sizes\": [\"XS\", \"S\", \"M\"],\n    \"colors\": [\"Burgundy\"],\n    \"material\": \"Silk\"\n  },\n  {\n    \"name\": \"Men's Slim Fit Chinos\",\n    \"description\": \"Classic slim fit chinos.\",\n    \"sku\": \"MEN-CHIN-BULK-001\",\n    \"brand\": \"Wrangler\",\n    \"gender\": 1,\n    \"categoryName\": \"Trousers\",\n    \"price\": 1799.99,\n    \"currency\": \"USD\",\n    \"stockQuantity\": 60,\n    \"sizes\": [\"30x32\", \"32x32\", \"34x32\"],\n    \"colors\": [\"Khaki\", \"Navy\"],\n    \"material\": \"Cotton Twill\"\n  }\n]",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                },
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products/bulk-insert",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products",
-                    "bulk-insert"
-                  ]
-                }
+                "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+                "body": { "mode": "raw", "raw": "[\n  {\n    \"name\": \"Women's Silk Evening Dress\",\n    \"description\": \"Elegant silk evening dress.\",\n    \"sku\": \"WOM-SILK-BULK-001\",\n    \"brand\": \"Biba\",\n    \"categoryName\": \"Women\",\n    \"subCategoryName\": \"Dresses\",\n    \"price\": 3999.99,\n    \"currency\": \"INR\",\n    \"stockQuantity\": 20,\n    \"sizes\": [\"XS\", \"S\", \"M\"],\n    \"colors\": [\"Burgundy\"],\n    \"material\": \"Silk\"\n  },\n  {\n    \"name\": \"Men's Slim Fit Chinos\",\n    \"description\": \"Classic slim fit chinos.\",\n    \"sku\": \"MEN-CHIN-BULK-001\",\n    \"brand\": \"Wrangler\",\n    \"categoryName\": \"Men\",\n    \"subCategoryName\": \"Trousers\",\n    \"price\": 1799.99,\n    \"currency\": \"INR\",\n    \"stockQuantity\": 60,\n    \"sizes\": [\"30x32\", \"32x32\", \"34x32\"],\n    \"colors\": [\"Khaki\", \"Navy\"],\n    \"material\": \"Cotton Twill\"\n  }\n]", "options": {"raw":{"language":"json"}} },
+                "url": { "raw": "{{productsUrl}}/api/v1/products/bulk-insert", "host": ["{{productsUrl}}"], "path": ["api","v1","products","bulk-insert"] }
               }
             },
             {
               "name": "PUT Bulk Update Products",
               "request": {
                 "method": "PUT",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  },
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{accessToken}}",
-                    "type": "text"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "[\n  {\n    \"id\": \"{{productId}}\",\n    \"data\": {\n      \"name\": \"Bulk Updated Name\",\n      \"description\": \"Updated via bulk operation\",\n      \"brand\": \"UpdatedBrand\",\n      \"price\": 999.99,\n      \"stockQuantity\": 50,\n      \"material\": \"Premium Cotton\"\n    }\n  }\n]",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                },
-                "url": {
-                  "raw": "{{productsUrl}}/api/v1/products/bulk-update",
-                  "host": [
-                    "{{productsUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "products",
-                    "bulk-update"
-                  ]
-                }
+                "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+                "body": { "mode": "raw", "raw": "[\n  {\n    \"id\": \"{{productId}}\",\n    \"data\": {\n      \"name\": \"Bulk Updated Name\",\n      \"description\": \"Updated via bulk operation\",\n      \"brand\": \"UpdatedBrand\",\n      \"price\": 999.99,\n      \"stockQuantity\": 50,\n      \"material\": \"Premium Cotton\"\n    }\n  }\n]", "options": {"raw":{"language":"json"}} },
+                "url": { "raw": "{{productsUrl}}/api/v1/products/bulk-update", "host": ["{{productsUrl}}"], "path": ["api","v1","products","bulk-update"] }
               }
             }
           ]
@@ -712,495 +200,198 @@
     },
     {
       "name": "AK.Discount gRPC",
-      "description": "Discount coupon microservice — gRPC on port 5001.\n\nPostman supports gRPC via the gRPC request type (New > gRPC Request).\nServer reflection URL: http://localhost:5001\nProto file: AK.Discount/AK.Discount.Grpc/Protos/discount.proto\n\nAlternatively use grpcurl:\n  grpcurl -plaintext localhost:5001 list\n  grpcurl -plaintext localhost:5001 discount.DiscountProtoService/GetAllDiscounts\n\nHealth check: GET http://localhost:5001/health",
+      "description": "Discount coupon microservice — gRPC.\n\nPostman supports gRPC via the gRPC request type (New > gRPC Request).\nServer reflection URL: http://{{discountGrpc}}\nProto file: AK.Discount/AK.Discount.Grpc/Protos/discount.proto\n\nAlternatively use grpcurl:\n  grpcurl -plaintext {{discountGrpc}} list\n  grpcurl -plaintext {{discountGrpc}} discount.DiscountProtoService/GetAllDiscounts\n\nHealth check: GET http://{{discountGrpc}}/health",
       "item": [
         {
           "name": "Health Check",
           "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://{{discountGrpc}}/health",
-              "host": [
-                "{{discountGrpc}}"
-              ],
-              "path": [
-                "health"
-              ]
-            }
+            "method": "GET", "header": [],
+            "url": { "raw": "http://{{discountGrpc}}/health", "host": ["{{discountGrpc}}"], "path": ["health"] }
           }
         },
         {
           "name": "grpcurl — Get All Discounts (copy & run in terminal)",
           "request": {
-            "method": "GET",
-            "header": [],
+            "method": "GET", "header": [],
             "description": "Run this in your terminal:\n\ngrpcurl -plaintext -d '{\"page\":1,\"page_size\":10}' {{discountGrpc}} discount.DiscountProtoService/GetAllDiscounts",
-            "url": {
-              "raw": "http://{{discountGrpc}}/",
-              "host": [
-                "http://{{discountGrpc}}"
-              ],
-              "path": [
-                ""
-              ]
-            }
+            "url": { "raw": "http://{{discountGrpc}}/", "host": ["http://{{discountGrpc}}"], "path": [""] }
           }
         },
         {
           "name": "grpcurl — Get Discount by Product ID (copy & run in terminal)",
           "request": {
-            "method": "GET",
-            "header": [],
+            "method": "GET", "header": [],
             "description": "Run this in your terminal:\n\ngrpcurl -plaintext -d '{\"product_id\":\"MEN-SHIR-001\"}' {{discountGrpc}} discount.DiscountProtoService/GetDiscount",
-            "url": {
-              "raw": "http://{{discountGrpc}}/",
-              "host": [
-                "http://{{discountGrpc}}"
-              ],
-              "path": [
-                ""
-              ]
-            }
+            "url": { "raw": "http://{{discountGrpc}}/", "host": ["http://{{discountGrpc}}"], "path": [""] }
           }
         },
         {
           "name": "grpcurl — Create Discount (copy & run in terminal)",
           "request": {
-            "method": "GET",
-            "header": [],
+            "method": "GET", "header": [],
             "description": "Run this in your terminal:\n\ngrpcurl -plaintext -d '{\n  \"coupon\": {\n    \"product_id\": \"MEN-SHIR-099\",\n    \"product_name\": \"Test Shirt\",\n    \"coupon_code\": \"SUMMER25\",\n    \"description\": \"Summer sale 25% off\",\n    \"amount\": 25.0,\n    \"discount_type\": \"Percentage\",\n    \"valid_from\": \"2026-04-01T00:00:00Z\",\n    \"valid_to\": \"2026-08-31T23:59:59Z\",\n    \"minimum_quantity\": 1\n  }\n}' {{discountGrpc}} discount.DiscountProtoService/CreateDiscount",
-            "url": {
-              "raw": "http://{{discountGrpc}}/",
-              "host": [
-                "http://{{discountGrpc}}"
-              ],
-              "path": [
-                ""
-              ]
-            }
+            "url": { "raw": "http://{{discountGrpc}}/", "host": ["http://{{discountGrpc}}"], "path": [""] }
           }
         },
         {
           "name": "grpcurl — Update Discount (copy & run in terminal)",
           "request": {
-            "method": "GET",
-            "header": [],
+            "method": "GET", "header": [],
             "description": "Run this in your terminal (replace id with actual discount ID):\n\ngrpcurl -plaintext -d '{\n  \"id\": 1,\n  \"coupon\": {\n    \"product_name\": \"Updated Shirt\",\n    \"description\": \"Updated discount\",\n    \"amount\": 30.0,\n    \"discount_type\": \"Percentage\",\n    \"valid_from\": \"2026-04-01T00:00:00Z\",\n    \"valid_to\": \"2026-12-31T23:59:59Z\",\n    \"is_active\": true,\n    \"minimum_quantity\": 1\n  }\n}' {{discountGrpc}} discount.DiscountProtoService/UpdateDiscount",
-            "url": {
-              "raw": "http://{{discountGrpc}}/",
-              "host": [
-                "http://{{discountGrpc}}"
-              ],
-              "path": [
-                ""
-              ]
-            }
+            "url": { "raw": "http://{{discountGrpc}}/", "host": ["http://{{discountGrpc}}"], "path": [""] }
           }
         },
         {
           "name": "grpcurl — Delete Discount (copy & run in terminal)",
           "request": {
-            "method": "GET",
-            "header": [],
+            "method": "GET", "header": [],
             "description": "Run this in your terminal (replace id with actual discount ID):\n\ngrpcurl -plaintext -d '{\"id\": 1}' {{discountGrpc}} discount.DiscountProtoService/DeleteDiscount",
-            "url": {
-              "raw": "http://{{discountGrpc}}/",
-              "host": [
-                "http://{{discountGrpc}}"
-              ],
-              "path": [
-                ""
-              ]
-            }
+            "url": { "raw": "http://{{discountGrpc}}/", "host": ["http://{{discountGrpc}}"], "path": [""] }
           }
         }
       ]
     },
     {
       "name": "AK.ShoppingCart API",
-      "description": "Shopping cart microservice — REST/HTTP on port 5079.\nSwagger UI: http://localhost:5079/swagger\nRedis-backed cart with 30-day TTL.",
+      "description": "Shopping cart microservice — REST/HTTP.\nSwagger UI: {{cartUrl}}/swagger\nRedis-backed cart with 30-day sliding TTL.\n\nNo userId in paths or bodies — user identity is derived from the JWT (IDOR-safe).",
       "item": [
         {
           "name": "GET Cart",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{cartUrl}}/api/v1/cart/{{cartUserId}}",
-              "host": [
-                "{{cartUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "cart",
-                "{{cartUserId}}"
-              ]
-            }
+            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+            "url": { "raw": "{{cartUrl}}/api/v1/cart", "host": ["{{cartUrl}}"], "path": ["api","v1","cart"] }
           }
         },
         {
           "name": "POST Add Item to Cart",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"productId\": \"{{cartProductId}}\",\n  \"productName\": \"Men's Classic Shirt\",\n  \"sku\": \"MEN-SHRT-001\",\n  \"price\": 999.99,\n  \"quantity\": 2,\n  \"imageUrl\": null\n}"
-            },
-            "url": {
-              "raw": "{{cartUrl}}/api/v1/cart/{{cartUserId}}/items",
-              "host": [
-                "{{cartUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "cart",
-                "{{cartUserId}}",
-                "items"
-              ]
-            }
+            "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+            "body": { "mode": "raw", "raw": "{\n  \"productId\": \"{{cartProductId}}\",\n  \"productName\": \"Men's Classic Shirt\",\n  \"sku\": \"MEN-SHIR-001\",\n  \"price\": 999.99,\n  \"quantity\": 2,\n  \"imageUrl\": null\n}" },
+            "url": { "raw": "{{cartUrl}}/api/v1/cart/items", "host": ["{{cartUrl}}"], "path": ["api","v1","cart","items"] }
           }
         },
         {
           "name": "PUT Update Cart Item Quantity",
           "request": {
             "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"quantity\": 5\n}"
-            },
-            "url": {
-              "raw": "{{cartUrl}}/api/v1/cart/{{cartUserId}}/items/{{cartProductId}}",
-              "host": [
-                "{{cartUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "cart",
-                "{{cartUserId}}",
-                "items",
-                "{{cartProductId}}"
-              ]
-            }
+            "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+            "body": { "mode": "raw", "raw": "{\n  \"quantity\": 5\n}" },
+            "url": { "raw": "{{cartUrl}}/api/v1/cart/items/{{cartProductId}}", "host": ["{{cartUrl}}"], "path": ["api","v1","cart","items","{{cartProductId}}"] }
           }
         },
         {
           "name": "DELETE Remove Item from Cart",
           "request": {
             "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{cartUrl}}/api/v1/cart/{{cartUserId}}/items/{{cartProductId}}",
-              "host": [
-                "{{cartUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "cart",
-                "{{cartUserId}}",
-                "items",
-                "{{cartProductId}}"
-              ]
-            }
+            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+            "url": { "raw": "{{cartUrl}}/api/v1/cart/items/{{cartProductId}}", "host": ["{{cartUrl}}"], "path": ["api","v1","cart","items","{{cartProductId}}"] }
           }
         },
         {
           "name": "DELETE Clear Cart",
           "request": {
             "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{cartUrl}}/api/v1/cart/{{cartUserId}}",
-              "host": [
-                "{{cartUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "cart",
-                "{{cartUserId}}"
-              ]
-            }
+            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+            "url": { "raw": "{{cartUrl}}/api/v1/cart", "host": ["{{cartUrl}}"], "path": ["api","v1","cart"] }
           }
         },
         {
           "name": "GET ShoppingCart Health Check",
           "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{cartUrl}}/health",
-              "host": [
-                "{{cartUrl}}"
-              ],
-              "path": [
-                "health"
-              ]
-            }
+            "method": "GET", "header": [],
+            "url": { "raw": "{{cartUrl}}/health", "host": ["{{cartUrl}}"], "path": ["health"] }
           }
         }
       ]
     },
     {
       "name": "AK.Order API",
+      "description": "Order management microservice — REST/HTTP.\nSwagger UI: {{orderUrl}}/swagger\n\nIDOR-safe: userId is derived from JWT. Use GET /me to list your own orders.\nAdmin-only: PUT /{id}/status requires 'admin' role.",
       "item": [
         {
-          "name": "Get All Orders",
+          "name": "GET All Orders (admin / paged)",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{orderUrl}}/api/orders?page=1&pageSize=20",
-              "host": [
-                "{{orderUrl}}"
-              ],
-              "path": [
-                "api",
-                "orders"
-              ],
-              "query": [
-                {
-                  "key": "page",
-                  "value": "1"
-                },
-                {
-                  "key": "pageSize",
-                  "value": "20"
-                }
-              ]
-            }
+            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+            "url": { "raw": "{{orderUrl}}/api/orders?page=1&pageSize=20", "host": ["{{orderUrl}}"], "path": ["api","orders"], "query": [{"key":"page","value":"1"},{"key":"pageSize","value":"20"}] }
           }
         },
         {
-          "name": "Get Orders by User",
+          "name": "GET My Orders",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{orderUrl}}/api/orders/user/user-123?page=1&pageSize=20",
-              "host": [
-                "{{orderUrl}}"
-              ],
-              "path": [
-                "api",
-                "orders",
-                "user",
-                "user-123"
-              ],
-              "query": [
-                {
-                  "key": "page",
-                  "value": "1"
-                },
-                {
-                  "key": "pageSize",
-                  "value": "20"
-                }
-              ]
-            }
+            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+            "url": { "raw": "{{orderUrl}}/api/orders/me?page=1&pageSize=20", "host": ["{{orderUrl}}"], "path": ["api","orders","me"], "query": [{"key":"page","value":"1"},{"key":"pageSize","value":"20"}] }
           }
         },
         {
-          "name": "Get Order by ID",
+          "name": "GET Order by ID",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{orderUrl}}/api/orders/{{orderId}}",
-              "host": [
-                "{{orderUrl}}"
-              ],
-              "path": [
-                "api",
-                "orders",
-                "{{orderId}}"
-              ]
-            }
+            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+            "url": { "raw": "{{orderUrl}}/api/orders/{{orderId}}", "host": ["{{orderUrl}}"], "path": ["api","orders","{{orderId}}"] }
           }
         },
         {
-          "name": "Create Order",
+          "name": "POST Create Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('orderId', json.id);",
+                  "    console.log('orderId saved: ' + json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
+            "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"userId\": \"user-123\",\n  \"order\": {\n    \"items\": [\n      {\n        \"productId\": \"prod-001\",\n        \"productName\": \"Test Product\",\n        \"sku\": \"MEN-SHIR-001\",\n        \"price\": 29.99,\n        \"quantity\": 2,\n        \"imageUrl\": null\n      }\n    ],\n    \"shippingAddress\": {\n      \"fullName\": \"John Doe\",\n      \"addressLine1\": \"123 Main St\",\n      \"addressLine2\": null,\n      \"city\": \"Springfield\",\n      \"state\": \"IL\",\n      \"postalCode\": \"62701\",\n      \"country\": \"US\",\n      \"phone\": \"+1-555-0100\"\n    },\n    \"notes\": \"Please handle with care\"\n  }\n}"
+              "raw": "{\n  \"shippingAddress\": {\n    \"fullName\": \"John Doe\",\n    \"addressLine1\": \"123 Main St\",\n    \"addressLine2\": null,\n    \"city\": \"Chennai\",\n    \"state\": \"Tamil Nadu\",\n    \"postalCode\": \"600001\",\n    \"country\": \"India\",\n    \"phone\": \"+919876543210\"\n  },\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"productName\": \"Men's Classic Shirt\",\n      \"sku\": \"MEN-SHIR-001\",\n      \"price\": 999.99,\n      \"quantity\": 2,\n      \"imageUrl\": null\n    }\n  ],\n  \"notes\": \"Please handle with care\"\n}",
+              "options": {"raw":{"language":"json"}}
             },
-            "url": {
-              "raw": "{{orderUrl}}/api/orders",
-              "host": [
-                "{{orderUrl}}"
-              ],
-              "path": [
-                "api",
-                "orders"
-              ]
-            }
+            "url": { "raw": "{{orderUrl}}/api/orders", "host": ["{{orderUrl}}"], "path": ["api","orders"] }
           }
         },
         {
-          "name": "Update Order Status",
+          "name": "PUT Update Order Status (admin only)",
+          "description": "Requires admin role. newStatus values: 0=Pending, 1=Confirmed, 2=Processing, 3=Shipped, 4=Delivered, 5=Cancelled, 6=PaymentFailed",
           "request": {
             "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"newStatus\": 1\n}"
-            },
-            "url": {
-              "raw": "{{orderUrl}}/api/orders/{{orderId}}/status",
-              "host": [
-                "{{orderUrl}}"
-              ],
-              "path": [
-                "api",
-                "orders",
-                "{{orderId}}",
-                "status"
-              ]
-            }
+            "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+            "body": { "mode": "raw", "raw": "{\n  \"newStatus\": 1\n}" },
+            "url": { "raw": "{{orderUrl}}/api/orders/{{orderId}}/status", "host": ["{{orderUrl}}"], "path": ["api","orders","{{orderId}}","status"] }
           }
         },
         {
-          "name": "Cancel Order",
+          "name": "DELETE Cancel Order",
           "request": {
             "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{orderUrl}}/api/orders/{{orderId}}",
-              "host": [
-                "{{orderUrl}}"
-              ],
-              "path": [
-                "api",
-                "orders",
-                "{{orderId}}"
-              ]
-            }
+            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
+            "url": { "raw": "{{orderUrl}}/api/orders/{{orderId}}", "host": ["{{orderUrl}}"], "path": ["api","orders","{{orderId}}"] }
           }
         },
         {
-          "name": "Health Check",
+          "name": "GET Order Health Check",
           "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{orderUrl}}/health",
-              "host": [
-                "{{orderUrl}}"
-              ],
-              "path": [
-                "health"
-              ]
-            }
+            "method": "GET", "header": [],
+            "url": { "raw": "{{orderUrl}}/health", "host": ["{{orderUrl}}"], "path": ["health"] }
           }
         }
       ]
     },
     {
       "name": "AK.UserIdentity API",
-      "description": "User identity microservice — Keycloak-backed auth proxy on port 5085.\nSwagger UI: http://localhost:5085/swagger\n\nPre-seeded users:\n- admin / admin123 (roles: admin, user)\n- user1 / user123 (roles: user)\n\nThe Login request auto-saves the access token to {{accessToken}} collection variable.",
+      "description": "User identity microservice — Keycloak-backed auth proxy.\nSwagger UI: {{identityUrl}}/swagger\n\nPre-seeded users:\n- admin / admin123 (roles: admin, user)\n- user1 / user123 (roles: user)\n\nThe Login requests auto-save the access token to {{accessToken}}.",
       "item": [
         {
           "name": "Auth",
@@ -1224,27 +415,9 @@
               ],
               "request": {
                 "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"username\": \"user1\",\n  \"password\": \"user123\"\n}"
-                },
-                "url": {
-                  "raw": "{{identityUrl}}/api/auth/login",
-                  "host": [
-                    "{{identityUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "auth",
-                    "login"
-                  ]
-                }
+                "header": [{"key":"Content-Type","value":"application/json"}],
+                "body": { "mode": "raw", "raw": "{\n  \"username\": \"user1\",\n  \"password\": \"user123\"\n}" },
+                "url": { "raw": "{{identityUrl}}/api/auth/login", "host": ["{{identityUrl}}"], "path": ["api","auth","login"] }
               }
             },
             {
@@ -1266,104 +439,35 @@
               ],
               "request": {
                 "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
-                },
-                "url": {
-                  "raw": "{{identityUrl}}/api/auth/login",
-                  "host": [
-                    "{{identityUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "auth",
-                    "login"
-                  ]
-                }
+                "header": [{"key":"Content-Type","value":"application/json"}],
+                "body": { "mode": "raw", "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}" },
+                "url": { "raw": "{{identityUrl}}/api/auth/login", "host": ["{{identityUrl}}"], "path": ["api","auth","login"] }
               }
             },
             {
               "name": "POST Register",
               "request": {
                 "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"username\": \"newuser\",\n  \"email\": \"newuser@example.com\",\n  \"password\": \"SecurePass1!\",\n  \"firstName\": \"New\",\n  \"lastName\": \"User\"\n}"
-                },
-                "url": {
-                  "raw": "{{identityUrl}}/api/auth/register",
-                  "host": [
-                    "{{identityUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "auth",
-                    "register"
-                  ]
-                }
+                "header": [{"key":"Content-Type","value":"application/json"}],
+                "body": { "mode": "raw", "raw": "{\n  \"username\": \"newuser\",\n  \"email\": \"newuser@example.com\",\n  \"password\": \"SecurePass1!\",\n  \"firstName\": \"New\",\n  \"lastName\": \"User\"\n}" },
+                "url": { "raw": "{{identityUrl}}/api/auth/register", "host": ["{{identityUrl}}"], "path": ["api","auth","register"] }
               }
             },
             {
               "name": "POST Refresh Token",
               "request": {
                 "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"refreshToken\": \"paste-refresh-token-here\"\n}"
-                },
-                "url": {
-                  "raw": "{{identityUrl}}/api/auth/refresh",
-                  "host": [
-                    "{{identityUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "auth",
-                    "refresh"
-                  ]
-                }
+                "header": [{"key":"Content-Type","value":"application/json"}],
+                "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"paste-refresh-token-here\"\n}" },
+                "url": { "raw": "{{identityUrl}}/api/auth/refresh", "host": ["{{identityUrl}}"], "path": ["api","auth","refresh"] }
               }
             },
             {
               "name": "GET Me (current user)",
               "request": {
                 "method": "GET",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{accessToken}}"
-                  }
-                ],
-                "url": {
-                  "raw": "{{identityUrl}}/api/auth/me",
-                  "host": [
-                    "{{identityUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "auth",
-                    "me"
-                  ]
-                }
+                "header": [{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+                "url": { "raw": "{{identityUrl}}/api/auth/me", "host": ["{{identityUrl}}"], "path": ["api","auth","me"] }
               }
             }
           ]
@@ -1372,525 +476,241 @@
           "name": "Admin",
           "item": [
             {
-              "name": "GET All Users (Admin only)",
+              "name": "GET All Users (admin only)",
               "request": {
                 "method": "GET",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{accessToken}}"
-                  }
-                ],
-                "url": {
-                  "raw": "{{identityUrl}}/api/admin/users",
-                  "host": [
-                    "{{identityUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "admin",
-                    "users"
-                  ]
-                }
+                "header": [{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+                "url": { "raw": "{{identityUrl}}/api/admin/users", "host": ["{{identityUrl}}"], "path": ["api","admin","users"] }
               }
             },
             {
-              "name": "POST Assign Role (Admin only)",
+              "name": "POST Assign Role (admin only)",
               "request": {
                 "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  },
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{accessToken}}"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"role\": \"admin\"\n}"
-                },
-                "url": {
-                  "raw": "{{identityUrl}}/api/admin/users/replace-with-user-id/roles",
-                  "host": [
-                    "{{identityUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "admin",
-                    "users",
-                    "replace-with-user-id",
-                    "roles"
-                  ]
-                }
+                "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+                "body": { "mode": "raw", "raw": "{\n  \"role\": \"admin\"\n}" },
+                "url": { "raw": "{{identityUrl}}/api/admin/users/replace-with-user-id/roles", "host": ["{{identityUrl}}"], "path": ["api","admin","users","replace-with-user-id","roles"] }
               }
             }
           ]
         },
         {
-          "name": "Health Check",
+          "name": "GET Identity Health Check",
           "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{identityUrl}}/health",
-              "host": [
-                "{{identityUrl}}"
-              ],
-              "path": [
-                "health"
-              ]
-            }
+            "method": "GET", "header": [],
+            "url": { "raw": "{{identityUrl}}/health", "host": ["{{identityUrl}}"], "path": ["health"] }
           }
         }
       ]
     },
     {
       "name": "AK.Payments API",
+      "description": "Payment processing microservice — REST/HTTP.\nSwagger UI: {{paymentsUrl}}/swagger\n\nIDOR-safe: userId is always derived from the JWT. No userId in paths or bodies.\nRazorpay two-step flow: POST /initiate → POST /verify\nTest cards: 4111 1111 1111 1111 (Visa), 5267 3169 4984 2643 (Mastercard). OTP: 1234 1234\nPaymentMethod: 1=Card, 2=SavedCard, 3=UPI, 4=NetBanking",
       "item": [
         {
-          "name": "Initiate Payment",
+          "name": "POST Initiate Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('paymentId', json.id);",
+                  "    pm.collectionVariables.set('razorpayOrderId', json.razorpayOrderId);",
+                  "    console.log('paymentId saved: ' + json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
+            "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}"}],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"userId\": \"{{userId}}\",\n  \"amount\": 999,\n  \"method\": 1\n}"
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"orderNumber\": \"ORD-20260426-ABCD1234\",\n  \"amount\": 199998,\n  \"method\": 1\n}",
+              "options": {"raw":{"language":"json"}}
             },
-            "url": {
-              "raw": "{{paymentsUrl}}/api/payments/initiate",
-              "host": [
-                "{{paymentsUrl}}"
-              ],
-              "path": [
-                "api",
-                "payments",
-                "initiate"
-              ]
-            }
+            "url": { "raw": "{{paymentsUrl}}/api/payments/initiate", "host": ["{{paymentsUrl}}"], "path": ["api","payments","initiate"] }
           }
         },
         {
-          "name": "Verify Payment",
+          "name": "POST Verify Payment",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
+            "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}"}],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"paymentId\": \"{{paymentId}}\",\n  \"razorpayOrderId\": \"{{razorpayOrderId}}\",\n  \"razorpayPaymentId\": \"{{razorpayPaymentId}}\",\n  \"razorpaySignature\": \"{{razorpaySignature}}\"\n}"
+              "raw": "{\n  \"paymentId\": \"{{paymentId}}\",\n  \"razorpayOrderId\": \"{{razorpayOrderId}}\",\n  \"razorpayPaymentId\": \"{{razorpayPaymentId}}\",\n  \"razorpaySignature\": \"{{razorpaySignature}}\"\n}",
+              "options": {"raw":{"language":"json"}}
             },
-            "url": {
-              "raw": "{{paymentsUrl}}/api/payments/verify",
-              "host": [
-                "{{paymentsUrl}}"
-              ],
-              "path": [
-                "api",
-                "payments",
-                "verify"
-              ]
-            }
+            "url": { "raw": "{{paymentsUrl}}/api/payments/verify", "host": ["{{paymentsUrl}}"], "path": ["api","payments","verify"] }
           }
         },
         {
-          "name": "Get Payment by ID",
+          "name": "GET My Payments",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{paymentsUrl}}/api/payments/{{paymentId}}",
-              "host": [
-                "{{paymentsUrl}}"
-              ],
-              "path": [
-                "api",
-                "payments",
-                "{{paymentId}}"
-              ]
-            }
+            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+            "url": { "raw": "{{paymentsUrl}}/api/payments/me", "host": ["{{paymentsUrl}}"], "path": ["api","payments","me"] }
           }
         },
         {
-          "name": "Get Payment by Order",
+          "name": "GET Payment by ID",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{paymentsUrl}}/api/payments/order/{{orderId}}",
-              "host": [
-                "{{paymentsUrl}}"
-              ],
-              "path": [
-                "api",
-                "payments",
-                "order",
-                "{{orderId}}"
-              ]
-            }
+            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+            "url": { "raw": "{{paymentsUrl}}/api/payments/{{paymentId}}", "host": ["{{paymentsUrl}}"], "path": ["api","payments","{{paymentId}}"] }
           }
         },
         {
-          "name": "Get User Payments",
+          "name": "GET Payment by Order",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{paymentsUrl}}/api/payments/user/{{userId}}",
-              "host": [
-                "{{paymentsUrl}}"
-              ],
-              "path": [
-                "api",
-                "payments",
-                "user",
-                "{{userId}}"
-              ]
-            }
+            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+            "url": { "raw": "{{paymentsUrl}}/api/payments/order/{{orderId}}", "host": ["{{paymentsUrl}}"], "path": ["api","payments","order","{{orderId}}"] }
           }
         },
         {
-          "name": "Save Card",
+          "name": "POST Save Card",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
+            "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}"}],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"razorpayCustomerId\": \"{{razorpayCustomerId}}\",\n  \"razorpayPaymentId\": \"{{razorpayPaymentId}}\",\n  \"customerName\": \"Test User\",\n  \"customerEmail\": \"user1@example.com\",\n  \"customerContact\": \"+911234567890\"\n}"
+              "raw": "{\n  \"razorpayCustomerId\": \"{{razorpayCustomerId}}\",\n  \"razorpayPaymentId\": \"{{razorpayPaymentId}}\",\n  \"customerName\": \"Test User\",\n  \"customerEmail\": \"user1@example.com\",\n  \"customerContact\": \"+919876543210\"\n}",
+              "options": {"raw":{"language":"json"}}
             },
-            "url": {
-              "raw": "{{paymentsUrl}}/api/payments/cards/save",
-              "host": [
-                "{{paymentsUrl}}"
-              ],
-              "path": [
-                "api",
-                "payments",
-                "cards",
-                "save"
-              ]
-            }
+            "url": { "raw": "{{paymentsUrl}}/api/payments/cards/save", "host": ["{{paymentsUrl}}"], "path": ["api","payments","cards","save"] }
           }
         },
         {
-          "name": "Get Saved Cards",
+          "name": "GET Saved Cards",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{paymentsUrl}}/api/payments/cards/user/{{userId}}",
-              "host": [
-                "{{paymentsUrl}}"
-              ],
-              "path": [
-                "api",
-                "payments",
-                "cards",
-                "user",
-                "{{userId}}"
-              ]
-            }
+            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+            "url": { "raw": "{{paymentsUrl}}/api/payments/cards", "host": ["{{paymentsUrl}}"], "path": ["api","payments","cards"] }
           }
         },
         {
-          "name": "Delete Saved Card",
+          "name": "DELETE Saved Card",
           "request": {
             "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{paymentsUrl}}/api/payments/cards/{{cardId}}?userId={{userId}}",
-              "host": [
-                "{{paymentsUrl}}"
-              ],
-              "path": [
-                "api",
-                "payments",
-                "cards",
-                "{{cardId}}"
-              ],
-              "query": [
-                {
-                  "key": "userId",
-                  "value": "{{userId}}"
-                }
-              ]
-            }
+            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+            "url": { "raw": "{{paymentsUrl}}/api/payments/cards/{{cardId}}", "host": ["{{paymentsUrl}}"], "path": ["api","payments","cards","{{cardId}}"] }
           }
         },
         {
           "name": "[401] Initiate Payment — No Auth",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [{"key":"Content-Type","value":"application/json"}],
             "description": "Expect 401 Unauthorized — no Bearer token provided",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"userId\": \"{{userId}}\",\n  \"amount\": 99.99,\n  \"currency\": \"INR\",\n  \"method\": 1\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{paymentsUrl}}/api/payments/initiate",
-              "host": [
-                "{{paymentsUrl}}"
-              ],
-              "path": [
-                "api",
-                "payments",
-                "initiate"
-              ]
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"orderNumber\": \"ORD-20260426-ABCD1234\",\n  \"amount\": 199998,\n  \"method\": 1\n}", "options": {"raw":{"language":"json"}} },
+            "url": { "raw": "{{paymentsUrl}}/api/payments/initiate", "host": ["{{paymentsUrl}}"], "path": ["api","payments","initiate"] }
           }
         },
         {
           "name": "[400] Initiate Payment — Missing Amount",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
+            "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}"}],
             "description": "Expect 400 Bad Request — amount is required",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"userId\": \"{{userId}}\",\n  \"currency\": \"INR\",\n  \"method\": 1\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{paymentsUrl}}/api/payments/initiate",
-              "host": [
-                "{{paymentsUrl}}"
-              ],
-              "path": [
-                "api",
-                "payments",
-                "initiate"
-              ]
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"orderNumber\": \"ORD-20260426-ABCD1234\",\n  \"method\": 1\n}", "options": {"raw":{"language":"json"}} },
+            "url": { "raw": "{{paymentsUrl}}/api/payments/initiate", "host": ["{{paymentsUrl}}"], "path": ["api","payments","initiate"] }
           }
         },
         {
           "name": "[400] Initiate Payment — Zero Amount",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
+            "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}"}],
             "description": "Expect 400 Bad Request — amount must be > 0",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"userId\": \"{{userId}}\",\n  \"amount\": 0,\n  \"currency\": \"INR\",\n  \"method\": 1\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{paymentsUrl}}/api/payments/initiate",
-              "host": [
-                "{{paymentsUrl}}"
-              ],
-              "path": [
-                "api",
-                "payments",
-                "initiate"
-              ]
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"orderNumber\": \"ORD-20260426-ABCD1234\",\n  \"amount\": 0,\n  \"method\": 1\n}", "options": {"raw":{"language":"json"}} },
+            "url": { "raw": "{{paymentsUrl}}/api/payments/initiate", "host": ["{{paymentsUrl}}"], "path": ["api","payments","initiate"] }
           }
         },
         {
           "name": "[400] Verify Payment — Invalid Signature",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
+            "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}"}],
             "description": "Expect 400 — HMAC-SHA256 signature mismatch",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"razorpayOrderId\": \"{{razorpayOrderId}}\",\n  \"razorpayPaymentId\": \"pay_invalid_test\",\n  \"razorpaySignature\": \"invalidsignature123abc\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{paymentsUrl}}/api/payments/verify",
-              "host": [
-                "{{paymentsUrl}}"
-              ],
-              "path": [
-                "api",
-                "payments",
-                "verify"
-              ]
-            }
+            "body": { "mode": "raw", "raw": "{\n  \"paymentId\": \"{{paymentId}}\",\n  \"razorpayOrderId\": \"{{razorpayOrderId}}\",\n  \"razorpayPaymentId\": \"pay_invalid_test\",\n  \"razorpaySignature\": \"invalidsignature123abc\"\n}", "options": {"raw":{"language":"json"}} },
+            "url": { "raw": "{{paymentsUrl}}/api/payments/verify", "host": ["{{paymentsUrl}}"], "path": ["api","payments","verify"] }
           }
         },
         {
-          "name": "[401] Get User Payments — No Auth",
+          "name": "[401] Get My Payments — No Auth",
           "request": {
-            "method": "GET",
-            "header": [],
+            "method": "GET", "header": [],
             "description": "Expect 401 Unauthorized",
-            "url": {
-              "raw": "{{paymentsUrl}}/api/payments/user/{{userId}}",
-              "host": [
-                "{{paymentsUrl}}"
-              ],
-              "path": [
-                "api",
-                "payments",
-                "user",
-                "{{userId}}"
-              ]
-            }
+            "url": { "raw": "{{paymentsUrl}}/api/payments/me", "host": ["{{paymentsUrl}}"], "path": ["api","payments","me"] }
           }
         },
         {
           "name": "[401] Get Saved Cards — No Auth",
           "request": {
-            "method": "GET",
-            "header": [],
+            "method": "GET", "header": [],
             "description": "Expect 401 Unauthorized",
-            "url": {
-              "raw": "{{paymentsUrl}}/api/payments/cards/user/{{userId}}",
-              "host": [
-                "{{paymentsUrl}}"
-              ],
-              "path": [
-                "api",
-                "payments",
-                "cards",
-                "user",
-                "{{userId}}"
-              ]
-            }
+            "url": { "raw": "{{paymentsUrl}}/api/payments/cards", "host": ["{{paymentsUrl}}"], "path": ["api","payments","cards"] }
           }
         },
         {
-          "name": "[400] Save Card — Missing TokenId",
+          "name": "[400] Save Card — Missing RazorpayCustomerId",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "description": "Expect 400 — razorpayTokenId is required",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"razorpayCustomerId\": \"cust_test\",\n  \"cardNetwork\": \"Visa\",\n  \"last4\": \"1111\",\n  \"cardType\": \"credit\",\n  \"cardName\": \"Test Card\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{paymentsUrl}}/api/payments/cards/save",
-              "host": [
-                "{{paymentsUrl}}"
-              ],
-              "path": [
-                "api",
-                "payments",
-                "cards",
-                "save"
-              ]
-            }
+            "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+            "description": "Expect 400 — razorpayCustomerId is required",
+            "body": { "mode": "raw", "raw": "{\n  \"razorpayPaymentId\": \"pay_test\",\n  \"customerName\": \"Test User\",\n  \"customerEmail\": \"user1@example.com\",\n  \"customerContact\": \"+919876543210\"\n}", "options": {"raw":{"language":"json"}} },
+            "url": { "raw": "{{paymentsUrl}}/api/payments/cards/save", "host": ["{{paymentsUrl}}"], "path": ["api","payments","cards","save"] }
+          }
+        },
+        {
+          "name": "GET Payments Health Check",
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{paymentsUrl}}/health", "host": ["{{paymentsUrl}}"], "path": ["health"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "AK.Notification API",
+      "description": "Notification microservice — REST/HTTP (event-driven).\nSwagger UI: {{notificationUrl}}/swagger\n\nNotifications are created automatically by consuming integration events from RabbitMQ:\n- UserRegisteredIntegrationEvent → welcome email\n- OrderCreatedIntegrationEvent → order confirmation\n- OrderConfirmedIntegrationEvent → stock confirmed\n- OrderCancelledIntegrationEvent → cancellation notice\n- PaymentSucceededIntegrationEvent → payment receipt\n- PaymentFailedIntegrationEvent → payment failure alert\n\nIDOR-safe: users can only read their own notifications. Admin endpoint returns all.",
+      "item": [
+        {
+          "name": "GET My Notifications",
+          "request": {
+            "method": "GET",
+            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+            "url": { "raw": "{{notificationUrl}}/api/notifications?page=1&pageSize=20", "host": ["{{notificationUrl}}"], "path": ["api","notifications"], "query": [{"key":"page","value":"1"},{"key":"pageSize","value":"20"}] }
+          }
+        },
+        {
+          "name": "GET Notification by ID",
+          "request": {
+            "method": "GET",
+            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+            "url": { "raw": "{{notificationUrl}}/api/notifications/{{notificationId}}", "host": ["{{notificationUrl}}"], "path": ["api","notifications","{{notificationId}}"] }
+          }
+        },
+        {
+          "name": "GET All Notifications (admin only)",
+          "request": {
+            "method": "GET",
+            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}"}],
+            "description": "Requires admin role. Returns all notifications across all users.",
+            "url": { "raw": "{{notificationUrl}}/api/notifications/admin?page=1&pageSize=20", "host": ["{{notificationUrl}}"], "path": ["api","notifications","admin"], "query": [{"key":"page","value":"1"},{"key":"pageSize","value":"20"}] }
+          }
+        },
+        {
+          "name": "GET Notification Health Check",
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{notificationUrl}}/health", "host": ["{{notificationUrl}}"], "path": ["health"] }
           }
         }
       ]
