@@ -222,29 +222,48 @@ gateway → keycloak + all REST services
 
 ### Test end-to-end async flow
 
+Two complete flows are shown. Both share the same setup (steps 1–4). The SAGA runs
+automatically in the background — no manual trigger is needed.
+
+#### Common setup
+
 ```bash
-# 1. Get a token
+# 1. Login
 TOKEN=$(curl -s -X POST http://localhost:8084/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"user1","password":"user123"}' | jq -r '.accessToken')
 
-# 2. Get a product ID
-PRODUCT_ID=$(curl -s http://localhost:8080/api/products?pageSize=1 | jq -r '.items[0].id')
-SKU=$(curl -s http://localhost:8080/api/products?pageSize=1 | jq -r '.items[0].sku')
-PRICE=$(curl -s http://localhost:8080/api/products?pageSize=1 | jq -r '.items[0].price')
+# 2. Fetch a product
+PRODUCT=$(curl -s "http://localhost:8080/api/v1/products?pageSize=1" | jq '.items[0]')
+PRODUCT_ID=$(echo $PRODUCT | jq -r '.id')
+SKU=$(echo $PRODUCT       | jq -r '.sku')
+PRICE=$(echo $PRODUCT     | jq -r '.price')
 
-# 3. Place an order (triggers SAGA)
-curl -s -X POST http://localhost:8083/api/orders \
+# 3. Place order
+# ┌─ fires ──────────────────────────────────────────────────────────────────────┐
+# │  OrderCreatedIntegrationEvent                                                │
+# │    → (Notification)  Order Confirmation email                                │
+# │  SAGA starts: StockPending state                                             │
+# │    → (Products) ReserveStockConsumer decrements stock                        │
+# │    → StockReservedIntegrationEvent                                           │
+# │       → (Order SAGA)   state: StockPending → Confirmed                      │
+# │       → OrderConfirmedIntegrationEvent                                       │
+# │            → (Order)        status → Confirmed                               │
+# │            → (ShoppingCart) cart cleared                                     │
+# │            → (Notification) Order Confirmed email                            │
+# └──────────────────────────────────────────────────────────────────────────────┘
+ORDER=$(curl -s -X POST http://localhost:8083/api/orders \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d "{
     \"shippingAddress\": {
       \"fullName\": \"John Doe\",
       \"addressLine1\": \"123 Main St\",
-      \"city\": \"Springfield\",
-      \"state\": \"IL\",
-      \"postalCode\": \"62701\",
-      \"country\": \"US\"
+      \"city\": \"Chennai\",
+      \"state\": \"Tamil Nadu\",
+      \"postalCode\": \"600001\",
+      \"country\": \"India\",
+      \"phone\": \"+91-9876543210\"
     },
     \"items\": [{
       \"productId\": \"$PRODUCT_ID\",
@@ -253,11 +272,119 @@ curl -s -X POST http://localhost:8083/api/orders \
       \"quantity\": 1,
       \"price\": $PRICE
     }]
-  }"
+  }")
+ORDER_ID=$(echo $ORDER     | jq -r '.id')
+ORDER_NUMBER=$(echo $ORDER | jq -r '.orderNumber')
+echo "Order: $ORDER_NUMBER  ID: $ORDER_ID"
 
-# 4. Watch RabbitMQ: http://localhost:15672
-# 5. Watch Kibana: http://localhost:5601
+sleep 3   # wait for SAGA stock reservation to complete
+
+# 4. Initiate payment (Razorpay creates a payment session)
+PAYMENT=$(curl -s -X POST http://localhost:8085/api/payments/initiate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{\"orderId\":\"$ORDER_ID\",\"orderNumber\":\"$ORDER_NUMBER\",\"amount\":$PRICE,\"method\":1}")
+PAYMENT_ID=$(echo $PAYMENT        | jq -r '.paymentId')
+RAZORPAY_ORDER_ID=$(echo $PAYMENT | jq -r '.razorpayOrderId')
+RAZORPAY_KEY_ID=$(echo $PAYMENT   | jq -r '.razorpayKeyId')
+echo "Payment: $PAYMENT_ID  Razorpay order: $RAZORPAY_ORDER_ID"
 ```
+
+---
+
+#### Flow A — Happy path (payment succeeds)
+
+Payment must be completed through the Razorpay checkout widget, which returns the
+`razorpayPaymentId` and `razorpaySignature`. Use the Razorpay sandbox test card:
+
+| Field | Value |
+|-------|-------|
+| Card number | `4111 1111 1111 1111` (Visa) or `5267 3169 4984 2643` (Mastercard) |
+| Expiry | Any future date |
+| CVV | Any 3 digits |
+| OTP | `1234 1234` |
+
+The widget calls your frontend callback with `razorpay_payment_id` and `razorpay_signature`.
+If running without a frontend, compute the signature from the terminal:
+
+```bash
+# Replace with values returned by the Razorpay widget / test dashboard
+RAZORPAY_PAYMENT_ID="pay_xxxxxxxxxxxx"
+RAZORPAY_KEY_SECRET="<your-razorpay-key-secret>"   # from Razorpay dashboard / local config
+
+RAZORPAY_SIGNATURE=$(printf '%s' "${RAZORPAY_ORDER_ID}|${RAZORPAY_PAYMENT_ID}" | \
+  openssl dgst -sha256 -hmac "$RAZORPAY_KEY_SECRET" | awk '{print $2}')
+
+# 5A. Verify payment (valid signature → success)
+# ┌─ fires ──────────────────────────────────────────────────────────────────────┐
+# │  PaymentSucceededIntegrationEvent                                            │
+# │    → (Order)        status → Paid                                            │
+# │    → (Notification) Payment Receipt email                                    │
+# └──────────────────────────────────────────────────────────────────────────────┘
+curl -s -X POST http://localhost:8085/api/payments/verify \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{
+    \"paymentId\": \"$PAYMENT_ID\",
+    \"razorpayOrderId\": \"$RAZORPAY_ORDER_ID\",
+    \"razorpayPaymentId\": \"$RAZORPAY_PAYMENT_ID\",
+    \"razorpaySignature\": \"$RAZORPAY_SIGNATURE\"
+  }" | jq '{status: .status}'
+```
+
+**Emails delivered (check Mailhog `http://localhost:8025` or Gmail inbox):**
+1. Order Confirmation  ← step 3
+2. Order Confirmed (stock reserved)  ← SAGA
+3. Payment Receipt  ← step 5A
+
+---
+
+#### Flow B — Compensation path (payment fails → order cancelled)
+
+Fully testable with curl — no real card or Razorpay widget needed.
+
+```bash
+# 5B. Verify with invalid signature → payment fails
+# ┌─ fires ──────────────────────────────────────────────────────────────────────┐
+# │  PaymentFailedIntegrationEvent                                               │
+# │    → (Order)        status → PaymentFailed                                   │
+# │    → (Notification) Payment Failed email                                     │
+# └──────────────────────────────────────────────────────────────────────────────┘
+curl -s -X POST http://localhost:8085/api/payments/verify \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{
+    \"paymentId\": \"$PAYMENT_ID\",
+    \"razorpayOrderId\": \"$RAZORPAY_ORDER_ID\",
+    \"razorpayPaymentId\": \"pay_test_invalid\",
+    \"razorpaySignature\": \"invalid_signature\"
+  }" | jq '{status: .status}'
+
+# 6B. Customer cancels the order
+# ┌─ fires ──────────────────────────────────────────────────────────────────────┐
+# │  OrderCancelledIntegrationEvent                                              │
+# │    → (Order)        status → Cancelled                                       │
+# │    → (Notification) Order Cancelled email                                    │
+# └──────────────────────────────────────────────────────────────────────────────┘
+curl -s -X DELETE "http://localhost:8083/api/orders/$ORDER_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Emails delivered (check Mailhog `http://localhost:8025` or Gmail inbox):**
+1. Order Confirmation  ← step 3
+2. Order Confirmed (stock reserved)  ← SAGA
+3. Payment Failed  ← step 5B
+4. Order Cancelled  ← step 6B
+
+---
+
+#### Observe the async activity
+
+| Tool | URL | What to watch |
+|------|-----|---------------|
+| RabbitMQ management | http://localhost:15672 | Queue depths, message routing, consumer counts |
+| Mailhog (local email) | http://localhost:8025 | All outbound emails captured — no real delivery |
+| Kibana | http://localhost:5601 | Structured logs with `X-Correlation-Id` across all services |
 
 ### Individual services (dev)
 
