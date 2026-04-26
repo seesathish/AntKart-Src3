@@ -12,6 +12,11 @@ public sealed class DiscountGrpcSettings
     public string Address { get; init; } = string.Empty;
 }
 
+// gRPC client for AK.Discount — used by product query handlers to enrich product results
+// with live discount prices without making a separate REST call.
+//
+// Uses IHttpClientFactory so the "discount-grpc" named client (registered in Infrastructure extensions)
+// inherits the Polly resilience pipeline (retry + circuit breaker).
 internal sealed class DiscountGrpcClient : IDiscountGrpcClient
 {
     private readonly DiscountProtoService.DiscountProtoServiceClient _client;
@@ -23,6 +28,7 @@ internal sealed class DiscountGrpcClient : IDiscountGrpcClient
         ILogger<DiscountGrpcClient> logger)
     {
         _logger = logger;
+        // Reuse the named HttpClient so connection pooling and Polly policies apply.
         var httpClient = httpClientFactory.CreateClient("discount-grpc");
         var channel = GrpcChannel.ForAddress(settings.Value.Address,
             new GrpcChannelOptions { HttpClient = httpClient });
@@ -40,10 +46,14 @@ internal sealed class DiscountGrpcClient : IDiscountGrpcClient
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound)
         {
+            // No coupon configured for this product — callers treat null as "no discount".
             return null;
         }
         catch (Exception ex)
         {
+            // Discount service unavailable (network error, circuit open, etc.).
+            // Return null so the product is still returned — just without a discounted price.
+            // Product queries must never fail because the discount service is down.
             _logger.LogWarning(ex, "Failed to fetch discount for product {ProductId}", productId);
             return null;
         }

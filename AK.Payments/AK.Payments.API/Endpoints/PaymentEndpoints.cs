@@ -13,11 +13,13 @@ public static class PaymentEndpoints
 {
     public static void MapPaymentEndpoints(this WebApplication app)
     {
+        // All payment endpoints require a valid JWT. Razorpay amounts are in INR (paise conversion
+        // happens inside RazorpayGatewayClient). The two-step flow is: initiate → verify.
         var group = app.MapGroup("/api/payments")
             .WithTags("Payments")
             .RequireAuthorization("authenticated");
 
-        // POST /api/payments/initiate — userId, email, name injected from JWT
+        // POST /api/payments/initiate — userId, email, name injected from JWT (not from request body)
         group.MapPost("/initiate", async (HttpContext http, InitiatePaymentRequest req, IMediator mediator) =>
         {
             var userId = http.GetUserId();

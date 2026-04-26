@@ -13,6 +13,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace AK.Products.API.Endpoints;
 
+// Product catalogue endpoints. All read endpoints are public (AllowAnonymous) so the storefront
+// doesn't need authentication. Write endpoints (create, update, delete, bulk ops) require the
+// "admin" Keycloak role. Categories are data-driven strings — no hardcoded enum — so adding
+// a new category (e.g. "Sports") only requires inserting products with that category value.
 public static class ProductEndpoints
 {
     public static void MapProductEndpoints(this WebApplication app)
@@ -20,7 +24,9 @@ public static class ProductEndpoints
         var group = app.MapGroup("/api/v1/products")
             .WithTags("Products");
 
-        // GET /api/v1/products
+        // GET /api/v1/products — paged, filterable product list.
+        // All query params are optional; invalid page/pageSize values are clamped to 1/20.
+        // Supports ?category=Men, ?subCategory=Shirts, ?search=polo, ?featured=true in any combination.
         group.MapGet("/", async (
             IMediator mediator,
             CancellationToken ct,
@@ -45,7 +51,9 @@ public static class ProductEndpoints
         .WithName("GetProducts")
         .WithSummary("Get products — filter by ?category=Men&subCategory=Shirts");
 
-        // GET /api/v1/products/categories
+        // GET /api/v1/products/categories — returns distinct top-level category names from MongoDB.
+        // Used by the frontend to populate the category navigation bar dynamically.
+        // Adding a new category requires no code change — just seed products with the new category name.
         group.MapGet("/categories", async (IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(new GetProductCategoriesQuery(), ct);
@@ -55,7 +63,8 @@ public static class ProductEndpoints
         .WithName("GetProductCategories")
         .WithSummary("Get all distinct top-level category names from the product catalogue");
 
-        // GET /api/v1/products/featured
+        // GET /api/v1/products/featured — shortcut for ?featured=true with a larger page size.
+        // Used on the homepage hero/banner section.
         group.MapGet("/featured", async (IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(new GetProductsQuery(IsFeatured: true, PageSize: 50), ct);
@@ -65,7 +74,9 @@ public static class ProductEndpoints
         .WithName("GetFeaturedProducts")
         .WithSummary("Get all featured products");
 
-        // GET /api/v1/products/{id}
+        // GET /api/v1/products/{id} — single product by its 32-char hex MongoDB ID.
+        // Response includes a DiscountedPrice field populated by a best-effort gRPC call
+        // to AK.Discount; if the gRPC call fails the product is still returned without discount.
         group.MapGet("/{id}", async (string id, IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(new GetProductByIdQuery(id), ct);
@@ -75,7 +86,8 @@ public static class ProductEndpoints
         .WithName("GetProductById")
         .WithSummary("Get a product by ID");
 
-        // GET /api/v1/products/category/{category}
+        // GET /api/v1/products/category/{category} — all products for a top-level category.
+        // Equivalent to GET /? category={category} but as a clean URL for SEO-friendly pages.
         group.MapGet("/category/{category}", async (string category, IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(new GetProductsByCategoryQuery(category), ct);
@@ -85,7 +97,8 @@ public static class ProductEndpoints
         .WithName("GetProductsByCategory")
         .WithSummary("Get all products by top-level category name (e.g. Men, Women, Kids)");
 
-        // POST /api/v1/products
+        // POST /api/v1/products — creates a single product. Admin only.
+        // Returns 201 Created with Location header pointing to the new product URL.
         group.MapPost("/", async (CreateProductDto dto, IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(new CreateProductCommand(dto), ct);
@@ -95,7 +108,7 @@ public static class ProductEndpoints
         .WithName("CreateProduct")
         .WithSummary("Create a new product (Admin only)");
 
-        // PUT /api/v1/products/{id}
+        // PUT /api/v1/products/{id} — full replacement update for a product. Admin only.
         group.MapPut("/{id}", async (string id, UpdateProductDto dto, IMediator mediator, CancellationToken ct) =>
         {
             var result = await mediator.Send(new UpdateProductCommand(id, dto), ct);
@@ -105,7 +118,7 @@ public static class ProductEndpoints
         .WithName("UpdateProduct")
         .WithSummary("Update an existing product (Admin only)");
 
-        // DELETE /api/v1/products/{id}
+        // DELETE /api/v1/products/{id} — hard delete from MongoDB. Admin only.
         group.MapDelete("/{id}", async (string id, IMediator mediator, CancellationToken ct) =>
         {
             await mediator.Send(new DeleteProductCommand(id), ct);
@@ -115,7 +128,8 @@ public static class ProductEndpoints
         .WithName("DeleteProduct")
         .WithSummary("Delete a product (Admin only)");
 
-        // POST /api/v1/products/bulk-insert
+        // POST /api/v1/products/bulk-insert — inserts multiple products in one request. Admin only.
+        // Used by the database seeder (300 products) to avoid 300 individual HTTP calls.
         group.MapPost("/bulk-insert", async (List<CreateProductDto> products, IMediator mediator, CancellationToken ct) =>
         {
             var count = await mediator.Send(new BulkInsertProductsCommand(products), ct);
@@ -125,7 +139,8 @@ public static class ProductEndpoints
         .WithName("BulkInsertProducts")
         .WithSummary("Bulk insert multiple products (Admin only)");
 
-        // PUT /api/v1/products/bulk-update
+        // PUT /api/v1/products/bulk-update — updates multiple products in one request. Admin only.
+        // Useful for batch price changes or setting featured flags across a category.
         group.MapPut("/bulk-update", async (List<BulkUpdateProductDto> updates, IMediator mediator, CancellationToken ct) =>
         {
             var count = await mediator.Send(new BulkUpdateProductsCommand(updates), ct);

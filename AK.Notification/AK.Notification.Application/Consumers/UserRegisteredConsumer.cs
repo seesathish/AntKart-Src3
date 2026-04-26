@@ -7,6 +7,9 @@ using MediatR;
 
 namespace AK.Notification.Application.Consumers;
 
+// Sends a welcome email when a new user registers.
+// Triggered by UserRegisteredIntegrationEvent published by AK.UserIdentity after
+// the user is created in Keycloak and the "user" role is assigned.
 public sealed class UserRegisteredConsumer(IMediator mediator) : IConsumer<UserRegisteredIntegrationEvent>
 {
     public async Task Consume(ConsumeContext<UserRegisteredIntegrationEvent> context)

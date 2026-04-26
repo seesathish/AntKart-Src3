@@ -7,6 +7,10 @@ using MediatR;
 
 namespace AK.Notification.Application.Consumers;
 
+// Sends a payment failure alert so the customer knows to retry.
+// PaymentFailedIntegrationEvent is published by VerifyPaymentCommandHandler when the
+// Razorpay HMAC-SHA256 signature check fails, indicating the payment was not captured.
+// The Reason field contains a human-readable explanation (e.g. "Signature mismatch").
 public sealed class PaymentFailedConsumer(IMediator mediator) : IConsumer<PaymentFailedIntegrationEvent>
 {
     public async Task Consume(ConsumeContext<PaymentFailedIntegrationEvent> context)

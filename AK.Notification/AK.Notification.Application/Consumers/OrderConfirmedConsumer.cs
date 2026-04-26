@@ -7,6 +7,9 @@ using MediatR;
 
 namespace AK.Notification.Application.Consumers;
 
+// Sends a stock-confirmed email when the Order SAGA moves from Pending → Confirmed.
+// Triggered by OrderConfirmedIntegrationEvent published by the OrderSaga after
+// StockReservedIntegrationEvent is received from AK.Products.
 public sealed class OrderConfirmedConsumer(IMediator mediator) : IConsumer<OrderConfirmedIntegrationEvent>
 {
     public async Task Consume(ConsumeContext<OrderConfirmedIntegrationEvent> context)

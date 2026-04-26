@@ -10,6 +10,8 @@ public static class SavedCardEndpoints
 {
     public static void MapSavedCardEndpoints(this WebApplication app)
     {
+        // Saved cards store Razorpay token IDs only — never raw card numbers (PCI compliance).
+        // All endpoints derive userId from JWT so a user can only manage their own cards.
         var group = app.MapGroup("/api/payments/cards")
             .WithTags("SavedCards")
             .RequireAuthorization("authenticated");
