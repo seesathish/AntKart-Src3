@@ -79,6 +79,7 @@
 - Discount price must be strictly less than the original price
 - Status is automatically set to `OutOfStock` when stock quantity = 0
 - Domain events are raised on create and update for downstream consumers
+- `ReserveStockConsumer` listens on RabbitMQ queue `products-reserve-stock` (registered via `AddRabbitMqMassTransit(configuration, "products", ...)`) and decrements stock when an order reserves it
 - Seeder auto-populates 300 products driven by a `CategoryDefinition` record array — adding a new category is a data change, not a code change
 - Categories are data-driven: `GET /api/v1/products/categories` returns all distinct category names currently in the catalogue
 

@@ -486,12 +486,16 @@ All events include `CustomerEmail` and `CustomerName` so downstream consumers (e
 
 ### Consumed by AK.Order
 
-| Event | Consumer | Action |
-|-------|----------|--------|
-| `StockReservedIntegrationEvent` | `OrderSaga` | Transition to Confirmed |
-| `StockReservationFailedIntegrationEvent` | `OrderSaga` | Transition to Cancelled |
-| `PaymentSucceededIntegrationEvent` | `PaymentSucceededConsumer` | `order.UpdateStatus(Paid)` |
-| `PaymentFailedIntegrationEvent` | `PaymentFailedConsumer` | `order.UpdateStatus(PaymentFailed)` |
+Registered via `AddRabbitMqMassTransit(configuration, "order", cfg => { ... })`. The `"order"` prefix ensures unique RabbitMQ queue names so AK.Notification's consumers for the same events receive their own copy (fan-out, not competing consumers).
+
+| Event | Consumer | RabbitMQ Queue | Action |
+|-------|----------|---------------|--------|
+| `StockReservedIntegrationEvent` | `OrderSaga` | `order-order-saga-state` | Transition to Confirmed |
+| `StockReservationFailedIntegrationEvent` | `OrderSaga` | `order-order-saga-state` | Transition to Cancelled |
+| `PaymentSucceededIntegrationEvent` | `PaymentSucceededConsumer` | `order-payment-succeeded` | `order.UpdateStatus(Paid)` |
+| `PaymentFailedIntegrationEvent` | `PaymentFailedConsumer` | `order-payment-failed` | `order.UpdateStatus(PaymentFailed)` |
+| `OrderConfirmedIntegrationEvent` | `OrderConfirmedConsumer` | `order-order-confirmed` | `order.UpdateStatus(Confirmed)` |
+| `OrderCancelledIntegrationEvent` | `OrderCancelledConsumer` | `order-order-cancelled` | `order.UpdateStatus(Cancelled)` |
 
 ---
 

@@ -359,6 +359,8 @@ New consumers in AK.Order:
 - `PaymentSucceededConsumer` — calls `order.UpdateStatus(OrderStatus.Paid)` + `order.ConfirmPayment()`
 - `PaymentFailedConsumer` — calls `order.UpdateStatus(OrderStatus.PaymentFailed)`
 
+AK.Payments is registered with `AddRabbitMqMassTransit(configuration, "payments", cfg => { ... })` giving its `OrderConfirmedConsumer` the unique queue `payments-order-confirmed`. This prevents competing consumption with AK.Order's and AK.Notification's consumers for the same event.
+
 ---
 
 ## API Endpoints

@@ -134,7 +134,7 @@ AK.<Service>/
 - `Messaging/IntegrationEvents/` — `OrderCreatedIntegrationEvent` (enriched: CustomerEmail, CustomerName, OrderNumber), `OrderConfirmedIntegrationEvent` (enriched), `OrderCancelledIntegrationEvent` (enriched + UserId), `PaymentSucceededIntegrationEvent` (enriched), `PaymentFailedIntegrationEvent` (enriched), `UserRegisteredIntegrationEvent` (published by AK.UserIdentity on registration), `StockReservedIntegrationEvent`, `StockReservationFailedIntegrationEvent`, `PaymentInitiatedIntegrationEvent` (consumed by `PaymentInitiatedAuditConsumer` in integration tests)
 - `Behaviors/ValidationBehavior<TRequest, TResponse>` — shared MediatR pipeline behavior; all services (except UserIdentity) wire this from BuildingBlocks; replaces 6 deleted per-service copies
 - `Middleware/ExceptionHandlerMiddleware` — shared exception→HTTP mapper used by ShoppingCart, Order, Payments, Notification, Products; UserIdentity keeps its own (maps `UnauthorizedAccessException` → 401, not 403)
-- `Messaging/MassTransitExtensions` — `AddRabbitMqMassTransit()` helper (kebab-case, global retry)
+- `Messaging/MassTransitExtensions` — `AddRabbitMqMassTransit(config, servicePrefix, configure)` helper; each service passes a unique prefix ("order", "notification", "payments", "cart", "products", "identity") so consumers get uniquely-named RabbitMQ queues — e.g. `notification-payment-failed` and `order-payment-failed` are separate queues both bound to the same exchange (fan-out, not competing consumers)
 - `Resilience/ResilienceExtensions` — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, `AddNpgsqlResilience()` (Npgsql uses exponential backoff + jitter to prevent thundering herd on DB reconnect)
 
 ### ✅ AK.IntegrationTests  (Event Bus Tests)
@@ -161,7 +161,8 @@ AK.<Service>/
 - **Transport:** HTTP REST, port 5087 (dev) / 8086 (Docker)
 - **Database:** PostgreSQL — `AKNotificationsDb` via EF Core 9 + Npgsql, auto-migrates on startup
 - **Email (local dev):** Mailhog SMTP trap — port 1025 (SMTP), port 8025 (web UI at `http://localhost:8025`)
-- **Email (production):** Gmail SMTP via `antkartadmin@gmail.com` — set `EmailSettings__Password` env var with app password
+- **Email (production):** Gmail SMTP via `antkartadmin@gmail.com`; use `docker-compose.gmail.yml` override (gitignored — contains credentials); `EmailSettings__Password` must be a Gmail App Password (not the account password)
+- **Email SSL:** `EmailNotificationChannel` uses explicit `SecureSocketOptions` — port 465 → `SslOnConnect`, port 587 → `StartTls`, Mailhog/plain → `None`; never pass a bare `bool` to `ConnectAsync`
 - **Architecture:** DDD + Clean Architecture (Domain → Application → Infrastructure → API)
 - **Patterns:** CQRS (MediatR 12.4.1), FluentValidation, MassTransit consumers, channel abstraction
 - **Channel abstraction:** `INotificationChannel` interface resolved by `INotificationChannelResolver`; Email fully implemented (MailKit); SMS + WhatsApp are stubbed for future activation

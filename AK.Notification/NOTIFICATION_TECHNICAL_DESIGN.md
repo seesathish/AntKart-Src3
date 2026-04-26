@@ -286,14 +286,16 @@ public sealed record NotificationDto(
 
 One consumer per integration event. Each consumer resolves the recipient address, builds the template model, and dispatches `SendNotificationCommand` via MediatR.
 
-| Consumer | Event | Template |
-|----------|-------|----------|
-| `UserRegisteredConsumer` | `UserRegisteredIntegrationEvent` | WelcomeEmail |
-| `OrderCreatedConsumer` | `OrderCreatedIntegrationEvent` | OrderConfirmation |
-| `OrderConfirmedConsumer` | `OrderConfirmedIntegrationEvent` | OrderConfirmed |
-| `OrderCancelledConsumer` | `OrderCancelledIntegrationEvent` | OrderCancelled |
-| `PaymentSucceededConsumer` | `PaymentSucceededIntegrationEvent` | PaymentSucceeded |
-| `PaymentFailedConsumer` | `PaymentFailedIntegrationEvent` | PaymentFailed |
+Registered via `AddRabbitMqMassTransit(configuration, "notification", cfg => { ... })`. The `"notification"` prefix ensures each consumer gets a uniquely-named RabbitMQ queue (e.g. `notification-payment-failed`) even when other services register a consumer with the same class name. Both queues bind to the same exchange — true fan-out delivery.
+
+| Consumer | RabbitMQ Queue | Event | Template |
+|----------|---------------|-------|----------|
+| `UserRegisteredConsumer` | `notification-user-registered` | `UserRegisteredIntegrationEvent` | WelcomeEmail |
+| `OrderCreatedConsumer` | `notification-order-created` | `OrderCreatedIntegrationEvent` | OrderConfirmation |
+| `OrderConfirmedConsumer` | `notification-order-confirmed` | `OrderConfirmedIntegrationEvent` | OrderConfirmed |
+| `OrderCancelledConsumer` | `notification-order-cancelled` | `OrderCancelledIntegrationEvent` | OrderCancelled |
+| `PaymentSucceededConsumer` | `notification-payment-succeeded` | `PaymentSucceededIntegrationEvent` | PaymentSucceeded |
+| `PaymentFailedConsumer` | `notification-payment-failed` | `PaymentFailedIntegrationEvent` | PaymentFailed |
 
 All consumers are registered in the Application layer. They use `IMediator` — no direct dependency on Infrastructure.
 
@@ -330,8 +332,14 @@ public sealed class EmailNotificationChannel : INotificationChannel
         email.Subject = message.Subject ?? string.Empty;
         email.Body = new TextPart("plain") { Text = message.Body };
 
+        // Explicit SecureSocketOptions — never pass a bare bool to ConnectAsync.
+        // Port 465 = implicit SSL (SslOnConnect); 587 = STARTTLS; 1025 (Mailhog) = plain.
+        var socketOptions = _settings.EnableSsl
+            ? (_settings.Port == 465 ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls)
+            : SecureSocketOptions.None;
+
         using var smtp = new SmtpClient();
-        await smtp.ConnectAsync(_settings.Host, _settings.Port, _settings.EnableSsl, ct);
+        await smtp.ConnectAsync(_settings.Host, _settings.Port, socketOptions, ct);
         if (!string.IsNullOrEmpty(_settings.Username))
             await smtp.AuthenticateAsync(_settings.Username, _settings.Password, ct);
         await smtp.SendAsync(email, ct);
@@ -339,6 +347,14 @@ public sealed class EmailNotificationChannel : INotificationChannel
     }
 }
 ```
+
+**Port → SSL mode mapping:**
+
+| Port | `EnableSsl` | `SecureSocketOptions` | Use case |
+|------|-------------|----------------------|----------|
+| 1025 | false | `None` | Mailhog (local dev) |
+| 587  | true | `StartTls` | Gmail SMTP (production) |
+| 465  | true | `SslOnConnect` | Implicit SSL (alternative) |
 
 ### EF Core — NotificationsDbContext
 
@@ -382,22 +398,30 @@ Email UI in local dev: `http://localhost:8025` (Mailhog web interface — all ou
 
 ### Production (Gmail SMTP)
 
+Use the `docker-compose.gmail.yml` compose override (gitignored — contains credentials):
+
 ```yaml
-EmailSettings__From: "antkartadmin@gmail.com"
-EmailSettings__DisplayName: "AntKart"
-EmailSettings__Host: "smtp.gmail.com"
-EmailSettings__Port: "587"
-EmailSettings__EnableSsl: "true"
-EmailSettings__Username: "antkartadmin@gmail.com"
-EmailSettings__Password: "<gmail-app-password>"   # generate in Google Account → Security → App Passwords
-NotificationSettings__RetentionDays: "90"
+# docker-compose.gmail.yml  — never commit; gitignored
+services:
+  ak-notification-api:
+    environment:
+      - EmailSettings__Host=smtp.gmail.com
+      - EmailSettings__Port=587
+      - EmailSettings__EnableSsl=true
+      - EmailSettings__Username=antkartadmin@gmail.com
+      - EmailSettings__Password=<gmail-app-password>
+      - EmailSettings__From=antkartadmin@gmail.com
+      - EmailSettings__DisplayName=AntKart
 ```
+
+Start with: `docker-compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.gmail.yml up -d`
 
 **Gmail app password setup:**
 1. Enable 2-Step Verification on `antkartadmin@gmail.com`
 2. Google Account → Security → 2-Step Verification → App passwords
 3. Generate password for "Mail / Other (AntKart)"
-4. Use the 16-character password as `EmailSettings__Password`
+4. Use the 16-character code (spaces optional) as `EmailSettings__Password`
+5. Regular Gmail account passwords are rejected by SMTP — only App Passwords work
 
 ### Typed settings records (Application)
 

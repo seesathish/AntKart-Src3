@@ -110,7 +110,7 @@ graph TB
     DOMAIN["AK.ShoppingCart.Domain\nCart Aggregate · CartItem\nDomain Events"]:::domain
     INFRA["AK.ShoppingCart.Infrastructure\nRedisContext · CartRepository\nUnitOfWork · RedisSettings"]:::infra
     REDIS[("Redis\nAKCart:cart:{userId}\nTTL: 30 days sliding")]:::db
-    MQ["RabbitMQ\nPublishes StockReservedIntegrationEvent"]:::infra
+    MQ["RabbitMQ\nConsumes: OrderConfirmedIntegrationEvent\nQueue: cart-clear-cart-on-order-confirmed"]:::infra
 
     CLIENT -->|HTTP/REST| API
     API -->|IMediator.Send| APP
@@ -368,6 +368,8 @@ classDiagram
 ### 6.3 Domain Events
 
 Domain events are raised in-memory and stored on the aggregate root. They are designed for future pub/sub wiring (e.g., service bus integration).
+
+**RabbitMQ consumer (active):** `ClearCartOnOrderConfirmedConsumer` listens on `cart-clear-cart-on-order-confirmed` and clears the user's cart when an order is confirmed. Registered via `AddRabbitMqMassTransit(configuration, "cart", ...)` — the `"cart"` prefix ensures this queue is uniquely named and does not compete with consumers in other services.
 
 | Event | Constructor | Raised When |
 |-------|-------------|-------------|
