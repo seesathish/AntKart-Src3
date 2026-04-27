@@ -1,6 +1,15 @@
+using AK.BuildingBlocks.DDD;
+
 namespace AK.Order.Domain.ValueObjects;
 
-public sealed class ShippingAddress
+// ShippingAddress is a Value Object — two addresses with identical fields are equal.
+// It extends ValueObject (AK.BuildingBlocks.DDD) which derives Equals/GetHashCode/==
+// from GetEqualityComponents(), making the structural equality mechanics explicit.
+//
+// Contrast with Money (AK.Products) which is a C# record — records give you equality
+// for free via compiler synthesis. ValueObject base makes the mechanics visible and
+// works correctly on plain classes that can't use record syntax (e.g. EF-owned types).
+public sealed class ShippingAddress : ValueObject
 {
     public string FullName { get; private set; } = string.Empty;
     public string AddressLine1 { get; private set; } = string.Empty;
@@ -36,6 +45,20 @@ public sealed class ShippingAddress
             Country = country.Trim(),
             Phone = phone.Trim()
         };
+    }
+
+    // All 8 fields participate in equality — two addresses are the same only if
+    // every component matches, including the optional AddressLine2.
+    protected override IEnumerable<object?> GetEqualityComponents()
+    {
+        yield return FullName;
+        yield return AddressLine1;
+        yield return AddressLine2;
+        yield return City;
+        yield return State;
+        yield return PostalCode;
+        yield return Country;
+        yield return Phone;
     }
 
     public string ToSingleLine() =>

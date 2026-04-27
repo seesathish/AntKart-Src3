@@ -1,6 +1,7 @@
 using AK.BuildingBlocks.Authentication;
 using AK.BuildingBlocks.HealthChecks;
 using AK.BuildingBlocks.Logging;
+using AK.BuildingBlocks.Swagger;
 using AK.Order.API.Endpoints;
 using AK.BuildingBlocks.Middleware;
 using AK.Order.Application.Extensions;
@@ -66,12 +67,7 @@ await app.ApplyMigrationsAsync();
 // so it wraps the entire request pipeline and catches exceptions from all subsequent middleware.
 app.UseMiddleware<ExceptionHandlerMiddleware>();
 
-// Swagger UI only available in Development — not exposed in Docker/production containers.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "AK.Order API v1"));
-}
+app.UseSwaggerInDevelopment("AK.Order API v1");
 
 // UseKeycloakAuth calls UseAuthentication() then UseAuthorization() in the correct order.
 // Must come AFTER ExceptionHandlerMiddleware (so auth errors are caught) and BEFORE endpoint mapping.

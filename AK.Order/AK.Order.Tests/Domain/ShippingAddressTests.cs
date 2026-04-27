@@ -56,4 +56,30 @@ public class ShippingAddressTests
         addr.FullName.Should().Be("Jane");
         addr.City.Should().Be("Chicago");
     }
+
+    [Fact]
+    public void Equals_IdenticalComponents_ReturnsTrue()
+    {
+        var a = TestDataFactory.CreateShippingAddress();
+        var b = TestDataFactory.CreateShippingAddress();
+        a.Should().Be(b);
+        (a == b).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Equals_DifferentCity_ReturnsFalse()
+    {
+        var a = TestDataFactory.CreateShippingAddress();
+        var b = TestDataFactory.CreateShippingAddress(city: "Chicago");
+        a.Should().NotBe(b);
+        (a != b).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Equals_NullAddressLine2VsValue_ReturnsFalse()
+    {
+        var a = TestDataFactory.CreateShippingAddress();
+        var b = TestDataFactory.CreateShippingAddress(addressLine2: "Apt 4B");
+        a.Should().NotBe(b);
+    }
 }

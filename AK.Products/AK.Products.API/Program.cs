@@ -1,6 +1,7 @@
 using AK.BuildingBlocks.Authentication;
 using AK.BuildingBlocks.HealthChecks;
 using AK.BuildingBlocks.Logging;
+using AK.BuildingBlocks.Swagger;
 using AK.Products.API.Endpoints;
 using AK.Products.API.Extensions;
 using AK.BuildingBlocks.Middleware;
@@ -47,11 +48,7 @@ var app = builder.Build();
 
 app.UseMiddleware<ExceptionHandlerMiddleware>();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "AK.Products API v1"));
-}
+app.UseSwaggerInDevelopment("AK.Products API v1");
 
 app.UseKeycloakAuth();
 
