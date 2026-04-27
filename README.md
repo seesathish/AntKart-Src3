@@ -160,6 +160,7 @@ AntKart/
 
 | Component | Technology | Design Doc |
 |-----------|-----------|------------|
+| BuildingBlocks | Shared DDD base classes, auth, messaging, resilience, middleware | [BUILDING_BLOCKS.md](AK.BuildingBlocks/BUILDING_BLOCKS.md) |
 | Event Bus | MassTransit + RabbitMQ + SAGA + Outbox | [EVENTBUS.md](EVENTBUS.md) |
 | Resilience | Polly v8 (retry, circuit breaker, timeout) | [RESILIENCE.md](RESILIENCE.md) |
 | Observability | Serilog + Elasticsearch + Kibana | [OBSERVABILITY.md](OBSERVABILITY.md) |
@@ -435,4 +436,4 @@ dotnet test
 | AK.IntegrationTests | 35 |
 | AK.Payments.Tests | 69 |
 | AK.Notification.Tests | 37 |
-| **Total** | **613** |
+| **Total** | **616** |

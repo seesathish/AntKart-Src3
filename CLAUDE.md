@@ -134,12 +134,14 @@ AK.<Service>/
 - `DDD/IAggregateRoot` — shared marker interface identifying aggregate root entities
 - `DDD/Entity` — shared abstract base for Guid-keyed entities (Order, Payments, Notification): `Guid Id`, `DateTimeOffset CreatedAt`, `DateTimeOffset? UpdatedAt`, `AddDomainEvent()`, `ClearDomainEvents()`, `SetUpdatedAt()`
 - `DDD/StringEntity` — same as Entity but with `string Id = Guid.NewGuid().ToString("N")` for MongoDB entities (Products); replaces per-service `BaseEntity`/`Entity` duplicates
+- `DDD/ValueObject` — abstract base for value objects; subclass and implement `GetEqualityComponents()` — `Equals()`, `GetHashCode()`, `==`, `!=` are derived automatically via `SequenceEqual`; used by `ShippingAddress` in AK.Order (deliberately contrasts with `Money` in AK.Products which uses a C# `record` — both approaches valid)
 - `Messaging/IIntegrationEvent` — base interface for all integration events
 - `Messaging/IntegrationEvents/` — `OrderCreatedIntegrationEvent` (enriched: CustomerEmail, CustomerName, OrderNumber), `OrderConfirmedIntegrationEvent` (enriched), `OrderCancelledIntegrationEvent` (enriched + UserId), `PaymentSucceededIntegrationEvent` (enriched), `PaymentFailedIntegrationEvent` (enriched), `UserRegisteredIntegrationEvent` (published by AK.UserIdentity on registration), `StockReservedIntegrationEvent`, `StockReservationFailedIntegrationEvent`, `PaymentInitiatedIntegrationEvent` (consumed by `PaymentInitiatedAuditConsumer` in integration tests)
 - `Behaviors/ValidationBehavior<TRequest, TResponse>` — shared MediatR pipeline behavior; all services (except UserIdentity) wire this from BuildingBlocks; replaces 6 deleted per-service copies
 - `Middleware/ExceptionHandlerMiddleware` — shared exception→HTTP mapper used by ShoppingCart, Order, Payments, Notification, Products; UserIdentity keeps its own (maps `UnauthorizedAccessException` → 401, not 403)
 - `Messaging/MassTransitExtensions` — `AddRabbitMqMassTransit(config, servicePrefix, configure)` helper; each service passes a unique prefix ("order", "notification", "payments", "cart", "products", "identity") so consumers get uniquely-named RabbitMQ queues — e.g. `notification-payment-failed` and `order-payment-failed` are separate queues both bound to the same exchange (fan-out, not competing consumers)
 - `Resilience/ResilienceExtensions` — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, `AddNpgsqlResilience()` (Npgsql uses exponential backoff + jitter to prevent thundering herd on DB reconnect)
+- `Swagger/SwaggerExtensions` — `UseSwaggerInDevelopment(title)` gates `UseSwagger()` + `UseSwaggerUI()` to Development only; `AddSwaggerGen()` registration stays in each service
 
 ### ✅ AK.IntegrationTests  (Event Bus Tests)
 - **Framework:** MassTransit in-memory test harness (no RabbitMQ, no DB, no host)
