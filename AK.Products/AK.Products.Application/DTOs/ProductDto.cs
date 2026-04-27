@@ -21,6 +21,6 @@ public sealed record ProductDto(
     double Rating,
     int ReviewCount,
     List<string> Tags,
-    DateTime CreatedAt,
-    DateTime? UpdatedAt
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? UpdatedAt
 );

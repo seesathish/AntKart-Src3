@@ -6,5 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\AK.BuildingBlocks\AK.BuildingBlocks\AK.BuildingBlocks.csproj" />
+  </ItemGroup>
 
 </Project>

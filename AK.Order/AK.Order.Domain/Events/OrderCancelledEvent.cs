@@ -1,4 +1,4 @@
-using AK.Order.Domain.Common;
+using AK.BuildingBlocks.DDD;
 
 namespace AK.Order.Domain.Events;
 

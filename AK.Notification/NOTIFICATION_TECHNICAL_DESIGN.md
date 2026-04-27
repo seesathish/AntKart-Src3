@@ -41,9 +41,10 @@ Tests           ← Application, Infrastructure, Domain
 ### Notification (Aggregate Root)
 
 ```csharp
-public sealed class Notification
+// Inherits from AK.BuildingBlocks.DDD.Entity:
+//   Guid Id, DateTimeOffset CreatedAt, DateTimeOffset? UpdatedAt
+public sealed class Notification : Entity, IAggregateRoot
 {
-    public Guid Id { get; private set; }
     public string UserId { get; private set; }           // Keycloak UUID
     public NotificationChannel Channel { get; private set; }
     public NotificationTemplateType TemplateType { get; private set; }
@@ -53,7 +54,6 @@ public sealed class Notification
     public string Body { get; private set; }
     public string? ErrorMessage { get; private set; }
     public DateTimeOffset? SentAt { get; private set; }
-    public DateTimeOffset CreatedAt { get; private set; }
     public int RetryCount { get; private set; }
 
     public static Notification Create(...);

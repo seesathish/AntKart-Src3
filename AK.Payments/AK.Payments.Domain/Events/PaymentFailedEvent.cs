@@ -1,4 +1,4 @@
-using AK.Payments.Domain.Common;
+using AK.BuildingBlocks.DDD;
 
 namespace AK.Payments.Domain.Events;
 

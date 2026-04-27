@@ -1,8 +1,8 @@
-using AK.Products.Domain.Common;
+using AK.BuildingBlocks.DDD;
 
 namespace AK.Products.Domain.Entities;
 
-public class Category : Entity
+public class Category : StringEntity
 {
     private Category() { }
 

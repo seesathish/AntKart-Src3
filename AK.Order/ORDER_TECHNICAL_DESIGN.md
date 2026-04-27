@@ -96,11 +96,9 @@ graph TB
 AK.Order/
 ├── AK.Order.Domain/
 │   ├── Common/
-│   │   ├── Entity.cs                     # Base class with Id, timestamps, domain events
-│   │   ├── IAggregateRoot.cs
-│   │   ├── IDomainEvent.cs
 │   │   ├── ISpecification.cs
 │   │   └── BaseSpecification.cs
+│   │   # Entity, IAggregateRoot, IDomainEvent → from AK.BuildingBlocks.DDD
 │   ├── Entities/
 │   │   ├── Order.cs                      # Aggregate root
 │   │   └── OrderItem.cs
@@ -367,7 +365,7 @@ record OrderDto(
     ShippingAddressDto ShippingAddress,
     IReadOnlyList<OrderItemDto> Items,
     decimal TotalAmount, int TotalItems,
-    string? Notes, DateTime CreatedAt, DateTime? UpdatedAt);
+    string? Notes, DateTimeOffset CreatedAt, DateTimeOffset? UpdatedAt);
 
 record OrderItemDto(
     Guid Id, string ProductId, string ProductName,

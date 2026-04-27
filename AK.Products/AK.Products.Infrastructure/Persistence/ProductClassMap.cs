@@ -1,4 +1,4 @@
-using AK.Products.Domain.Common;
+using AK.BuildingBlocks.DDD;
 using AK.Products.Domain.Entities;
 using MongoDB.Bson.Serialization;
 
@@ -21,7 +21,7 @@ internal static class ProductClassMap
         {
             if (_registered) return;  // Guard: RegisterClassMap throws if called twice for the same type.
 
-            BsonClassMap.RegisterClassMap<BaseEntity>(cm =>
+            BsonClassMap.RegisterClassMap<StringEntity>(cm =>
             {
                 cm.AutoMap();  // Automatically maps all public properties.
                 // SetIgnoreExtraElements: if a MongoDB document has a field that doesn't

@@ -1,3 +1,4 @@
+using AK.BuildingBlocks.DDD;
 using AK.Notification.Domain.Enums;
 
 namespace AK.Notification.Domain.Entities;
@@ -20,7 +21,6 @@ public sealed class Notification : Entity, IAggregateRoot
     public string Body { get; private set; } = string.Empty;
     public string? ErrorMessage { get; private set; }
     public DateTimeOffset? SentAt { get; private set; }
-    public DateTimeOffset CreatedAt { get; private set; }
     public int RetryCount { get; private set; }
 
     // Parameterless constructor required by EF Core to reconstruct entities from the database.
@@ -45,7 +45,6 @@ public sealed class Notification : Entity, IAggregateRoot
 
         return new Notification
         {
-            Id = Guid.NewGuid(),
             UserId = userId,
             Channel = channel,
             TemplateType = templateType,
@@ -53,7 +52,6 @@ public sealed class Notification : Entity, IAggregateRoot
             RecipientAddress = recipientAddress,
             Subject = subject,
             Body = body,
-            CreatedAt = DateTimeOffset.UtcNow,
             RetryCount = 0
         };
     }

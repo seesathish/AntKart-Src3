@@ -50,6 +50,8 @@ internal sealed class NotificationConfiguration : IEntityTypeConfiguration<Notif
         builder.Property(n => n.CreatedAt)
             .IsRequired();
 
+        builder.Property(n => n.UpdatedAt);
+
         builder.Property(n => n.RetryCount)
             .IsRequired();
 

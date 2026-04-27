@@ -154,9 +154,9 @@ AK.Products/
 │   ├── AK.Products.Domain/
 │   │   └── AK.Products.Domain/
 │   │       ├── Common/
-│   │       │   ├── BaseEntity.cs          # GUID Id, CreatedAt, UpdatedAt (no infrastructure deps)
-│   │       │   ├── IAggregateRoot.cs      # Marker interface
-│   │       │   └── IDomainEvent.cs        # : INotification (MediatR)
+│   │       │   ├── ISpecification.cs      # Specification contract
+│   │       │   └── BaseSpecification.cs   # Base specification implementation
+│   │       │   # StringEntity, IAggregateRoot, IDomainEvent → from AK.BuildingBlocks.DDD
 │   │       ├── Entities/
 │   │       │   └── Product.cs             # Aggregate root
 │   │       ├── Enums/
@@ -265,8 +265,8 @@ classDiagram
 
     class Product {
         +string Id
-        +DateTime CreatedAt
-        +DateTime? UpdatedAt
+        +DateTimeOffset CreatedAt
+        +DateTimeOffset? UpdatedAt
         +string Name
         +string SKU
         +string Brand
@@ -320,7 +320,7 @@ classDiagram
 | `ProductUpdatedEvent` | `Product.Update()` |
 | `ProductDeletedEvent` | Available for deletion flows |
 
-Events implement `IDomainEvent : INotification` — compatible with MediatR's `IPublisher`.
+Events implement `AK.BuildingBlocks.DDD.IDomainEvent` — shared marker interface across all services.
 
 ### 6.4 Enums
 

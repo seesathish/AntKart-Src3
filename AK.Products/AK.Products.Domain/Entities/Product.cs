@@ -1,4 +1,4 @@
-using AK.Products.Domain.Common;
+using AK.BuildingBlocks.DDD;
 using AK.Products.Domain.Enums;
 using AK.Products.Domain.Events;
 using AK.Products.Domain.ValueObjects;
@@ -12,7 +12,7 @@ namespace AK.Products.Domain.Entities;
 //
 // Category design: CategoryName and SubCategoryName are plain strings (not enums).
 // Adding a new category (e.g. "Electronics") is purely a data change — no code deployment needed.
-public sealed class Product : BaseEntity, IAggregateRoot
+public sealed class Product : StringEntity, IAggregateRoot
 {
     public string Name { get; private set; } = string.Empty;
     public string Description { get; private set; } = string.Empty;
@@ -41,9 +41,6 @@ public sealed class Product : BaseEntity, IAggregateRoot
     public double Rating { get; private set; }
     public int ReviewCount { get; private set; }
     public List<string> Tags { get; private set; } = new();
-
-    private readonly List<IDomainEvent> _domainEvents = new();
-    public IReadOnlyCollection<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
     // Private constructor: forces all creation through the factory method.
     // MongoDB and EF Core also require a parameterless constructor for deserialisation.
@@ -79,7 +76,7 @@ public sealed class Product : BaseEntity, IAggregateRoot
             Colors = colors,
             Material = material
         };
-        product._domainEvents.Add(new ProductCreatedEvent(product.Id, product.Name));
+        product.AddDomainEvent(new ProductCreatedEvent(product.Id, product.Name));
         return product;
     }
 
@@ -92,20 +89,20 @@ public sealed class Product : BaseEntity, IAggregateRoot
         StockQuantity = stockQuantity;
         Material = material;
         Status = stockQuantity > 0 ? ProductStatus.Active : ProductStatus.OutOfStock;
-        SetUpdated();
-        _domainEvents.Add(new ProductUpdatedEvent(Id, Name));
+        SetUpdatedAt();
+        AddDomainEvent(new ProductUpdatedEvent(Id, Name));
     }
 
     public void SetDiscount(decimal discountPrice)
     {
         if (discountPrice >= Price) throw new InvalidOperationException("Discount price must be less than original price");
         DiscountPrice = discountPrice;
-        SetUpdated();
+        SetUpdatedAt();
     }
 
-    public void RemoveDiscount() { DiscountPrice = null; SetUpdated(); }
+    public void RemoveDiscount() { DiscountPrice = null; SetUpdatedAt(); }
 
-    public void SetFeatured(bool isFeatured) { IsFeatured = isFeatured; SetUpdated(); }
+    public void SetFeatured(bool isFeatured) { IsFeatured = isFeatured; SetUpdatedAt(); }
 
     // Incremental running average — avoids storing all individual ratings.
     // New average = (old_avg × old_count + new_rating) / (old_count + 1)
@@ -113,7 +110,7 @@ public sealed class Product : BaseEntity, IAggregateRoot
     {
         Rating = ((Rating * ReviewCount) + rating) / (ReviewCount + 1);
         ReviewCount++;
-        SetUpdated();
+        SetUpdatedAt();
     }
 
     // Called by ReserveStockConsumer when an order is placed.
@@ -127,13 +124,10 @@ public sealed class Product : BaseEntity, IAggregateRoot
                 $"Insufficient stock for SKU '{SKU}'. Available: {StockQuantity}, Requested: {quantity}");
         StockQuantity -= quantity;
         Status = StockQuantity > 0 ? ProductStatus.Active : ProductStatus.OutOfStock;
-        SetUpdated();
+        SetUpdatedAt();
     }
 
-    public void Deactivate() { Status = ProductStatus.Inactive; SetUpdated(); }
-
-    // Called after domain events have been dispatched to prevent replaying them.
-    public void ClearDomainEvents() => _domainEvents.Clear();
+    public void Deactivate() { Status = ProductStatus.Inactive; SetUpdatedAt(); }
 
     public Money GetPrice() => new(Price, Currency);
     public Money? GetDiscountPrice() => DiscountPrice.HasValue ? new(DiscountPrice.Value, Currency) : null;

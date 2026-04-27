@@ -13,5 +13,5 @@ public sealed record OrderDto(
     decimal TotalAmount,
     int TotalItems,
     string? Notes,
-    DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? UpdatedAt);

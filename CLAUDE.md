@@ -58,7 +58,7 @@ AK.<Service>/
 - **Patterns:** CQRS (MediatR 12.4.1), FluentValidation pipeline, Specification, Unit of Work
 - **Category design:** Data-driven — `CategoryName` (top-level: Men/Women/Kids/Sports/etc.) + `SubCategoryName` (specific: Shirts/Dresses/etc.) are plain strings; no hardcoded enum. Adding a new category is a data change only.
 - **ID format:** `Guid.NewGuid().ToString("N")` — 32-char hex string, pure .NET, stored as BSON string
-- **MongoDB mapping:** `ProductClassMap` (Infrastructure) registers `BsonClassMap` — handles `SetIgnoreExtraElements` and unmaps `DomainEvents`; called before `MongoDbContext` is registered
+- **MongoDB mapping:** `ProductClassMap` (Infrastructure) registers `BsonClassMap<StringEntity>` and `BsonClassMap<Product>` — handles `SetIgnoreExtraElements` and unmaps `DomainEvents`; called before `MongoDbContext` is registered
 - **Seed data:** 300 products driven by `CategoryDefinition` record array — 10 sub-categories × 10 products per top-level category. Currently seeded: Men, Women, Kids.
 - **SKU format:** `{CAT_ABBREV}-{SUBCAT_ABBREV}-{001..NNN}` e.g. `MEN-SHIR-001`, `WOM-DRES-001`
 - **New endpoint:** `GET /api/v1/products/categories` — returns distinct top-level category names from DB
@@ -130,6 +130,10 @@ AK.<Service>/
 - `Authentication/AuthenticationExtensions` — `AddKeycloakAuthentication()` + `UseKeycloakAuth()` shared JWT auth wiring; validates `azp` claim against `settings.Audience` (`antkart-client`) to prevent cross-client token reuse; logs `JsonException` on malformed `realm_access` claim
 - `Authentication/KeycloakSettings` — typed config record for Keycloak settings
 - `Authentication/HttpContextExtensions` — `GetUserId()` extracts `sub` from JWT; `GetUserEmail()` reads `email`/`ClaimTypes.Email`; `GetUserDisplayName()` reads `name`/`given_name`+`family_name`/`preferred_username`
+- `DDD/IDomainEvent` — shared marker interface implemented by all domain event records (Products, Order, Payments)
+- `DDD/IAggregateRoot` — shared marker interface identifying aggregate root entities
+- `DDD/Entity` — shared abstract base for Guid-keyed entities (Order, Payments, Notification): `Guid Id`, `DateTimeOffset CreatedAt`, `DateTimeOffset? UpdatedAt`, `AddDomainEvent()`, `ClearDomainEvents()`, `SetUpdatedAt()`
+- `DDD/StringEntity` — same as Entity but with `string Id = Guid.NewGuid().ToString("N")` for MongoDB entities (Products); replaces per-service `BaseEntity`/`Entity` duplicates
 - `Messaging/IIntegrationEvent` — base interface for all integration events
 - `Messaging/IntegrationEvents/` — `OrderCreatedIntegrationEvent` (enriched: CustomerEmail, CustomerName, OrderNumber), `OrderConfirmedIntegrationEvent` (enriched), `OrderCancelledIntegrationEvent` (enriched + UserId), `PaymentSucceededIntegrationEvent` (enriched), `PaymentFailedIntegrationEvent` (enriched), `UserRegisteredIntegrationEvent` (published by AK.UserIdentity on registration), `StockReservedIntegrationEvent`, `StockReservationFailedIntegrationEvent`, `PaymentInitiatedIntegrationEvent` (consumed by `PaymentInitiatedAuditConsumer` in integration tests)
 - `Behaviors/ValidationBehavior<TRequest, TResponse>` — shared MediatR pipeline behavior; all services (except UserIdentity) wire this from BuildingBlocks; replaces 6 deleted per-service copies
@@ -150,7 +154,7 @@ AK.<Service>/
 - **Patterns:** CQRS (MediatR 12.4.1), FluentValidation pipeline, Repository, Unit of Work, EF Core Outbox
 - **Operations:** Initiate payment, verify signature, saved cards CRUD, user payment history
 - **Saved cards:** PCI-compliant — Razorpay token IDs only, never raw card numbers
-- **Domain events:** `PaymentCreatedEvent`, `PaymentSucceededEvent`, `PaymentFailedEvent` — all implement `IDomainEvent` (defined in `AK.Payments.Domain.Common`); `Entity` base class holds a typed `List<IDomainEvent>` (not `object`)
+- **Domain events:** `PaymentCreatedEvent`, `PaymentSucceededEvent`, `PaymentFailedEvent` — all implement `AK.BuildingBlocks.DDD.IDomainEvent`; inherited `Entity` base class holds the typed event list
 - **Integration events:** Publishes `PaymentInitiatedIntegrationEvent`, `PaymentSucceededIntegrationEvent`, `PaymentFailedIntegrationEvent`; AK.Order consumes succeeded/failed to update order status
 - **Tests:** 69 passing (domain, commands, queries, validators — SaveCard, DeleteSavedCard, GetPaymentById, GetPaymentByOrderId, GetUserPayments, GetUserSavedCards, VerifyPayment, SaveCard validators)
 - **Swagger:** `http://localhost:5086/swagger` (Development only)
