@@ -166,6 +166,7 @@ AntKart/
 | Observability | Serilog + Elasticsearch + Kibana | [OBSERVABILITY.md](OBSERVABILITY.md) |
 | Integration Tests | MassTransit in-memory test harness | [INTEGRATION_TESTS.md](AK.IntegrationTests/INTEGRATION_TESTS.md) |
 | Architecture Decisions | Why each key technology was chosen | [docs/adr/](docs/adr/) |
+| C4 Architecture | System context, containers, components, and code diagrams | [C4Architecture.md](C4Architecture.md) |
 
 ---
 
