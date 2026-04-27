@@ -55,6 +55,8 @@ public sealed class Payment : Entity, IAggregateRoot
             throw new ArgumentException("OrderId is required.", nameof(orderId));
         if (string.IsNullOrWhiteSpace(userId))
             throw new ArgumentException("UserId is required.", nameof(userId));
+        if (string.IsNullOrWhiteSpace(orderNumber))
+            throw new ArgumentException("OrderNumber is required.", nameof(orderNumber));
         if (amount <= 0)
             throw new ArgumentException("Amount must be greater than zero.", nameof(amount));
 

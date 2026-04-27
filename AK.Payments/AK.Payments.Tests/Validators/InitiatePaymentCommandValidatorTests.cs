@@ -42,4 +42,13 @@ public sealed class InitiatePaymentCommandValidatorTests
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Amount");
     }
+
+    [Fact]
+    public void Validate_WithEmptyOrderNumber_Fails()
+    {
+        var command = new InitiatePaymentCommand(Guid.NewGuid(), "user1", "user@test.com", "Test User", string.Empty, 100m, PaymentMethod.Card);
+        var result = _validator.Validate(command);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == "OrderNumber");
+    }
 }

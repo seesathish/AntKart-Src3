@@ -235,10 +235,13 @@ if [ -n "$ORDER_ID" ]; then
   CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $USER_TOKEN" "http://localhost:8083/api/orders/me")
   check "GET /api/orders/me (user auth)" $CODE 200
 
+  # The SAGA moves the order to Confirmed automatically after stock reservation.
+  # Wait for that to complete before attempting a further status transition.
+  sleep 2
   CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "http://localhost:8083/api/orders/$ORDER_ID/status" \
     -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
-    -d '{"newStatus":1}')
-  check "PUT /api/orders/{id}/status (admin)" $CODE 200
+    -d '{"newStatus":3}')
+  check "PUT /api/orders/{id}/status admin -> Processing (admin)" $CODE 200
 
   CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "http://localhost:8083/api/orders/$ORDER_ID" \
     -H "Authorization: Bearer $USER_TOKEN")
@@ -280,14 +283,16 @@ PAY_ORDER=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8083/api/orders
   -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
   -d "{\"shippingAddress\":{\"fullName\":\"Pay Test\",\"addressLine1\":\"1 Pay St\",\"city\":\"Mumbai\",\"state\":\"MH\",\"postalCode\":\"400001\",\"country\":\"IN\",\"phone\":\"+91-9999999999\"},\"items\":[{\"productId\":\"$PRODUCT_ID\",\"productName\":\"Test Product\",\"sku\":\"MEN-SHIR-001\",\"price\":29.99,\"quantity\":1}]}")
 PAY_ORDER_CODE=$(echo "$PAY_ORDER" | tail -1)
-PAY_ORDER_ID=$(echo "$PAY_ORDER" | head -1 | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-echo "  Payment test order: $PAY_ORDER_ID (HTTP $PAY_ORDER_CODE)"
+PAY_ORDER_BODY=$(echo "$PAY_ORDER" | head -1)
+PAY_ORDER_ID=$(echo "$PAY_ORDER_BODY" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+PAY_ORDER_NUMBER=$(echo "$PAY_ORDER_BODY" | grep -o '"orderNumber":"[^"]*"' | cut -d'"' -f4)
+echo "  Payment test order: $PAY_ORDER_ID  $PAY_ORDER_NUMBER (HTTP $PAY_ORDER_CODE)"
 
 # Initiate payment (hits Razorpay sandbox — requires internet from Docker)
 if [ -n "$PAY_ORDER_ID" ]; then
   PAY_RESP=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8085/api/payments/initiate \
     -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
-    -d "{\"orderId\":\"$PAY_ORDER_ID\",\"amount\":29.99,\"method\":1}")
+    -d "{\"orderId\":\"$PAY_ORDER_ID\",\"orderNumber\":\"$PAY_ORDER_NUMBER\",\"amount\":29.99,\"method\":1}")
   PAY_CODE=$(echo "$PAY_RESP" | tail -1)
   PAY_BODY=$(echo "$PAY_RESP" | head -1)
   PAY_ID=$(echo "$PAY_BODY" | grep -o '"paymentId":"[^"]*"' | cut -d'"' -f4)
