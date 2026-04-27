@@ -362,3 +362,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsddocker-compose.gmail.yml
+
+# Structurizr CLI local cache (Lucene index + thumbnails — generated tooling state)
+docs/architecture/.structurizr/
