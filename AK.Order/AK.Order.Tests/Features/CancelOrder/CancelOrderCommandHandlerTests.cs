@@ -2,6 +2,7 @@ using AK.BuildingBlocks.Messaging.IntegrationEvents;
 using AK.Order.Application.Common.Interfaces;
 using AK.Order.Application.Features.CancelOrder;
 using AK.Order.Domain.Entities;
+using AK.Order.Domain.Enums;
 using OrderEntity = AK.Order.Domain.Entities.Order;
 using AK.Order.Tests.Common;
 using FluentAssertions;
@@ -23,7 +24,7 @@ public class CancelOrderCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ValidOrder_ReturnsTrue()
+    public async Task Handle_ValidOrder_ReturnsSuccessResult()
     {
         var order = TestDataFactory.CreateOrder();
         _repo.Setup(r => r.GetByIdAsync(order.Id, It.IsAny<CancellationToken>())).ReturnsAsync(order);
@@ -32,7 +33,8 @@ public class CancelOrderCommandHandlerTests
         var handler = new CancelOrderCommandHandler(_uow.Object, _publisher.Object);
         var result = await handler.Handle(new CancelOrderCommand(order.Id), CancellationToken.None);
 
-        result.Should().BeTrue();
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeTrue();
     }
 
     [Fact]
@@ -54,26 +56,45 @@ public class CancelOrderCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_OrderNotFound_ThrowsKeyNotFoundException()
+    public async Task Handle_OrderNotFound_ReturnsFailureResult()
     {
         _repo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((OrderEntity?)null);
 
         var handler = new CancelOrderCommandHandler(_uow.Object, _publisher.Object);
-        var act = async () => await handler.Handle(new CancelOrderCommand(Guid.NewGuid()), CancellationToken.None);
+        var result = await handler.Handle(new CancelOrderCommand(Guid.NewGuid()), CancellationToken.None);
 
-        await act.Should().ThrowAsync<KeyNotFoundException>();
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("not found");
     }
 
     [Fact]
-    public async Task Handle_AlreadyCancelled_ThrowsInvalidOperationException()
+    public async Task Handle_AlreadyCancelled_ReturnsFailureResult()
     {
         var order = TestDataFactory.CreateOrder();
         order.Cancel();
         _repo.Setup(r => r.GetByIdAsync(order.Id, It.IsAny<CancellationToken>())).ReturnsAsync(order);
 
         var handler = new CancelOrderCommandHandler(_uow.Object, _publisher.Object);
-        var act = async () => await handler.Handle(new CancelOrderCommand(order.Id), CancellationToken.None);
+        var result = await handler.Handle(new CancelOrderCommand(order.Id), CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>();
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("already cancelled");
+    }
+
+    [Fact]
+    public async Task Handle_DeliveredOrder_ReturnsFailureResult()
+    {
+        var order = TestDataFactory.CreateOrder();
+        order.UpdateStatus(OrderStatus.Confirmed);
+        order.UpdateStatus(OrderStatus.Processing);
+        order.UpdateStatus(OrderStatus.Shipped);
+        order.UpdateStatus(OrderStatus.Delivered);
+        _repo.Setup(r => r.GetByIdAsync(order.Id, It.IsAny<CancellationToken>())).ReturnsAsync(order);
+
+        var handler = new CancelOrderCommandHandler(_uow.Object, _publisher.Object);
+        var result = await handler.Handle(new CancelOrderCommand(order.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("Cannot cancel a delivered order");
     }
 }

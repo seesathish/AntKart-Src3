@@ -21,7 +21,7 @@ public class UpdateOrderStatusCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ValidCommand_ReturnsUpdatedOrderDto()
+    public async Task Handle_ValidCommand_ReturnsSuccessResultWithUpdatedDto()
     {
         var order = TestDataFactory.CreateOrder();
         _repo.Setup(r => r.GetByIdAsync(order.Id, It.IsAny<CancellationToken>())).ReturnsAsync(order);
@@ -30,30 +30,33 @@ public class UpdateOrderStatusCommandHandlerTests
         var handler = new UpdateOrderStatusCommandHandler(_uow.Object);
         var result = await handler.Handle(new UpdateOrderStatusCommand(order.Id, OrderStatus.Confirmed), CancellationToken.None);
 
-        result.Status.Should().Be("Confirmed");
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Status.Should().Be("Confirmed");
     }
 
     [Fact]
-    public async Task Handle_OrderNotFound_ThrowsKeyNotFoundException()
+    public async Task Handle_OrderNotFound_ReturnsFailureResult()
     {
         _repo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((OrderEntity?)null);
 
         var handler = new UpdateOrderStatusCommandHandler(_uow.Object);
-        var act = async () => await handler.Handle(new UpdateOrderStatusCommand(Guid.NewGuid(), OrderStatus.Processing), CancellationToken.None);
+        var result = await handler.Handle(new UpdateOrderStatusCommand(Guid.NewGuid(), OrderStatus.Processing), CancellationToken.None);
 
-        await act.Should().ThrowAsync<KeyNotFoundException>();
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("not found");
     }
 
     [Fact]
-    public async Task Handle_CancelledOrder_ThrowsInvalidOperationException()
+    public async Task Handle_InvalidTransition_ReturnsFailureResult()
     {
         var order = TestDataFactory.CreateOrder();
         order.Cancel();
         _repo.Setup(r => r.GetByIdAsync(order.Id, It.IsAny<CancellationToken>())).ReturnsAsync(order);
 
         var handler = new UpdateOrderStatusCommandHandler(_uow.Object);
-        var act = async () => await handler.Handle(new UpdateOrderStatusCommand(order.Id, OrderStatus.Processing), CancellationToken.None);
+        var result = await handler.Handle(new UpdateOrderStatusCommand(order.Id, OrderStatus.Processing), CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>();
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().NotBeNullOrEmpty();
     }
 }

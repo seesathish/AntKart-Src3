@@ -329,14 +329,16 @@ This contrasts with horizontal layering (separate `Commands/`, `Queries/`, `Vali
 
 > **Security:** `CreateOrderCommand` carries `UserId`, `CustomerEmail`, and `CustomerName` — all derived from the JWT at the endpoint layer via `http.GetUserId()`, `http.GetUserEmail()`, and `http.GetUserDisplayName()`. Clients never supply these fields. `CancelOrderCommandHandler` publishes `OrderCancelledIntegrationEvent` directly (not via SAGA) so notification consumers receive the cancellation signal.
 
-| Feature | Type | Returns |
-|---------|------|---------|
-| `CreateOrder` | Command | `OrderDto` |
-| `UpdateOrderStatus` | Command | `OrderDto` |
-| `CancelOrder` | Command | `bool` |
-| `GetOrderById` | Query | `OrderDto?` |
-| `GetOrders` | Query | `PagedResult<OrderDto>` |
-| `GetOrdersByUser` | Query | `PagedResult<OrderDto>` |
+| Feature | Type | Returns | Error strategy |
+|---------|------|---------|----------------|
+| `CreateOrder` | Command | `OrderDto` | throws (exception middleware → 400/409/500) |
+| `UpdateOrderStatus` | Command | `Result<OrderDto>` | returns `Result.Failure` for not-found and invalid transitions |
+| `CancelOrder` | Command | `Result<bool>` | returns `Result.Failure` for not-found, already-cancelled, delivered |
+| `GetOrderById` | Query | `OrderDto?` | returns null (endpoint maps to 404) |
+| `GetOrders` | Query | `PagedResult<OrderDto>` | throws (exception middleware) |
+| `GetOrdersByUser` | Query | `PagedResult<OrderDto>` | throws (exception middleware) |
+
+> **Result\<T\> pattern:** `CancelOrder` and `UpdateOrderStatus` return `Result<T>` (from `AK.BuildingBlocks.Common`) instead of throwing for expected business outcomes. "Order not found" and "invalid state transition" are expected — they happen because of valid user actions, not infrastructure failures. The endpoint maps `result.IsSuccess` → 204/200 and `result.Failure` → 409 Conflict. `CreateOrder` deliberately uses the exception-throwing pattern for comparison — the CQRS article covers both approaches side by side.
 
 ### 7.3 Validation Rules
 

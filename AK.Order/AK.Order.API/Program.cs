@@ -2,6 +2,7 @@ using AK.BuildingBlocks.Authentication;
 using AK.BuildingBlocks.HealthChecks;
 using AK.BuildingBlocks.Logging;
 using AK.BuildingBlocks.Swagger;
+using AK.BuildingBlocks.Versioning;
 using AK.Order.API.Endpoints;
 using AK.BuildingBlocks.Middleware;
 using AK.Order.Application.Extensions;
@@ -25,6 +26,10 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 // AddKeycloakAuthentication: JWT Bearer middleware, role extraction, admin/authenticated policies
 builder.Services.AddKeycloakAuthentication(builder.Configuration);
+
+// API versioning: default v1.0, URL segment (/api/v1/...) or header (api-version: 1.0).
+// Other services adopt this by calling AddStandardApiVersioning() in their Program.cs.
+builder.Services.AddStandardApiVersioning();
 
 // Adds a /health endpoint that returns 200 when the service is running.
 // Docker Compose uses this for depends_on health checks.

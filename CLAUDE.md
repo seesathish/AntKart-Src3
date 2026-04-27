@@ -99,7 +99,9 @@ AK.<Service>/
 - **Order number format:** `ORD-{yyyyMMdd}-{8-char-GUID-uppercase}` e.g. `ORD-20260418-A1B2C3D4`
 - **Domain events:** `OrderCreatedEvent`, `OrderStatusChangedEvent`, `OrderCancelledEvent`
 - **Order status state machine:** `_allowedTransitions` dictionary enforces valid transitions — Pending→Confirmed|Cancelled|PaymentFailed, Confirmed→Processing|Shipped|Cancelled, Processing→Shipped|Cancelled, Shipped→Delivered, Delivered/Cancelled are terminal (no further transitions). `UpdateStatus()` throws `InvalidOperationException` for invalid transitions.
-- **Tests:** 109 passing (domain, features, validators, behaviors, infrastructure with EF InMemory)
+- **Result\<T\> pattern:** `CancelOrderCommandHandler` and `UpdateOrderStatusCommandHandler` return `Result<T>` (BuildingBlocks) instead of throwing for expected failures (not found, invalid transition, already cancelled, delivered). Endpoints map `Result.IsSuccess` → 204/200, `Result.Failure` → 409 with error message. `CreateOrderCommandHandler` deliberately uses exceptions — the CQRS article compares both approaches.
+- **API versioning:** `AddStandardApiVersioning()` registered — v1.0 default, URL segment or `api-version` header. Other services adopt by calling the same single method.
+- **Tests:** 113 passing (domain, features, validators, behaviors, infrastructure with EF InMemory)
 - **Swagger:** `http://localhost:5080/swagger` (Development only)
 - **Design doc:** [AK.Order/ORDER_TECHNICAL_DESIGN.md](AK.Order/ORDER_TECHNICAL_DESIGN.md)
 
@@ -142,6 +144,7 @@ AK.<Service>/
 - `Messaging/MassTransitExtensions` — `AddRabbitMqMassTransit(config, servicePrefix, configure)` helper; each service passes a unique prefix ("order", "notification", "payments", "cart", "products", "identity") so consumers get uniquely-named RabbitMQ queues — e.g. `notification-payment-failed` and `order-payment-failed` are separate queues both bound to the same exchange (fan-out, not competing consumers)
 - `Resilience/ResilienceExtensions` — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, `AddNpgsqlResilience()` (Npgsql uses exponential backoff + jitter to prevent thundering herd on DB reconnect)
 - `Swagger/SwaggerExtensions` — `UseSwaggerInDevelopment(title)` gates `UseSwagger()` + `UseSwaggerUI()` to Development only; `AddSwaggerGen()` registration stays in each service
+- `Versioning/ApiVersioningExtensions` — `AddStandardApiVersioning()` sets default v1.0, accepts version via URL segment (`/api/v1/`) or `api-version` header; currently demonstrated in AK.Order, other services adopt by calling this single method
 
 ### ✅ AK.IntegrationTests  (Event Bus Tests)
 - **Framework:** MassTransit in-memory test harness (no RabbitMQ, no DB, no host)

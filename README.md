@@ -165,6 +165,7 @@ AntKart/
 | Resilience | Polly v8 (retry, circuit breaker, timeout) | [RESILIENCE.md](RESILIENCE.md) |
 | Observability | Serilog + Elasticsearch + Kibana | [OBSERVABILITY.md](OBSERVABILITY.md) |
 | Integration Tests | MassTransit in-memory test harness | [INTEGRATION_TESTS.md](AK.IntegrationTests/INTEGRATION_TESTS.md) |
+| Architecture Decisions | Why each key technology was chosen | [docs/adr/](docs/adr/) |
 
 ---
 
@@ -431,9 +432,9 @@ dotnet test
 | AK.Products.Tests | 202 |
 | AK.Discount.Tests | 53 |
 | AK.ShoppingCart.Tests | 88 |
-| AK.Order.Tests | 109 |
+| AK.Order.Tests | 113 |
 | AK.UserIdentity.Tests | 20 |
 | AK.IntegrationTests | 35 |
 | AK.Payments.Tests | 70 |
 | AK.Notification.Tests | 37 |
-| **Total** | **617** |
+| **Total** | **621** |

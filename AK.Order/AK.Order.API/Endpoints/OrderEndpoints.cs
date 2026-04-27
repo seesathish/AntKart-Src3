@@ -78,15 +78,19 @@ public static class OrderEndpoints
 
         // PUT /api/orders/{id}/status — admin only
         // Status transitions are admin-controlled (e.g. marking an order as Shipped).
+        // Handler returns Result<OrderDto>: Failure maps to 409 with the domain's error message.
         group.MapPut("/{id:guid}/status", async (Guid id, UpdateOrderStatusRequest req, IMediator mediator) =>
         {
-            var order = await mediator.Send(new UpdateOrderStatusCommand(id, req.NewStatus));
-            return Results.Ok(order);
+            var result = await mediator.Send(new UpdateOrderStatusCommand(id, req.NewStatus));
+            return result.IsSuccess
+                ? Results.Ok(result.Value)
+                : Results.Conflict(new { error = result.Error });
         })
         .RequireAuthorization("admin")
         .WithName("UpdateOrderStatus");
 
         // DELETE /api/orders/{id} — owner or admin
+        // Handler returns Result<bool>: Failure maps to 409 with the domain's error message.
         group.MapDelete("/{id:guid}", async (Guid id, HttpContext http, IMediator mediator) =>
         {
             var order = await mediator.Send(new GetOrderByIdQuery(id));
@@ -96,8 +100,10 @@ public static class OrderEndpoints
             if (!isAdmin && order.UserId != http.GetUserId())
                 return Results.Forbid();
 
-            await mediator.Send(new CancelOrderCommand(id));
-            return Results.NoContent();
+            var result = await mediator.Send(new CancelOrderCommand(id));
+            return result.IsSuccess
+                ? Results.NoContent()
+                : Results.Conflict(new { error = result.Error });
         })
         .WithName("CancelOrder");
     }
