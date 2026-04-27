@@ -235,9 +235,14 @@ if [ -n "$ORDER_ID" ]; then
   CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $USER_TOKEN" "http://localhost:8083/api/orders/me")
   check "GET /api/orders/me (user auth)" $CODE 200
 
-  # The SAGA moves the order to Confirmed automatically after stock reservation.
-  # Wait for that to complete before attempting a further status transition.
-  sleep 2
+  # The SAGA moves the order Pending→Confirmed via 3 RabbitMQ hops (OrderCreated→StockReserved→Confirmed).
+  # Poll until Confirmed (status=2) or timeout after 15s to avoid flaky timing.
+  SAGA_WAIT=0
+  while [ $SAGA_WAIT -lt 15 ]; do
+    ORDER_STATUS=$(curl -s -H "Authorization: Bearer $ADMIN_TOKEN" "http://localhost:8083/api/orders/$ORDER_ID" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+    [ "$ORDER_STATUS" = "Confirmed" ] && break
+    sleep 1; SAGA_WAIT=$((SAGA_WAIT + 1))
+  done
   CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "http://localhost:8083/api/orders/$ORDER_ID/status" \
     -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
     -d '{"newStatus":3}')

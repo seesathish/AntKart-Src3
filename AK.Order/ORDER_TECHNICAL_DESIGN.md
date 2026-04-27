@@ -584,7 +584,7 @@ Updates the status of an order.
 
 **Request body:**
 ```json
-{ "newStatus": 1 }
+{ "newStatus": 2 }
 ```
 
 Status values (use integer): `Pending=1, Confirmed=2, Processing=3, Shipped=4, Delivered=5, Cancelled=6, Paid=7, PaymentFailed=8`
@@ -637,14 +637,14 @@ All tests are pure unit tests or EF InMemory integration tests — no network, n
 |------|-----------|-------|
 | Order aggregate | `OrderTests.cs` | 20 |
 | OrderItem entity | `OrderItemTests.cs` | 8 |
-| ShippingAddress value object | `ShippingAddressTests.cs` | 5 |
+| ShippingAddress value object | `ShippingAddressTests.cs` | 7 |
 | Domain events | `DomainEventsTests.cs` | 4 |
 | Specifications | `SpecificationTests.cs` | 10 |
 | CreateOrder handler | `CreateOrderCommandHandlerTests.cs` | 4 |
 | CreateOrder validator | `CreateOrderValidatorTests.cs` | 7 |
 | UpdateOrderStatus handler | `UpdateOrderStatusCommandHandlerTests.cs` | 3 |
 | UpdateOrderStatus validator | `UpdateOrderStatusValidatorTests.cs` | 3 |
-| CancelOrder handler | `CancelOrderCommandHandlerTests.cs` | 3 |
+| CancelOrder handler | `CancelOrderCommandHandlerTests.cs` | 5 |
 | CancelOrder validator | `CancelOrderValidatorTests.cs` | 2 |
 | GetOrderById handler | `GetOrderByIdQueryHandlerTests.cs` | 2 |
 | GetOrders handler | `GetOrdersQueryHandlerTests.cs` | 2 |
@@ -654,7 +654,7 @@ All tests are pure unit tests or EF InMemory integration tests — no network, n
 | ValidationBehavior | `ValidationBehaviorTests.cs` | 3 |
 | OrderRepository (EF InMemory) | `OrderRepositoryTests.cs` | 10 |
 | UnitOfWork (EF InMemory) | `UnitOfWorkTests.cs` | 3 |
-| **Total** | | **109** |
+| **Total** | | **113** |
 
 ### Mock Strategy
 

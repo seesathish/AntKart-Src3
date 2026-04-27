@@ -19,6 +19,7 @@
 | `AK.BuildingBlocks.Logging` | SerilogExtensions |
 | `AK.BuildingBlocks.HealthChecks` | HealthCheckExtensions |
 | `AK.BuildingBlocks.Swagger` | SwaggerExtensions |
+| `AK.BuildingBlocks.Versioning` | ApiVersioningExtensions |
 
 ---
 
@@ -455,6 +456,40 @@ Gates `UseSwagger()` + `UseSwaggerUI()` to the `Development` environment only. `
 
 ---
 
+## Versioning
+
+### `ApiVersioningExtensions.AddStandardApiVersioning()`
+
+```csharp
+// Program.cs (API versioning):
+builder.Services.AddStandardApiVersioning();
+```
+
+Registers `Asp.Versioning.Http` with these defaults:
+
+| Setting | Value |
+|---------|-------|
+| Default version | `1.0` |
+| Assume default when unspecified | `true` — existing clients without a version header continue to work |
+| Report versions | `true` — adds `api-supported-versions` response header |
+| Version readers | URL segment (`/api/v1/`) **and** `api-version` header (both accepted) |
+
+**Adding v2 to an endpoint group:**
+
+```csharp
+var versionSet = app.NewApiVersionSet()
+    .HasApiVersion(new ApiVersion(1, 0))
+    .HasApiVersion(new ApiVersion(2, 0))
+    .Build();
+
+var v1 = app.MapGroup("/api/v1/orders").WithApiVersionSet(versionSet).MapToApiVersion(1, 0);
+var v2 = app.MapGroup("/api/v2/orders").WithApiVersionSet(versionSet).MapToApiVersion(2, 0);
+```
+
+v1 and v2 coexist — existing clients are unaffected when v2 launches. Currently demonstrated in `AK.Order`; other services adopt it by calling `AddStandardApiVersioning()` in their `Program.cs`.
+
+---
+
 ## Adding a new service — BuildingBlocks checklist
 
 When building a new microservice, use these BuildingBlocks components:
@@ -475,6 +510,7 @@ When building a new microservice, use these BuildingBlocks components:
 3. API / Grpc layer
    AddKeycloakAuthentication()     ← JWT auth
    UseKeycloakAuth()               ← auth middleware
+   AddStandardApiVersioning()      ← URL-segment + header versioning
    UseMiddleware<ExceptionHandlerMiddleware>()
    UseMiddleware<CorrelationIdMiddleware>()
    UseSwaggerInDevelopment("AK.<Name> API v1")

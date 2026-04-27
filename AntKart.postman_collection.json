@@ -364,11 +364,11 @@
         },
         {
           "name": "PUT Update Order Status (admin only)",
-          "description": "Requires admin role. newStatus values: 0=Pending, 1=Confirmed, 2=Processing, 3=Shipped, 4=Delivered, 5=Cancelled, 6=PaymentFailed",
+          "description": "Requires admin role. newStatus values: Pending=1, Confirmed=2, Processing=3, Shipped=4, Delivered=5, Cancelled=6, Paid=7, PaymentFailed=8",
           "request": {
             "method": "PUT",
             "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}","type":"text"}],
-            "body": { "mode": "raw", "raw": "{\n  \"newStatus\": 1\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"newStatus\": 2\n}", "options": {"raw":{"language":"json"}} },
             "url": { "raw": "{{orderUrl}}/api/orders/{{orderId}}/status", "host": ["{{orderUrl}}"], "path": ["api","orders","{{orderId}}","status"] }
           }
         },

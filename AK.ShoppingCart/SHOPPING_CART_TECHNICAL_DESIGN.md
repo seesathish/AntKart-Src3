@@ -267,8 +267,8 @@ AK.ShoppingCart/
 classDiagram
     class Cart {
         +string UserId
-        +DateTime CreatedAt
-        +DateTime UpdatedAt
+        +DateTimeOffset CreatedAt
+        +DateTimeOffset? UpdatedAt
         +IReadOnlyList~CartItem~ Items
         +decimal TotalAmount
         +int TotalItems
@@ -475,8 +475,8 @@ sealed record CartDto(
     IReadOnlyList<CartItemDto> Items,
     decimal TotalAmount,
     int TotalItems,
-    DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? UpdatedAt);
 ```
 
 ### 7.6 CartMapper
@@ -534,8 +534,8 @@ Implements `ICartRepository`. Serialises cart state as a JSON snapshot using `Sy
 ```csharp
 private sealed record CartSnapshot(
     string UserId,
-    DateTime CreatedAt,
-    DateTime UpdatedAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? UpdatedAt,
     List<CartItemSnapshot> Items);
 
 private sealed record CartItemSnapshot(
