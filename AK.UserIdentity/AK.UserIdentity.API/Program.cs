@@ -8,6 +8,7 @@ using AK.UserIdentity.API.Middleware;
 using AK.UserIdentity.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 
 builder.AddSerilogLogging();
 

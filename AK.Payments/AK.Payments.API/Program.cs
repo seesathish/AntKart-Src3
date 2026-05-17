@@ -9,6 +9,7 @@ using AK.Payments.Application.Extensions;
 using AK.Payments.Infrastructure.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 
 builder.AddSerilogLogging();
 

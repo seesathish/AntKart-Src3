@@ -154,6 +154,7 @@ AntKart/
 ├── EVENTBUS.md           Event bus & SAGA design
 ├── RESILIENCE.md         Circuit breaker & Polly design
 ├── OBSERVABILITY.md      ELK observability design
+├── SECURITY_TESTS.md     Ethical security test guide (15 categories)
 └── nuget.config
 ```
 
@@ -183,6 +184,7 @@ AntKart/
 | Integration Tests | MassTransit in-memory test harness | [INTEGRATION_TESTS.md](AK.IntegrationTests/INTEGRATION_TESTS.md) |
 | Architecture Decisions | Why each key technology was chosen | [docs/adr/](docs/adr/) |
 | C4 Architecture | System context, containers, components, and code diagrams | [C4Architecture.md](C4Architecture.md) |
+| Security Tests | Ethical black-box & grey-box security test guide (15 categories) | [SECURITY_TESTS.md](SECURITY_TESTS.md) |
 
 ---
 

@@ -14,6 +14,7 @@ using Ocelot.Provider.Polly;
 // Each route specifies: upstream path, downstream service, rate limit, and QoS circuit breaker.
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 
 // Load config sources in priority order (last wins on duplicate keys):
 //   appsettings.json → appsettings.{Environment}.json → ocelot.json → ocelot.{Environment}.json → env vars
@@ -32,6 +33,10 @@ builder.AddSerilogLogging();
 // Downstream services also validate JWTs independently (defence in depth).
 builder.Services.AddKeycloakAuthentication(builder.Configuration);
 builder.Services.AddDefaultHealthChecks();
+
+// Required by Ocelot's rate limiting middleware — stores per-route request counters.
+// Without this, EnableRateLimiting in ocelot.json is silently ignored.
+builder.Services.AddMemoryCache();
 
 // AddPolly enables Ocelot's QoS (circuit breaker) per route, configured in ocelot.json.
 builder.Services.AddOcelot(builder.Configuration).AddPolly();

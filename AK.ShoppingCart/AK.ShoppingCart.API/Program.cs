@@ -8,6 +8,7 @@ using AK.ShoppingCart.Application.Extensions;
 using AK.ShoppingCart.Infrastructure.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 
 builder.AddSerilogLogging();
 

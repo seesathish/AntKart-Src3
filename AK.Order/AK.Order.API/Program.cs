@@ -12,6 +12,7 @@ using AK.Order.Infrastructure.Extensions;
 // The order of registration and middleware matters — comments explain why each step is here.
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 
 // Replaces the default Microsoft.Extensions.Logging with Serilog.
 // Serilog outputs structured JSON logs to console, rolling file, and Elasticsearch.
