@@ -171,6 +171,84 @@ Exchange and queue names are auto-formatted by MassTransit using kebab-case conv
 
 ---
 
+## RabbitMQ Management Portal
+
+### Access
+| URL | `http://localhost:15672` |
+|-----|--------------------------|
+| Username | `guest` |
+| Password | `guest` |
+
+---
+
+### What to look at
+
+#### Exchanges
+**RabbitMQ → Exchanges tab**
+
+Every integration event gets its own exchange (named after the event class in kebab-case). Useful ones to inspect:
+
+| Exchange | Published by |
+|----------|-------------|
+| `order-created-integration-event` | AK.Order |
+| `stock-reserved-integration-event` | AK.Products |
+| `stock-reservation-failed-integration-event` | AK.Products |
+| `order-confirmed-integration-event` | AK.Order (SAGA) |
+| `order-cancelled-integration-event` | AK.Order (SAGA) |
+| `payment-initiated-integration-event` | AK.Payments |
+| `payment-succeeded-integration-event` | AK.Payments |
+| `payment-failed-integration-event` | AK.Payments |
+| `user-registered-integration-event` | AK.UserIdentity |
+
+Click an exchange → **Bindings** tab to see which queues are bound to it (fan-out delivery).
+
+#### Queues
+**RabbitMQ → Queues tab**
+
+Each consumer gets its own uniquely-named queue (prefixed by service name):
+
+| Queue | Consumer service |
+|-------|----------------|
+| `order-order-confirmed` | AK.Order — OrderConfirmedConsumer |
+| `order-order-cancelled` | AK.Order — OrderCancelledConsumer |
+| `order-payment-succeeded` | AK.Order — PaymentSucceededConsumer |
+| `order-payment-failed` | AK.Order — PaymentFailedConsumer |
+| `notification-user-registered` | AK.Notification |
+| `notification-order-created` | AK.Notification |
+| `notification-payment-succeeded` | AK.Notification |
+| `notification-payment-failed` | AK.Notification |
+| `products-reserve-stock` | AK.Products — ReserveStockConsumer |
+| `cart-order-confirmed` | AK.ShoppingCart — ClearCartOnOrderConfirmedConsumer |
+
+Click a queue to see:
+- **Ready** — messages waiting to be consumed
+- **Unacked** — messages being processed by a consumer
+- **Total** — throughput counter
+- **Messages** tab — browse actual message payloads (useful for debugging stuck messages)
+
+#### Monitoring a live event flow
+1. Go to **Queues** — note all queues show 0 Ready
+2. Trigger an action (e.g. create an order via Postman)
+3. Refresh Queues — messages briefly appear as Unacked then clear (fast consumers)
+4. If a queue shows **Ready > 0** for more than a few seconds, the consumer is down or erroring — check that service's logs
+
+#### Dead-letter queues
+Failed messages after all retries (3 × exponential backoff) land in dead-letter queues named `<queue>_skipped` or `<queue>_error`. These appear in the Queues list if any message has been dead-lettered. Click the queue → **Get messages** to inspect the failed payload and reason.
+
+---
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| Queue has Ready messages accumulating | Consumer service is down | Check `docker logs antkart-<service>` |
+| Exchange missing | Service never started (no consumers registered) | `docker-compose up` the relevant service |
+| Messages appearing in `_error` queue | Consumer threw unhandled exception | Inspect message payload; check service logs |
+| No exchanges visible at all | RabbitMQ just restarted; services not yet connected | Wait ~30s for services to reconnect; check service healthcheck |
+| `guest` login rejected | RabbitMQ default user disabled | Check `RABBITMQ_DEFAULT_USER/PASS` env vars in docker-compose.yml |
+
+---
+
 ## ReserveStockConsumer (AK.Products)
 
 Location: `AK.Products/AK.Products.Application/Consumers/ReserveStockConsumer.cs`

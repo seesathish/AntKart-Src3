@@ -124,21 +124,157 @@ PaymentId={PaymentId} reason={Reason}                                        ←
 
 ---
 
-## Kibana Setup
+## Kibana — Full Setup Guide
+
+### Access
+| URL | `http://localhost:5601` |
+|-----|------------------------|
+| No login required | Security is disabled (`xpack.security.enabled=false`) |
+
+---
+
+### Step 1 — Verify Elasticsearch received logs
+
+Before creating a data view, confirm logs are actually arriving.
+
+Open in your browser:
+```
+http://localhost:9200/_cat/indices?v
+```
+
+You should see a row like:
+```
+health status index                            ...  docs.count
+green  open   antkart-logs-production-2026.05  ...  1234
+```
+
+If the index is missing: the services haven't started yet, or Elasticsearch isn't healthy. Check:
+```
+http://localhost:9200/_cluster/health?pretty
+```
+`status` should be `green` or `yellow` (never `red`).
+
+---
+
+### Step 2 — Create a Data View in Kibana
 
 1. Open `http://localhost:5601`
-2. Navigate to **Stack Management → Data Views**
-3. Create a Data View with pattern: `antkart-logs-*`
-4. Set the time field to `@timestamp`
-5. Go to **Discover** to query logs across all services
+2. Click the **hamburger menu** (≡) top-left → **Stack Management**
+3. Under **Kibana** → click **Data Views**
+4. Click **Create data view** (top-right button)
+5. Fill in:
+   - **Name:** `AntKart Logs`
+   - **Index pattern:** `antkart-logs-*`
+   - **Timestamp field:** `@timestamp`
+6. Click **Save data view to Kibana**
 
-Useful KQL queries:
+You only need to do this once — Kibana remembers it across restarts (data is stored in Elasticsearch).
+
+---
+
+### Step 3 — Open Discover
+
+1. Click the **hamburger menu** (≡) → **Discover**
+2. Select the **AntKart Logs** data view from the dropdown (top-left, below the search bar)
+3. Set the time range (top-right) to **Last 1 hour** or **Today**
+4. Click **Refresh** — all log entries from all services appear
+
+Each row is one log event. The important columns are:
+
+| Field | Meaning |
+|-------|---------|
+| `@timestamp` | When the log was emitted |
+| `level` | `INF`, `WRN`, `ERR`, `DBG` |
+| `message` | The rendered log message |
+| `ServiceName` | Which microservice emitted it (e.g. `AK.Order.API`) |
+| `CorrelationId` | Request trace ID — same across all services for one user request |
+| `SourceContext` | Class that logged it (e.g. `AK.Order.Application.Features.CreateOrder.CreateOrderCommandHandler`) |
+
+Click any row to expand it and see all fields.
+
+---
+
+### Step 4 — Add columns to the table
+
+By default Discover shows only `@timestamp` and `message`. To make it more readable:
+
+1. In the **Available fields** panel (left sidebar), hover over a field name
+2. Click **+** to add it as a column
+3. Recommended columns: `level`, `ServiceName`, `CorrelationId`, `message`
+
+---
+
+### Useful KQL Queries
+
+Type these in the search bar at the top of Discover:
+
+#### See all errors across all services
 ```kql
-ServiceName: "AK.Order.API" AND Level: "Error"
-CorrelationId: "abc-123"
-MessageTemplate: *OrderCreated*
-ServiceName: "AK.Payments.API" AND (PaymentId: * OR OrderId: *)
+level: "ERR"
 ```
+
+#### See logs from one service only
+```kql
+ServiceName: "AK.Order.API"
+```
+
+#### See errors from one service
+```kql
+ServiceName: "AK.Payments.API" AND level: "ERR"
+```
+
+#### Trace a single request end-to-end (copy CorrelationId from any log row)
+```kql
+CorrelationId: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+```
+This shows the full request journey across Gateway → Order → Products → Notification.
+
+#### Find logs related to a specific order
+```kql
+message: *ORD-20260517*
+```
+
+#### Find all notification send failures
+```kql
+ServiceName: "AK.Notification.API" AND level: "ERR"
+```
+
+#### Find SAGA activity
+```kql
+SourceContext: *OrderSaga*
+```
+
+#### Find payment events
+```kql
+ServiceName: "AK.Payments.API" AND message: *payment*
+```
+
+---
+
+### What each service logs
+
+| Service | Key log events |
+|---------|---------------|
+| AK.Gateway | Incoming requests, route matches, rate limit rejections |
+| AK.UserIdentity | Login attempts, register events, role assignments |
+| AK.Products | Product queries, stock reservation start/success/failure |
+| AK.ShoppingCart | Cart read/write, cart cleared on order confirmed |
+| AK.Order | Order created, SAGA state transitions, status updates |
+| AK.Payments | Payment initiated, signature verified/failed, events published |
+| AK.Notification | Consumer received, email sent/failed, template rendered |
+
+---
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| No index in `_cat/indices` | Services not shipping logs | Check `Elasticsearch__Url` env var is set on each service |
+| Index exists but Discover shows 0 results | Wrong time range | Expand time picker to **Last 7 days** |
+| `level` field missing | Old Serilog template | Ensure `SerilogExtensions.AddSerilogLogging()` is called in each service's `Program.cs` |
+| Kibana shows "No data views" | Data view not created yet | Follow Step 2 above |
+| Kibana unreachable | Elasticsearch not healthy | Check `http://localhost:9200/_cluster/health` — wait until `status` is not `red` |
+| `CorrelationId` missing from some logs | Request didn't pass through CorrelationIdMiddleware | Middleware must be registered before the endpoint routes in `Program.cs` |
 
 ---
 

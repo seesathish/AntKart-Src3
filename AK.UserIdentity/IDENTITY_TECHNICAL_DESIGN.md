@@ -325,6 +325,104 @@ Keycloak starts with `--import-realm` — the `keycloak/antkart-realm.json` file
 
 ---
 
+## Keycloak Admin Portal
+
+### Access
+| URL | `http://localhost:8090` |
+|-----|------------------------|
+| Username | `admin` |
+| Password | `admin` |
+
+After login, select the **antkart** realm from the top-left dropdown (default opens as `master` realm).
+
+---
+
+### Manage Users
+
+**Keycloak → antkart realm → Users**
+
+| Task | Steps |
+|------|-------|
+| List all users | Users → search or leave blank → Enter |
+| View a user's details | Click the user row → Details tab |
+| Check assigned roles | Click user → Role mappings tab → Realm roles |
+| Reset a password | Click user → Credentials tab → Set password → toggle Temporary off |
+| Verify email/name | Click user → Details tab |
+| Delete a user | Click user → Actions → Delete |
+
+**Verify a registration worked:** After calling `POST /api/auth/register`, go to Users and search by the email you registered — the new account appears with `user` role assigned.
+
+---
+
+### Manage Sessions
+
+**Keycloak → antkart realm → Sessions**
+
+- Shows all active sessions (logged-in users) and which client they authenticated with (`antkart-client`)
+- **Revoke all sessions:** Sessions → Actions → Sign out all active sessions — useful for forcing re-login after role changes
+
+---
+
+### Manage Roles
+
+**Keycloak → antkart realm → Realm roles**
+
+AntKart uses two realm-level roles:
+
+| Role | Purpose |
+|------|---------|
+| `user` | Standard authenticated user — cart, orders, payments |
+| `admin` | Full access — product management, all orders, user administration |
+
+To assign a role to a user manually: Users → select user → Role mappings → Assign role → select `admin` or `user`.
+
+---
+
+### Manage Clients
+
+**Keycloak → antkart realm → Clients → antkart-client**
+
+Key settings:
+- **Client authentication:** ON (confidential client)
+- **Direct access grants:** ON — allows `grant_type=password` (used by `/api/auth/login`)
+- **Service accounts:** ON — allows the client to obtain tokens without a user (used for Admin API calls from `KeycloakAdminService`)
+- **Client secret:** Settings → Credentials tab → Client secret: `antkart-secret`
+
+---
+
+### Inspect a JWT Token
+
+To decode and verify a token issued by Keycloak:
+
+1. Call `POST /api/auth/login` → copy the `accessToken`
+2. Paste it at [jwt.io](https://jwt.io) (offline tool — never paste real production tokens)
+3. Verify the payload contains:
+   - `"iss": "http://localhost:8090/realms/antkart"`
+   - `"azp": "antkart-client"`
+   - `"realm_access": { "roles": ["user"] }` (or `["admin","user"]`)
+   - `"sub"` — the Keycloak user UUID (this is what `GetUserId()` extracts)
+
+Alternatively, call the Keycloak introspection endpoint directly:
+```bash
+curl -s -X POST http://localhost:8090/realms/antkart/protocol/openid-connect/token/introspect \
+  -d "token=<access_token>&client_id=antkart-client&client_secret=antkart-secret"
+```
+
+---
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| Login returns 401 | Wrong password or user doesn't exist | Check Users in admin portal |
+| Login returns 400 `invalid_client` | Wrong `ClientId` or `ClientSecret` in config | Check Clients → antkart-client → Credentials |
+| Register returns 409 | Username or email already exists in Keycloak | Check Users, delete if needed |
+| Token missing `admin` role | Role not assigned | Users → Role mappings → assign `admin` |
+| Services return 401 on valid token | `Authority` URL mismatch (localhost vs keycloak) | In Docker use `http://keycloak:8080`; in dev use `http://localhost:8090` |
+| Keycloak not starting | Port 8090 in use | `docker ps` — check if another container holds it |
+
+---
+
 ## Configuration (appsettings.json)
 
 All services share the same Keycloak configuration block:
@@ -374,12 +472,12 @@ In Docker Compose, `localhost:8090` is replaced by `keycloak:8080` (internal Doc
 
 ## Tests
 
-**Total:** 17 tests
+**Total:** 20 tests
 
 | Test Class | Count | Coverage |
 |------------|-------|---------|
 | `KeycloakServiceTests` | 9 | Login success/failure, refresh success/failure, getUserInfo success/failure, register publishes event, register conflict |
-| `KeycloakAdminServiceTests` | 4 | GetUsers success/failure, AssignRole success/notFound |
+| `KeycloakAdminServiceTests` | 7 | GetUsers success/failure/missing optional fields, AssignRole success/step-2 failure/notFound, GetAdminTokenAsync |
 | `ExceptionHandlerMiddlewareTests` | 4 | No exception (200), 404, 409, 500 |
 
 All tests use `Moq.Protected` to mock `HttpMessageHandler` — no real HTTP calls, no Keycloak required. `KeycloakServiceTests` uses `Mock<IPublishEndpoint>` to verify `UserRegisteredIntegrationEvent` is published on successful registration.
