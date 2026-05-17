@@ -155,6 +155,9 @@ AntKart/
 ├── RESILIENCE.md         Circuit breaker & Polly design
 ├── OBSERVABILITY.md      ELK observability design
 ├── SECURITY_TESTS.md     Ethical security test guide (15 categories)
+├── docs/
+│   ├── adr/              Architecture Decision Records
+│   └── skills/           Step-by-step development & maintenance guides (12 skills)
 └── nuget.config
 ```
 
@@ -185,6 +188,7 @@ AntKart/
 | Architecture Decisions | Why each key technology was chosen | [docs/adr/](docs/adr/) |
 | C4 Architecture | System context, containers, components, and code diagrams | [C4Architecture.md](C4Architecture.md) |
 | Security Tests | Ethical black-box & grey-box security test guide (15 categories) | [SECURITY_TESTS.md](SECURITY_TESTS.md) |
+| Skills | Step-by-step guides for development, maintenance, and verification tasks | [docs/skills/](docs/skills/) |
 
 ---
 
