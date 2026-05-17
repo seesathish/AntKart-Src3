@@ -756,6 +756,95 @@ await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(
 
 ---
 
+## Testing Notifications
+
+### Local dev — Mailhog (default)
+
+Mailhog is a local SMTP trap. Every email sent by the notification service is captured there — nothing goes to a real inbox.
+
+**Start the stack (standard):**
+```bash
+docker-compose up -d
+```
+
+**Open the inbox:** `http://localhost:8025`
+
+All outbound emails appear here automatically — no configuration needed.
+
+#### Trigger each email type
+
+| Email | How to trigger |
+|-------|---------------|
+| **Welcome** | `POST /api/identity/register` (register a new user) |
+| **Order Confirmation** | `POST /api/orders` (create an order) |
+| **Order Confirmed** | SAGA flow: stock reserved → order moves to `Confirmed` automatically |
+| **Order Cancelled** | `DELETE /api/orders/{id}` |
+| **Payment Succeeded** | `POST /api/payments/verify` with a valid Razorpay signature |
+| **Payment Failed** | Verify call with mismatched signature — consumer publishes `PaymentFailedIntegrationEvent` |
+
+#### End-to-end local test flow
+
+1. Register a user → check Mailhog for **Welcome** email
+2. Log in → get JWT
+3. Add items to cart → create order → check Mailhog for **Order Confirmation**
+4. Wait ~5 s (SAGA runs) → check Mailhog for **Order Confirmed**
+5. Initiate and verify payment → check Mailhog for **Payment Succeeded**
+
+Mailhog renders both subject line and full body. You can also query the notification audit trail:
+```
+GET http://localhost:9090/api/notifications
+Authorization: Bearer <token>
+```
+
+---
+
+### Real email — Gmail SMTP
+
+Use the `docker-compose.gmail.yml` override to send real emails to actual inboxes.
+
+#### Gmail App Password setup (one-time)
+
+1. Sign in to `antkartadmin@gmail.com`
+2. **Google Account → Security → 2-Step Verification** — enable if not already on
+3. **Google Account → Security → 2-Step Verification → App passwords**
+4. Click **Create** → name it "AntKart SMTP"
+5. Copy the 16-character code shown (e.g. `xxxx xxxx xxxx xxxx`)
+6. Open `docker-compose.gmail.yml` and set:
+   ```yaml
+   - EmailSettings__Password=<16-char-app-password-no-spaces>
+   ```
+7. This file is gitignored — never commit it
+
+#### Start the stack with Gmail
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.gmail.yml up -d
+```
+
+The notification service starts with Gmail SMTP instead of Mailhog. Mailhog still runs but receives nothing.
+
+#### Verify real delivery
+
+1. Register a new user (`POST /api/identity/register`) with `email` set to any inbox you control
+2. The **Welcome** email should arrive within seconds at that address
+3. Create an order to confirm the **Order Confirmation** email also delivers
+
+**Important:** The `EmailSettings__From` is `antkartadmin@gmail.com`. Gmail SMTP enforces that the authenticated user matches the `From` address — changing `From` to a different address will cause a send failure.
+
+---
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| Email not in Mailhog | Consumer not running or event not published | Check `docker logs antkart-notification-api` and RabbitMQ at `http://localhost:15672` (guest/guest) |
+| `535 Authentication failed` | Wrong Gmail password | Ensure you're using an App Password, not the account password |
+| `Connection refused port 587` | Gmail SMTP blocked | Check `EmailSettings__EnableSsl=true` and port `587` in `docker-compose.gmail.yml` |
+| `Notification` row in DB has `Status=Failed` | Channel send threw | Check `ErrorMessage` column via `GET /api/notifications/admin` (admin JWT) |
+| Email arrives but from wrong address | `From` doesn't match Gmail account | Keep `EmailSettings__From=antkartadmin@gmail.com` |
+
+---
+
 ## Implementation Order
 
 When building, follow this sequence to keep the solution in a buildable state at every step:
