@@ -45,6 +45,34 @@ dotnet test AntKart.sln -m --logger "console;verbosity=minimal" 2>&1
 
 ---
 
+## ⚠️ Getting an Accurate Total — disable the terminal logger
+
+The default `dotnet test AntKart.sln` prints a single aggregated headline:
+
+```
+Test summary: total: 618, failed: 0, succeeded: 618, skipped: 0
+```
+
+That headline comes from the .NET SDK **terminal logger**, whose test-result
+aggregation is **racy** when summing results streamed from multiple parallel
+xunit/VSTest assemblies. It can under-count to a different number on each run
+(e.g. 440, 477, 598) **even though every assembly passes and the real total is 618**.
+This is an SDK display bug, not missing or deleted tests.
+
+To get a trustworthy count, **turn the terminal logger off** so the accurate
+per-assembly VSTest output is shown:
+
+```bash
+dotnet test AntKart.sln --tl:off --nologo
+```
+
+Each project then reports `Passed! … Total: N` with `Failed: 0`; the eight
+assemblies sum to **618**. Equivalently, use an explicit logger
+(`--logger "console;verbosity=normal"`) or emit a `.trx` and count from it —
+never trust the terminal-logger headline for the count.
+
+---
+
 ## Run Tests for a Single Service
 
 ```bash
