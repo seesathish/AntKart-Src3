@@ -24,7 +24,7 @@
 | Architecture decisions | `docs/adr/ADR-00X-*.md` | A key architectural decision changes |
 | API contract | `AntKart.postman_collection.json` | Endpoint added, removed, or path changed |
 | Event bus map | `docs/design/EVENTBUS.md` | Integration event or consumer added/changed |
-| Security guide | `SECURITY_TESTS.md` | Auth pattern changed, vulnerability fixed |
+| Security guide | `docs/test/SECURITY_TESTS.md` | Auth pattern changed, vulnerability fixed |
 | Observability | `docs/design/OBSERVABILITY.md` | New service added (new log streams) |
 | Gateway guide | `AK.Gateway/API_GATEWAY.md` | Route added or changed |
 
@@ -159,7 +159,7 @@ grep -A 3 "exchange\|queue" docs/design/EVENTBUS.md | head -40
 
 ---
 
-## Step 7 — SECURITY_TESTS.md
+## Step 7 — docs/test/SECURITY_TESTS.md
 
 Update when:
 - New endpoint added that involves user data → add to test 4/4b/15 examples
@@ -201,7 +201,7 @@ If the team adopts a new documentation surface, add it to this file and to the s
 - [ ] `docs/design/EVENTBUS.md` → Exchanges table, Queues table
 
 **If auth or security changed:**
-- [ ] `SECURITY_TESTS.md` → baseline table, vulnerability history
+- [ ] `docs/test/SECURITY_TESTS.md` → baseline table, vulnerability history
 
 **If a new service was added:**
 - [ ] `CLAUDE.md` → Completed Services section

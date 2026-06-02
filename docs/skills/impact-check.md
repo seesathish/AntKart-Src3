@@ -34,7 +34,7 @@ Use this matrix to determine what to check based on what you are changing:
 | `ocelot.json` route change | Gateway, affected downstream service, ocelot.Development.json, docs/design/EVENTBUS.md if routing changes |
 | Integration event field added (non-breaking) | All consumers — verify they compile; new optional field with default is safe |
 | Integration event field removed or renamed (breaking) | All publishers + all consumers must update simultaneously |
-| Keycloak realm change | `antkart-realm.json`, all services using JWT claims, `SECURITY_TESTS.md` |
+| Keycloak realm change | `antkart-realm.json`, all services using JWT claims, `docs/test/SECURITY_TESTS.md` |
 
 ---
 
@@ -120,7 +120,7 @@ Before making the change, write a brief impact report (inline comment or PR desc
 **Docs affected:**
 - CLAUDE.md — BuildingBlocks Authentication section
 - All service design docs mentioning GetUserId()
-- SECURITY_TESTS.md — explanation section
+- docs/test/SECURITY_TESTS.md — explanation section
 
 **Strategy:** Rename in BuildingBlocks first, then fix all call sites, build, test — single commit.
 ```
@@ -137,7 +137,7 @@ dotnet build
 dotnet test
 
 # If security-relevant change: run security checks
-bash docs/skills/security-check.md   # or follow SECURITY_TESTS.md
+bash docs/skills/security-check.md   # or follow docs/test/SECURITY_TESTS.md
 ```
 
 ---

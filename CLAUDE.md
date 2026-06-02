@@ -32,7 +32,7 @@ AntKart/
 │   ├── architecture/     C4 model diagrams (C4Architecture.md + Structurizr workspace)
 │   ├── design/           Cross-cutting design docs (EVENTBUS, RESILIENCE, OBSERVABILITY)
 │   ├── skills/           Step-by-step development & maintenance guides
-│   └── test/             Developer manual test guide (DevTestGuide.md)
+│   └── test/             Manual test & security test guides (DevTestGuide, SECURITY_TESTS)
 ├── nuget.config
 └── CLAUDE.md             ← this file
 ```

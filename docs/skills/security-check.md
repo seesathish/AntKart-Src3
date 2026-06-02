@@ -1,6 +1,6 @@
 # Skill: Run Security Checks
 
-**Purpose:** Execute the full 15-category ethical security test suite from `SECURITY_TESTS.md` against the live Docker stack. Reports each test as PASS/FAIL/WARN and flags any regressions from the last known-good baseline.
+**Purpose:** Execute the full 15-category ethical security test suite from `docs/test/SECURITY_TESTS.md` against the live Docker stack. Reports each test as PASS/FAIL/WARN and flags any regressions from the last known-good baseline.
 
 ---
 
@@ -14,7 +14,7 @@
 ## Prerequisites
 - The AntKart services running and reachable — cloud-deployed, or run locally against live cloud services / via cloud port-forwarding
 - All services healthy
-- Two test accounts registered: `sectest_user` and `sectest_user2` (see Setup in `SECURITY_TESTS.md`)
+- Two test accounts registered: `sectest_user` and `sectest_user2` (see Setup in `docs/test/SECURITY_TESTS.md`)
 
 ---
 
@@ -230,7 +230,7 @@ check "User2 → admin notifications" \
 echo ""
 echo "══════════════════════════════════════"
 echo "PASS: $PASS | FAIL: $FAIL | WARN: $WARN"
-[ "$FAIL" -gt 0 ] && echo "ACTION REQUIRED: $FAIL test(s) failed. See SECURITY_TESTS.md for fix guidance." \
+[ "$FAIL" -gt 0 ] && echo "ACTION REQUIRED: $FAIL test(s) failed. See docs/test/SECURITY_TESTS.md for fix guidance." \
   || echo "All tests passed. Review any warnings above."
 echo "══════════════════════════════════════"
 ```
