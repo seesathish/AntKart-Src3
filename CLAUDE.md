@@ -26,10 +26,13 @@ AntKart/
 ├── AK.IntegrationTests/  SAGA + event bus + notification consumer tests (no API/Grpc dependency)
 ├── AntKart.sln
 ├── AntKart.postman_collection.json
-├── EVENTBUS.md           Event bus & SAGA design
-├── RESILIENCE.md         Polly circuit breaker design
-├── OBSERVABILITY.md      ELK observability design
 ├── KNOWN-ISSUES.md       Tracker for known technical debt & deferred fixes (KI-NNN ids)
+├── docs/
+│   ├── adr/              Architecture Decision Records
+│   ├── architecture/     C4 model diagrams (C4Architecture.md + Structurizr workspace)
+│   ├── design/           Cross-cutting design docs (EVENTBUS, RESILIENCE, OBSERVABILITY)
+│   ├── skills/           Step-by-step development & maintenance guides
+│   └── test/             Developer manual test guide (DevTestGuide.md)
 ├── nuget.config
 └── CLAUDE.md             ← this file
 ```

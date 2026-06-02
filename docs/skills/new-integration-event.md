@@ -9,7 +9,7 @@
 - Examples: `OrderShippedIntegrationEvent` → Notification sends shipping email; `ReviewPostedIntegrationEvent` → Products updates average rating
 
 ## Prerequisite Reading
-- [EVENTBUS.md](../../EVENTBUS.md) — fan-out exchange topology, queue naming, SAGA pattern
+- [EVENTBUS.md](../design/EVENTBUS.md) — fan-out exchange topology, queue naming, SAGA pattern
 - [AK.BuildingBlocks/Messaging/IntegrationEvents/](../../AK.BuildingBlocks/AK.BuildingBlocks/Messaging/IntegrationEvents/) — existing event records
 
 ---
@@ -142,9 +142,9 @@ The `AddRabbitMqMassTransit` helper in BuildingBlocks uses the service prefix (`
 
 ---
 
-## Step 4 — Update the RabbitMQ Exchange/Queue Map in EVENTBUS.md
+## Step 4 — Update the RabbitMQ Exchange/Queue Map in docs/design/EVENTBUS.md
 
-In `EVENTBUS.md`, add a row to the Exchanges table and a row to the Queues table:
+In `docs/design/EVENTBUS.md`, add a row to the Exchanges table and a row to the Queues table:
 
 ```markdown
 | `OrderShippedIntegrationEvent` | `order-shipped` (fanout) | Published by AK.Order on status→Shipped |
@@ -204,7 +204,7 @@ dotnet test           # all pass; new integration test included
 
 ## Step 7 — Update Documentation
 
-- `EVENTBUS.md` — Exchanges + Queues tables updated (Step 4)
+- `docs/design/EVENTBUS.md` — Exchanges + Queues tables updated (Step 4)
 - Source service `<SERVICE>_TECHNICAL_DESIGN.md` — add event to "Integration Events Published" table
 - Target service `<SERVICE>_TECHNICAL_DESIGN.md` — add event to "Events Consumed" table
 - `CLAUDE.md` — update the BuildingBlocks `Messaging/IntegrationEvents/` list
@@ -219,7 +219,7 @@ dotnet test           # all pass; new integration test included
 - [ ] Consumer class created in target service Infrastructure (`IConsumer<T>` implemented)
 - [ ] Consumer registered in target service `AddRabbitMqMassTransit` configure callback
 - [ ] MassTransit in-memory integration test written and passing
-- [ ] `EVENTBUS.md` Exchanges + Queues tables updated
+- [ ] `docs/design/EVENTBUS.md` Exchanges + Queues tables updated
 - [ ] Source service design doc "Published" table updated
 - [ ] Target service design doc "Consumed" table updated
 - [ ] BuildingBlocks section in `CLAUDE.md` updated

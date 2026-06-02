@@ -149,14 +149,13 @@ AntKart/
 ├── AK.BuildingBlocks/    Shared library (messaging, resilience, logging, auth)
 ├── AK.IntegrationTests/  SAGA + event bus + notification consumer tests (MassTransit in-memory harness)
 ├── AntKart.postman_collection.json
-├── EVENTBUS.md           Event bus & SAGA design
-├── RESILIENCE.md         Circuit breaker & Polly design
-├── OBSERVABILITY.md      ELK observability design
 ├── SECURITY_TESTS.md     Ethical security test guide (15 categories)
-├── DevTestGuide.md       Fresher-level step-by-step manual testing guide
 ├── docs/
 │   ├── adr/              Architecture Decision Records
-│   └── skills/           Step-by-step development & maintenance guides (12 skills)
+│   ├── architecture/     C4 model diagrams (C4Architecture.md + Structurizr workspace)
+│   ├── design/           Cross-cutting design docs (EVENTBUS, RESILIENCE, OBSERVABILITY)
+│   ├── skills/           Step-by-step development & maintenance guides (12 skills)
+│   └── test/             Developer manual test guide (DevTestGuide.md)
 └── nuget.config
 ```
 
@@ -180,15 +179,15 @@ AntKart/
 | Component | Technology | Design Doc |
 |-----------|-----------|------------|
 | BuildingBlocks | Shared DDD base classes, auth, messaging, resilience, middleware | [BUILDING_BLOCKS.md](AK.BuildingBlocks/BUILDING_BLOCKS.md) |
-| Event Bus | MassTransit + RabbitMQ + SAGA + Outbox | [EVENTBUS.md](EVENTBUS.md) |
-| Resilience | Polly v8 (retry, circuit breaker, timeout) | [RESILIENCE.md](RESILIENCE.md) |
-| Observability | Serilog + Elasticsearch + Kibana | [OBSERVABILITY.md](OBSERVABILITY.md) |
+| Event Bus | MassTransit + RabbitMQ + SAGA + Outbox | [EVENTBUS.md](docs/design/EVENTBUS.md) |
+| Resilience | Polly v8 (retry, circuit breaker, timeout) | [RESILIENCE.md](docs/design/RESILIENCE.md) |
+| Observability | Serilog + Elasticsearch + Kibana | [OBSERVABILITY.md](docs/design/OBSERVABILITY.md) |
 | Integration Tests | MassTransit in-memory test harness | [INTEGRATION_TESTS.md](AK.IntegrationTests/INTEGRATION_TESTS.md) |
 | Architecture Decisions | Why each key technology was chosen | [docs/adr/](docs/adr/) |
-| C4 Architecture | System context, containers, components, and code diagrams | [C4Architecture.md](C4Architecture.md) |
+| C4 Architecture | System context, containers, components, and code diagrams | [C4Architecture.md](docs/architecture/C4Architecture.md) |
 | Security Tests | Ethical black-box & grey-box security test guide (15 categories) | [SECURITY_TESTS.md](SECURITY_TESTS.md) |
 | Skills | Step-by-step guides for development, maintenance, and verification tasks | [docs/skills/](docs/skills/) |
-| Developer Testing Guide | Fresher-level end-to-end manual test guide (Postman, RabbitMQ, Kibana, SAGA, payments) | [DevTestGuide.md](DevTestGuide.md) |
+| Developer Testing Guide | Fresher-level end-to-end manual test guide (Postman, RabbitMQ, Kibana, SAGA, payments) | [DevTestGuide.md](docs/test/DevTestGuide.md) |
 
 ---
 

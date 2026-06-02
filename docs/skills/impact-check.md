@@ -31,7 +31,7 @@ Use this matrix to determine what to check based on what you are changing:
 | `AuthenticationExtensions` / `KeycloakSettings` | All services calling `AddKeycloakAuthentication` |
 | `MassTransitExtensions.AddRabbitMqMassTransit` | All services using MassTransit (Order, Payments, Notification, Cart, Products, UserIdentity) |
 | `PagedResult<T>` or `Result<T>` | All handlers and endpoints returning these types |
-| `ocelot.json` route change | Gateway, affected downstream service, ocelot.Development.json, EVENTBUS.md if routing changes |
+| `ocelot.json` route change | Gateway, affected downstream service, ocelot.Development.json, docs/design/EVENTBUS.md if routing changes |
 | Integration event field added (non-breaking) | All consumers — verify they compile; new optional field with default is safe |
 | Integration event field removed or renamed (breaking) | All publishers + all consumers must update simultaneously |
 | Keycloak realm change | `antkart-realm.json`, all services using JWT claims, `SECURITY_TESTS.md` |

@@ -10,7 +10,7 @@
 - Examples: AK.Payments starts consuming `OrderCancelledIntegrationEvent` to auto-refund; AK.Products consumes `OrderCancelledIntegrationEvent` to release reserved stock
 
 ## Prerequisite Reading
-- [EVENTBUS.md](../../EVENTBUS.md) — fan-out topology, queue naming, dead-letter queues
+- [EVENTBUS.md](../design/EVENTBUS.md) — fan-out topology, queue naming, dead-letter queues
 - [new-integration-event.md](new-integration-event.md) — if the event doesn't exist yet, create it first
 
 ---
@@ -160,9 +160,9 @@ dotnet test
 
 ---
 
-## Step 8 — Update EVENTBUS.md
+## Step 8 — Update docs/design/EVENTBUS.md
 
-Add a row to the **Queues** table in `EVENTBUS.md`:
+Add a row to the **Queues** table in `docs/design/EVENTBUS.md`:
 
 ```markdown
 | `payments-order-cancelled` | `OrderCancelledIntegrationEvent` | `OrderCancelledConsumer` in AK.Payments |
@@ -190,5 +190,5 @@ RabbitMQ may redeliver messages (network hiccup, consumer restart). Ensure the h
 - [ ] Queue name verified (no duplicate consumer for same event in same service)
 - [ ] MassTransit in-memory integration test written and passing
 - [ ] Handler is idempotent (safe to receive duplicate events)
-- [ ] `EVENTBUS.md` Queues table updated
+- [ ] `docs/design/EVENTBUS.md` Queues table updated
 - [ ] Target service design doc "Events Consumed" table updated

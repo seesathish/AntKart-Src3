@@ -62,7 +62,7 @@ Use these to avoid rework, missed impacts, and documentation drift.
 2. /new-integration-event     ← define contract + wire publisher + consumer + test
    or /new-consumer           ← if event already exists
 3. /run-tests                 ← integration tests pass
-4. /sync-docs                 ← EVENTBUS.md, both service design docs
+4. /sync-docs                 ← docs/design/EVENTBUS.md, both service design docs
 ```
 
 ### Maintaining the platform

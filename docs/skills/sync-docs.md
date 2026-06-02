@@ -23,9 +23,9 @@
 | README | `README.md` | Service added, port changed, diagram changed |
 | Architecture decisions | `docs/adr/ADR-00X-*.md` | A key architectural decision changes |
 | API contract | `AntKart.postman_collection.json` | Endpoint added, removed, or path changed |
-| Event bus map | `EVENTBUS.md` | Integration event or consumer added/changed |
+| Event bus map | `docs/design/EVENTBUS.md` | Integration event or consumer added/changed |
 | Security guide | `SECURITY_TESTS.md` | Auth pattern changed, vulnerability fixed |
-| Observability | `OBSERVABILITY.md` | New service added (new log streams) |
+| Observability | `docs/design/OBSERVABILITY.md` | New service added (new log streams) |
 | Gateway guide | `AK.Gateway/API_GATEWAY.md` | Route added or changed |
 
 ---
@@ -144,7 +144,7 @@ For each new endpoint, a Postman request needs:
 
 ---
 
-## Step 6 — EVENTBUS.md
+## Step 6 — docs/design/EVENTBUS.md
 
 Update when any of these change:
 - Integration event added → Exchanges table
@@ -154,7 +154,7 @@ Update when any of these change:
 
 ```bash
 # Check current exchange and queue tables
-grep -A 3 "exchange\|queue" EVENTBUS.md | head -40
+grep -A 3 "exchange\|queue" docs/design/EVENTBUS.md | head -40
 ```
 
 ---
@@ -169,7 +169,7 @@ Update when:
 
 ---
 
-## Step 8 — OBSERVABILITY.md
+## Step 8 — docs/design/OBSERVABILITY.md
 
 Update when a new service is added:
 - Add the service to the "Per-service log events" table
@@ -198,7 +198,7 @@ If the team adopts a new documentation surface, add it to this file and to the s
 - [ ] `AntKart.postman_collection.json` → request added/updated for any new/changed endpoint
 
 **If events changed:**
-- [ ] `EVENTBUS.md` → Exchanges table, Queues table
+- [ ] `docs/design/EVENTBUS.md` → Exchanges table, Queues table
 
 **If auth or security changed:**
 - [ ] `SECURITY_TESTS.md` → baseline table, vulnerability history
@@ -206,7 +206,7 @@ If the team adopts a new documentation surface, add it to this file and to the s
 **If a new service was added:**
 - [ ] `CLAUDE.md` → Completed Services section
 - [ ] `README.md` → Solution Structure tree, Microservices table, Tests table, Authorization table
-- [ ] `OBSERVABILITY.md` → Per-service log events table
+- [ ] `docs/design/OBSERVABILITY.md` → Per-service log events table
 - [ ] `AK.Gateway/API_GATEWAY.md` → routing table
 
 **If an architectural decision was made:**
