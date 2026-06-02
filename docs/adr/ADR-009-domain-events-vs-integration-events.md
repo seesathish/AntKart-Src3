@@ -1,4 +1,4 @@
-# ADR-006: Domain Events vs Integration Events — Two Distinct Patterns
+# ADR-009: Domain Events vs Integration Events — Two Distinct Patterns
 
 ## Status
 Accepted

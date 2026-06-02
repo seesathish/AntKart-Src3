@@ -1,4 +1,4 @@
-# ADR-003: Ocelot API Gateway over YARP
+# ADR-006: Ocelot API Gateway over YARP
 
 ## Status
 Accepted

@@ -1,4 +1,4 @@
-# ADR-005: Shared DDD Contracts in AK.BuildingBlocks
+# ADR-008: Shared DDD Contracts in AK.BuildingBlocks
 
 ## Status
 Accepted

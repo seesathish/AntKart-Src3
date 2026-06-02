@@ -1,4 +1,4 @@
-# ADR-004: MassTransit over Raw RabbitMQ Client
+# ADR-007: MassTransit over Raw RabbitMQ Client
 
 ## Status
 Accepted

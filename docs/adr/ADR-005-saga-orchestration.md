@@ -1,4 +1,4 @@
-# ADR-002: SAGA Orchestration over 2PC and Choreography
+# ADR-005: SAGA Orchestration over 2PC and Choreography
 
 ## Status
 Accepted

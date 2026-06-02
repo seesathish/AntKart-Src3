@@ -1,4 +1,4 @@
-# ADR-001: Polyglot Persistence — One Database Per Service
+# ADR-004: Polyglot Persistence — One Database Per Service
 
 ## Status
 Accepted

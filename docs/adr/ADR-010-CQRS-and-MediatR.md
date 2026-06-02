@@ -1,4 +1,4 @@
-# ADR-007: CQRS and MediatR as the Internal Application Pattern
+# ADR-010: CQRS and MediatR as the Internal Application Pattern
 
 ## Status
 Accepted

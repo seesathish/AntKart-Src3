@@ -1,4 +1,4 @@
-# ADR-008: Repository, Specification, and Unit of Work Patterns
+# ADR-011: Repository, Specification, and Unit of Work Patterns
 
 ## Status
 Accepted
