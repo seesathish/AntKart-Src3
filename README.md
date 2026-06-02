@@ -99,7 +99,7 @@ AntKart/
 ├── AntKart.postman_collection.json
 ├── docs/
 │   ├── adr/              Architecture Decision Records
-│   ├── architecture/     C4 model diagrams (C4Architecture.md + Structurizr workspace)
+│   ├── architecture/     C4 diagram images + Structurizr workspace
 │   ├── design/           Cross-cutting design docs (EVENTBUS, RESILIENCE, OBSERVABILITY)
 │   ├── skills/           Step-by-step development & maintenance guides (12 skills)
 │   └── test/             Manual test & security test guides (DevTestGuide, SECURITY_TESTS)
@@ -131,7 +131,6 @@ AntKart/
 | Observability | Serilog + Elasticsearch + Kibana | [OBSERVABILITY.md](docs/design/OBSERVABILITY.md) |
 | Integration Tests | MassTransit in-memory test harness | [INTEGRATION_TESTS.md](AK.IntegrationTests/INTEGRATION_TESTS.md) |
 | Architecture Decisions | Why each key technology was chosen | [docs/adr/](docs/adr/) |
-| C4 Architecture | System context, containers, components, and code diagrams | [C4Architecture.md](docs/architecture/C4Architecture.md) |
 | Security Tests | Ethical black-box & grey-box security test guide (15 categories) | [SECURITY_TESTS.md](docs/test/SECURITY_TESTS.md) |
 | Skills | Step-by-step guides for development, maintenance, and verification tasks | [docs/skills/](docs/skills/) |
 | Developer Testing Guide | Fresher-level end-to-end manual test guide (Postman, RabbitMQ, Kibana, SAGA, payments) | [DevTestGuide.md](docs/test/DevTestGuide.md) |

@@ -29,7 +29,7 @@ AntKart/
 ├── KNOWN-ISSUES.md       Tracker for known technical debt & deferred fixes (KI-NNN ids)
 ├── docs/
 │   ├── adr/              Architecture Decision Records
-│   ├── architecture/     C4 model diagrams (C4Architecture.md + Structurizr workspace)
+│   ├── architecture/     C4 diagram images + Structurizr workspace
 │   ├── design/           Cross-cutting design docs (EVENTBUS, RESILIENCE, OBSERVABILITY)
 │   ├── skills/           Step-by-step development & maintenance guides
 │   └── test/             Manual test & security test guides (DevTestGuide, SECURITY_TESTS)
