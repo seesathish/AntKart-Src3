@@ -16,7 +16,7 @@ AntKart is a cloud-native e-commerce platform built as independently deployable 
 
 ### C4 Architecture Diagrams
 
-The platform is documented with the [C4 model](https://c4model.com/) at four levels of zoom. Full model and per-service component docs: [C4Architecture.md](docs/architecture/C4Architecture.md).
+> 📌 _The C4 diagrams below are to be updated._
 
 #### Level 1 — System Context
 
@@ -58,27 +58,27 @@ The end-to-end order journey: Customer → Gateway → Order (creates via Outbox
 Key design and platform decisions are captured as ADRs in [docs/adr/](docs/adr/).
 
 | ADR | Decision | Summary |
-|-----|----------|---------|
-| [ADR-001](docs/adr/ADR-001-microservices-architecture.md) | Microservices Architecture | Independently deployable .NET 9 services over a monolith; each owns its data and deployment lifecycle. |
-| [ADR-002](docs/adr/ADR-002-clean-architecture-and-ddd.md) | Clean Architecture & DDD | Domain / Application / Infrastructure / API layering with inward dependencies and a rich domain model. |
-| [ADR-003](docs/adr/ADR-003-fault-tolerance-with-polly.md) | Fault Tolerance with Polly | Retry + circuit breaker + timeout pipelines (Polly v8) on all outbound calls, with graceful degradation. |
-| [ADR-004](docs/adr/ADR-004-polyglot-persistence.md) | Polyglot Persistence | One database per service, each chosen to fit its workload (MongoDB, PostgreSQL, Redis, SQLite). |
-| [ADR-005](docs/adr/ADR-005-saga-orchestration.md) | SAGA Orchestration | Orchestrated SAGA (MassTransit state machine) over 2PC and pure choreography for the order workflow. |
-| [ADR-006](docs/adr/ADR-006-ocelot-api-gateway.md) | Ocelot API Gateway | Ocelot as the in-process gateway (routing, JWT, rate limiting, QoS) over YARP. |
-| [ADR-007](docs/adr/ADR-007-masstransit-over-raw-rabbitmq.md) | MassTransit over Raw RabbitMQ | MassTransit for SAGA, outbox, retry, and consumer pipelines instead of the raw RabbitMQ client. |
-| [ADR-008](docs/adr/ADR-008-shared-ddd-contracts-in-buildingblocks.md) | Shared DDD Contracts | Common DDD base types and contracts centralised in AK.BuildingBlocks. |
-| [ADR-009](docs/adr/ADR-009-domain-events-vs-integration-events.md) | Domain vs Integration Events | Two distinct event patterns — in-process domain events vs cross-service integration events. |
-| [ADR-010](docs/adr/ADR-010-CQRS-and-MediatR.md) | CQRS and MediatR | Command/query separation via MediatR with a validation pipeline behavior. |
-| [ADR-011](docs/adr/ADR-011-Repository-Specification-and-Unit-of-Work.md) | Repository, Specification & UoW | Repository, Specification, and Unit of Work patterns for persistence abstraction. |
-| [ADR-012](docs/adr/ADR-012-iac-with-terraform-terragrunt.md) | IaC with Terraform & Terragrunt | All Azure infrastructure as code, composed and kept DRY with Terragrunt. |
-| [ADR-013](docs/adr/ADR-013-key-vault-rbac-and-observability-foundation.md) | Key Vault RBAC & Observability | Key Vault RBAC authorization, workspace-based App Insights, and an ACR Basic→Premium strategy. |
-| [ADR-014](docs/adr/ADR-014-cosmosdb-and-servicebus.md) | Cosmos DB & Service Bus | Cosmos DB (Mongo API, serverless) and Azure Service Bus (Standard) as managed cloud backbones. |
-| [ADR-015](docs/adr/ADR-015-messaging-migration-to-service-bus.md) | Messaging → Service Bus | Migrate messaging from RabbitMQ to Azure Service Bus with token (managed identity) auth. |
-| [ADR-016](docs/adr/ADR-016-data-migration-cosmosdb-and-workload-identity.md) | Cosmos Data Migration & Workload Identity | Move Products persistence to Cosmos DB and establish the Workload Identity foundation. |
-| [ADR-017](docs/adr/ADR-017-entra-id-functions-eventgrid.md) | Entra ID, Functions & Event Grid | Replace Keycloak with Entra ID; isolated-worker Azure Functions and Event Grid routing. |
-| [ADR-018](docs/adr/ADR-018-aks-workload-identity-base-image.md) | AKS & Hardened Base Image | AKS cluster with Workload Identity and a custom hardened .NET base image. |
-| [ADR-019](docs/adr/ADR-019-serverless-notification-functions-eventgrid.md) | Serverless Notification | Notification as Consumption-plan Azure Functions; Service Bus vs Event Grid transport boundary. |
-| [ADR-020](docs/adr/ADR-020-api-management-managed-edge-gateway.md) | API Management Edge Gateway | Azure API Management as the managed external edge in front of internal cluster routing. |
+|-----|------------------------------------------------|---------|
+| [ADR-001](docs/adr/ADR-001-microservices-architecture.md) | Microservices&nbsp;Architecture | Independently deployable .NET 9 services over a monolith; each owns its data and deployment lifecycle. |
+| [ADR-002](docs/adr/ADR-002-clean-architecture-and-ddd.md) | Clean&nbsp;Architecture&nbsp;&&nbsp;DDD | Domain / Application / Infrastructure / API layering with inward dependencies and a rich domain model. |
+| [ADR-003](docs/adr/ADR-003-fault-tolerance-with-polly.md) | Fault&nbsp;Tolerance&nbsp;with&nbsp;Polly | Retry + circuit breaker + timeout pipelines (Polly v8) on all outbound calls, with graceful degradation. |
+| [ADR-004](docs/adr/ADR-004-polyglot-persistence.md) | Polyglot&nbsp;Persistence | One database per service, each chosen to fit its workload (MongoDB, PostgreSQL, Redis, SQLite). |
+| [ADR-005](docs/adr/ADR-005-saga-orchestration.md) | SAGA&nbsp;Orchestration | Orchestrated SAGA (MassTransit state machine) over 2PC and pure choreography for the order workflow. |
+| [ADR-006](docs/adr/ADR-006-ocelot-api-gateway.md) | Ocelot&nbsp;API&nbsp;Gateway | Ocelot as the in-process gateway (routing, JWT, rate limiting, QoS) over YARP. |
+| [ADR-007](docs/adr/ADR-007-masstransit-over-raw-rabbitmq.md) | MassTransit&nbsp;over&nbsp;Raw&nbsp;RabbitMQ | MassTransit for SAGA, outbox, retry, and consumer pipelines instead of the raw RabbitMQ client. |
+| [ADR-008](docs/adr/ADR-008-shared-ddd-contracts-in-buildingblocks.md) | Shared&nbsp;DDD&nbsp;Contracts | Common DDD base types and contracts centralised in AK.BuildingBlocks. |
+| [ADR-009](docs/adr/ADR-009-domain-events-vs-integration-events.md) | Domain&nbsp;vs&nbsp;Integration&nbsp;Events | Two distinct event patterns — in-process domain events vs cross-service integration events. |
+| [ADR-010](docs/adr/ADR-010-CQRS-and-MediatR.md) | CQRS&nbsp;and&nbsp;MediatR | Command/query separation via MediatR with a validation pipeline behavior. |
+| [ADR-011](docs/adr/ADR-011-Repository-Specification-and-Unit-of-Work.md) | Repository,&nbsp;Specification&nbsp;&&nbsp;UoW | Repository, Specification, and Unit of Work patterns for persistence abstraction. |
+| [ADR-012](docs/adr/ADR-012-iac-with-terraform-terragrunt.md) | IaC&nbsp;with&nbsp;Terraform&nbsp;&&nbsp;Terragrunt | All Azure infrastructure as code, composed and kept DRY with Terragrunt. |
+| [ADR-013](docs/adr/ADR-013-key-vault-rbac-and-observability-foundation.md) | Key&nbsp;Vault&nbsp;RBAC&nbsp;&&nbsp;Observability | Key Vault RBAC authorization, workspace-based App Insights, and an ACR Basic→Premium strategy. |
+| [ADR-014](docs/adr/ADR-014-cosmosdb-and-servicebus.md) | Cosmos&nbsp;DB&nbsp;&&nbsp;Service&nbsp;Bus | Cosmos DB (Mongo API, serverless) and Azure Service Bus (Standard) as managed cloud backbones. |
+| [ADR-015](docs/adr/ADR-015-messaging-migration-to-service-bus.md) | Messaging&nbsp;→&nbsp;Service&nbsp;Bus | Migrate messaging from RabbitMQ to Azure Service Bus with token (managed identity) auth. |
+| [ADR-016](docs/adr/ADR-016-data-migration-cosmosdb-and-workload-identity.md) | Cosmos&nbsp;Data&nbsp;Migration&nbsp;&&nbsp;Workload&nbsp;Identity | Move Products persistence to Cosmos DB and establish the Workload Identity foundation. |
+| [ADR-017](docs/adr/ADR-017-entra-id-functions-eventgrid.md) | Entra&nbsp;ID,&nbsp;Functions&nbsp;&&nbsp;Event&nbsp;Grid | Replace Keycloak with Entra ID; isolated-worker Azure Functions and Event Grid routing. |
+| [ADR-018](docs/adr/ADR-018-aks-workload-identity-base-image.md) | AKS&nbsp;&&nbsp;Hardened&nbsp;Base&nbsp;Image | AKS cluster with Workload Identity and a custom hardened .NET base image. |
+| [ADR-019](docs/adr/ADR-019-serverless-notification-functions-eventgrid.md) | Serverless&nbsp;Notification | Notification as Consumption-plan Azure Functions; Service Bus vs Event Grid transport boundary. |
+| [ADR-020](docs/adr/ADR-020-api-management-managed-edge-gateway.md) | API&nbsp;Management&nbsp;Edge&nbsp;Gateway | Azure API Management as the managed external edge in front of internal cluster routing. |
 
 ---
 
