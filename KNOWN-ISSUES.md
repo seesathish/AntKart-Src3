@@ -5,7 +5,6 @@ This file tracks known technical debt and deferred fixes. Each item is acknowled
 | ID | Severity | Component | Description | Planned Fix |
 |----|----------|-----------|-------------|-------------|
 | KI-001 | High | AK.Discount.Grpc | The gRPC `AuthInterceptor` reads a nested role-claim structure specific to the current identity provider. When the platform moves to a token format that carries roles in a flat `roles` claim, the admin write RPCs (create/update/delete discount) will fail authorization until the interceptor is updated to read the flat claim, consistent with the other services. Read-only RPCs are unaffected. | Address as part of the identity-provider migration. |
-| KI-002 | Low | docs/architecture | `docs/architecture/C4Architecture.md` is now orphaned — the C4 diagrams live only in the README and nothing references the standalone document. The C4 image assets and Structurizr workspace are still used by the README and must be kept. | Delete the document once the platform is deployed to cloud and DevOps is in place. |
 
 ## Notes
 
