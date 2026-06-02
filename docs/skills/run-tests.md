@@ -21,10 +21,10 @@
 | AK.ShoppingCart.Tests | 88 |
 | AK.Order.Tests | 113 |
 | AK.UserIdentity.Tests | 20 |
-| AK.Payments.Tests | 69 |
+| AK.Payments.Tests | 70 |
 | AK.Notification.Tests | 37 |
 | AK.IntegrationTests | 35 |
-| **Total** | **617** |
+| **Total** | **618** |
 
 Update this table in `CLAUDE.md` whenever you add tests. If a count drops, investigate — do not ignore.
 
@@ -70,8 +70,8 @@ dotnet test AntKart.sln --logger "console;verbosity=minimal" 2>&1 \
 Expected output example:
 ```
 Test Run Successful.
-Total tests: 617
-     Passed: 617
+Total tests: 618
+     Passed: 618
      Failed: 0
 ```
 
@@ -170,7 +170,7 @@ public class CreateOrderCommandHandlerTests
 
 - [ ] `dotnet build` → 0 errors before running tests
 - [ ] `dotnet test` → 0 failures
-- [ ] Total test count ≥ baseline (617); higher if you added tests
+- [ ] Total test count ≥ baseline (618); higher if you added tests
 - [ ] No tests skipped (no `[Skip]` attribute added without justification)
 - [ ] New feature has at least: handler happy path + handler failure + validator valid + validator invalid
 - [ ] If a count dropped — investigated and either restored the test or updated the baseline with justification

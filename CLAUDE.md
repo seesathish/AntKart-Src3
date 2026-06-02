@@ -161,7 +161,7 @@ AK.<Service>/
 - **Saved cards:** PCI-compliant — Razorpay token IDs only, never raw card numbers
 - **Domain events:** `PaymentCreatedEvent`, `PaymentSucceededEvent`, `PaymentFailedEvent` — all implement `AK.BuildingBlocks.DDD.IDomainEvent`; inherited `Entity` base class holds the typed event list
 - **Integration events:** Publishes `PaymentInitiatedIntegrationEvent`, `PaymentSucceededIntegrationEvent`, `PaymentFailedIntegrationEvent`; AK.Order consumes succeeded/failed to update order status
-- **Tests:** 69 passing (domain, commands, queries, validators — SaveCard, DeleteSavedCard, GetPaymentById, GetPaymentByOrderId, GetUserPayments, GetUserSavedCards, VerifyPayment, SaveCard validators)
+- **Tests:** 70 passing (domain, commands, queries, validators — SaveCard, DeleteSavedCard, GetPaymentById, GetPaymentByOrderId, GetUserPayments, GetUserSavedCards, VerifyPayment, SaveCard validators)
 - **Swagger:** `http://localhost:5086/swagger` (Development only)
 - **Removed:** Unimplemented `/api/payments/webhook` stub endpoint was removed
 - **Design doc:** [AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md](AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md)

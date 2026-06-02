@@ -464,4 +464,4 @@ dotnet test
 | AK.IntegrationTests | 35 |
 | AK.Payments.Tests | 70 |
 | AK.Notification.Tests | 37 |
-| **Total** | **621** |
+| **Total** | **618** |
