@@ -242,10 +242,10 @@ Failed messages after all retries (3 × exponential backoff) land in dead-letter
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
 | Queue has Ready messages accumulating | Consumer service is down | Check `docker logs antkart-<service>` |
-| Exchange missing | Service never started (no consumers registered) | `docker-compose up` the relevant service |
+| Exchange missing | Service never started (no consumers registered) | start the relevant service |
 | Messages appearing in `_error` queue | Consumer threw unhandled exception | Inspect message payload; check service logs |
 | No exchanges visible at all | RabbitMQ just restarted; services not yet connected | Wait ~30s for services to reconnect; check service healthcheck |
-| `guest` login rejected | RabbitMQ default user disabled | Check `RABBITMQ_DEFAULT_USER/PASS` env vars in docker-compose.yml |
+| `guest` login rejected | RabbitMQ default user disabled | Check `RABBITMQ_DEFAULT_USER/PASS` env vars in the broker configuration |
 
 ---
 

@@ -156,14 +156,11 @@ If missing, add `builder.Services.AddMemoryCache();` before `builder.Services.Ad
 
 ---
 
-## Step 7 — Rebuild Gateway and Test
+## Step 7 — Run the Gateway and Test
 
 ```bash
-# Rebuild only the gateway
-docker-compose up --build -d ak-gateway-api
-
-# Wait for startup
-sleep 5
+# Run the gateway locally (against cloud-reachable downstream services), or redeploy it
+cd AK.Gateway/AK.Gateway.API && dotnet run
 
 # Smoke test the new route
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/gateway/reviews \
@@ -204,7 +201,7 @@ rm -rf "$tmpdir"
 - [ ] Development override added to `ocelot.Development.json`
 - [ ] No upstream path conflicts (specific routes before wildcard routes)
 - [ ] `AddMemoryCache()` confirmed in Gateway `Program.cs`
-- [ ] Gateway rebuilt (`docker-compose up --build -d ak-gateway-api`)
+- [ ] Gateway rebuilt / restarted with the new route
 - [ ] Smoke test: route returns expected status code
 - [ ] Rate limit test: burst above limit produces 429s
 - [ ] `API_GATEWAY.md` routing table updated

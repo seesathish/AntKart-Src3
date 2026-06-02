@@ -26,7 +26,7 @@ This ADR covers Week 5 decisions about:
 
 ### Decision
 
-The Cosmos DB connection string is stored in Key Vault as secret `cosmos-connection-string` (written by the Cosmos DB Terraform module in Week 3). At application startup, `ServiceCollectionExtensions.AddInfrastructure()` calls `SecretClient.GetSecret()` using `DefaultAzureCredential` to retrieve the connection string. The retrieved string is used to construct `MongoClient`. It never appears in `appsettings.json`, `docker-compose.yml`, or any committed file.
+The Cosmos DB connection string is stored in Key Vault as secret `cosmos-connection-string` (written by the Cosmos DB Terraform module in Week 3). At application startup, `ServiceCollectionExtensions.AddInfrastructure()` calls `SecretClient.GetSecret()` using `DefaultAzureCredential` to retrieve the connection string. The retrieved string is used to construct `MongoClient`. It never appears in `appsettings.json` or any committed file.
 
 `appsettings.json` contains only non-secret references:
 ```json

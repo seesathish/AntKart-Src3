@@ -2,7 +2,7 @@
 
 ## Overview
 
-All AntKart services emit structured JSON logs via **Serilog**, shipped to **Elasticsearch 8.13.0** and visualised in **Kibana 8.13.0**. The stack runs as part of `docker-compose.yml`.
+All AntKart services emit structured JSON logs via **Serilog**, shipped to **Elasticsearch 8.13.0** and visualised in **Kibana 8.13.0**. Elasticsearch and Kibana run as part of the cloud-deployed observability stack.
 
 ---
 
@@ -69,7 +69,7 @@ flowchart LR
 }
 ```
 
-`docker-compose.yml` injects the real URL:
+The deployment injects the real URL via environment variable:
 
 ```yaml
 environment:

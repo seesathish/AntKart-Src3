@@ -1068,14 +1068,11 @@ ENTRYPOINT ["dotnet", "AK.ShoppingCart.API.dll"]
 ### Running Locally
 
 ```bash
-# Prerequisites: Redis running on localhost:6379
-# Option A: Docker
-docker run -d -p 6379:6379 redis:7-alpine
+# Prerequisites: Redis reachable (Azure Cache for Redis in the cloud — directly
+# or via port-forward — or a local container)
+docker run -d -p 6379:6379 redis:7-alpine   # optional local Redis
 
-# Option B: via Docker Compose (all services)
-docker-compose up --build
-
-# Run individually (dev)
+# Run the service (dev)
 cd AK.ShoppingCart/AK.ShoppingCart.API && dotnet run
 # → http://localhost:5079/swagger
 

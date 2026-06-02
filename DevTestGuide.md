@@ -5,6 +5,8 @@ This guide walks a developer through manually testing every AntKart service end-
 **Intended audience:** Freshers and junior developers performing their first full system test.  
 **Time required:** 3–4 hours for a complete run-through.
 
+> **Scope note:** This guide covers **Phase-1 local running** of the AntKart platform via Docker Compose, using the public **AntKart reference repository** ([`AntKart-Src1`](https://github.com/seesathish/AntKart-Src1)), which it clones in Section 2. The current repository targets **cloud deployment** — services run locally against live cloud services or are debugged via cloud port-forwarding, with no local docker-compose stack of its own. The `docker-compose` commands below operate on the cloned reference repository.
+
 ---
 
 ## Table of Contents

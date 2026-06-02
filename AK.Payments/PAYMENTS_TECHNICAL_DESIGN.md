@@ -438,10 +438,8 @@ AK.Payments is registered with `AddRabbitMqMassTransit(configuration, "payments"
 ## Running Locally
 
 ```bash
-# Start infrastructure (PostgreSQL + RabbitMQ)
-docker-compose up postgres rabbitmq -d
-
-# Run the service
+# With PostgreSQL and RabbitMQ reachable in the cloud (directly or via
+# port-forward), run the service locally:
 cd AK.Payments/AK.Payments.API
 dotnet run
 # Swagger → http://localhost:5086/swagger

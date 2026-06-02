@@ -707,11 +707,13 @@ cd AK.Order/AK.Order.API && dotnet run
 }
 ```
 
-### Docker Compose (all services)
+### Running the service
+
+This repository targets cloud deployment — run the service locally against live cloud services or via cloud port-forwarding. The docker-compose-based Phase-1 local stack is preserved in the public AntKart reference repository.
 
 ```bash
-docker-compose up --build
-# Order API → http://localhost:8083/swagger
+cd AK.Order/AK.Order.API && dotnet run
+# Order API → http://localhost:5080/swagger
 ```
 
 ### Tests

@@ -8,7 +8,7 @@
 - Before committing any change
 - After adding a new feature or fixing a bug
 - After modifying BuildingBlocks (all services must still pass)
-- As a gate before `docker-compose up --build`
+- As a gate before deploying
 
 ---
 

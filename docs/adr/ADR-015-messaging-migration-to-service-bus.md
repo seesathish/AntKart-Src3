@@ -59,7 +59,7 @@ Same line of code in `MassTransitExtensions.cs`. Different credential source cho
 - Developer must have run `az login` and have an active session before running any service locally
 - Developer identity must have `Azure Service Bus Data Owner` on the namespace (one-time RBAC grant)
 - In AKS (Week 7), a Managed Identity with the same role must be assigned to the pod
-- No connection string in any `appsettings.json` or `docker-compose.yml`
+- No connection string in any committed configuration (`appsettings.json` or deployment config)
 
 ---
 
@@ -93,7 +93,7 @@ All environments use Service Bus. Locally, `DefaultAzureCredential` uses `AzureC
 ### Consequences
 
 - Developers need internet access and an active `az login` session to run services locally
-- The RabbitMQ Docker container is removed from `docker-compose.yml` — one less container to start
+- The RabbitMQ Docker container is removed from the local orchestration — one less container to start
 - Any retry or dead-letter behaviour observed locally is identical to what will happen in production
 
 ---
@@ -190,8 +190,8 @@ The enterprise model eliminates this class of problem:
 | `AK.Notification/AK.Notification.Infrastructure/Extensions/ServiceCollectionExtensions.cs` | Same |
 | `AK.ShoppingCart/AK.ShoppingCart.Infrastructure/Extensions/ServiceCollectionExtensions.cs` | Same |
 | `AK.UserIdentity/AK.UserIdentity.API/Program.cs` | `AddRabbitMqMassTransit` → `AddServiceBusMassTransit` |
-| `docker-compose.yml` | Removed `rabbitmq` service, all `RabbitMq__*` env vars, `rabbitmq_data` volume; added `ServiceBus__FullyQualifiedNamespace` to 6 services |
-| `docker-compose.override.yml` | Removed `rabbitmq` port stanza |
+| Local orchestration config | Removed `rabbitmq` service, all `RabbitMq__*` env vars, `rabbitmq_data` volume; added `ServiceBus__FullyQualifiedNamespace` to 6 services |
+| Local orchestration override | Removed `rabbitmq` port stanza |
 | `CloudMigration.md` | Created — running record of all code changes with detailed reasoning |
 | `DevelopmentGuide.md` | Added Section 4 — enterprise dev model, Service Bus explanation, token auth, step-by-step walkthrough |
 

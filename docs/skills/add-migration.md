@@ -128,15 +128,14 @@ cd AK.Order/AK.Order.API && dotnet run
 
 ---
 
-## Step 7 — Rebuild Docker
+## Step 7 — Run the Service
 
 ```bash
-# Rebuild just the affected service
-docker-compose up --build -d ak-order-api
-
-# Watch logs for migration success
-docker logs antkart-order-api --follow
+# Run the service (locally against cloud services, or after redeploying)
+cd AK.Order/AK.Order.API && dotnet run
 ```
+
+The migration applies on startup. The docker-compose-based Phase-1 local stack is preserved in the public AntKart reference repository.
 
 Expected log line: `Applying pending EF Core migrations...` followed by the migration name and no errors.
 

@@ -12,8 +12,8 @@
 - Periodically as a scheduled security health check
 
 ## Prerequisites
-- Docker Compose stack fully up: `docker-compose up -d`
-- All 16 containers healthy: `docker ps` shows `Up` or `healthy` for all
+- The AntKart services running and reachable — cloud-deployed, or run locally against live cloud services / via cloud port-forwarding
+- All services healthy
 - Two test accounts registered: `sectest_user` and `sectest_user2` (see Setup in `SECURITY_TESTS.md`)
 
 ---

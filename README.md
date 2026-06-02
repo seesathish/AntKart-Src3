@@ -126,7 +126,7 @@ flowchart TD
 - **Clean Architecture + DDD per service** — each microservice has Domain, Application, Infrastructure, and API layers with strict inward dependency rules; domain entities use private setters and factory methods with no framework leakage.
 - **CQRS via MediatR 12 in every service** — commands and queries are fully separated; a `ValidationBehavior<TRequest, TResponse>` pipeline ensures all requests are validated by FluentValidation before reaching handlers.
 - **MassTransit SAGA orchestrates order → stock → payment → notification** — the `OrderSaga` in AK.Order transitions through `Initial → StockPending → Confirmed/Cancelled` states, coordinating AK.Products, AK.ShoppingCart, AK.Payments, and AK.Notification over RabbitMQ without any direct service-to-service HTTP calls.
-- **AK.Notification is fully event-driven** — consumes six integration events (`UserRegistered`, `OrderCreated`, `OrderConfirmed`, `OrderCancelled`, `PaymentSucceeded`, `PaymentFailed`) and dispatches transactional emails via MailKit. Local dev uses Mailhog (`http://localhost:8025`) as an SMTP trap; production uses Gmail SMTP with an App Password via `docker-compose.gmail.yml`.
+- **AK.Notification is fully event-driven** — consumes six integration events (`UserRegistered`, `OrderCreated`, `OrderConfirmed`, `OrderCancelled`, `PaymentSucceeded`, `PaymentFailed`) and dispatches transactional emails via MailKit. Local dev uses an SMTP trap (e.g. Mailhog at `http://localhost:8025`); production uses Gmail SMTP with an App Password supplied through the notification service's `EmailSettings`.
 - **EF Core Outbox pattern in Order and Payments** — integration events are written atomically to the same PostgreSQL transaction as the business data, guaranteeing at-least-once delivery and preventing dual-write inconsistencies.
 - **JWT authentication via Keycloak, validated at Gateway and per-service** — Ocelot validates the Bearer token at the gateway edge; each downstream service independently re-validates via the Keycloak OIDC discovery endpoint, so a compromised gateway cannot bypass service-level auth.
 - **Polly v8 resilience (retry + circuit breaker) on all outbound calls** — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, and `AddNpgsqlResilience()` from AK.BuildingBlocks wrap every external dependency with exponential backoff retry and a half-open circuit breaker.
@@ -149,8 +149,6 @@ AntKart/
 ├── AK.BuildingBlocks/    Shared library (messaging, resilience, logging, auth)
 ├── AK.IntegrationTests/  SAGA + event bus + notification consumer tests (MassTransit in-memory harness)
 ├── AntKart.postman_collection.json
-├── docker-compose.yml
-├── docker-compose.override.yml
 ├── EVENTBUS.md           Event bus & SAGA design
 ├── RESILIENCE.md         Circuit breaker & Polly design
 ├── OBSERVABILITY.md      ELK observability design
@@ -214,11 +212,9 @@ AntKart/
 
 ## Running the Full Stack
 
-### Docker Compose (recommended)
+This repository targets **cloud deployment**. There is no local docker-compose stack — run the services locally against live cloud services (databases, message broker, identity) or debug them via **cloud port-forwarding**. The earlier docker-compose-based Phase-1 local stack is preserved in the public AntKart reference repository.
 
-```bash
-docker-compose up --build
-```
+The endpoints below use the illustrative ports from that reference setup:
 
 | Service | URL |
 |---------|-----|
@@ -239,7 +235,7 @@ docker-compose up --build
 
 ### Startup order
 
-Docker Compose `depends_on` ensures correct startup order:
+Services depend on their backing infrastructure in this order:
 
 ```
 keycloak → all REST services
@@ -418,9 +414,9 @@ curl -s -X DELETE "http://localhost:8083/api/orders/$ORDER_ID" \
 ### Individual services (dev)
 
 ```bash
-docker-compose up keycloak rabbitmq mongodb redis postgres elasticsearch
-
-# Then in separate terminals:
+# With the backing services (Keycloak, RabbitMQ, MongoDB, Redis, PostgreSQL,
+# Elasticsearch) reachable in the cloud — directly or via port-forward —
+# run each service locally in separate terminals:
 cd AK.Products/AK.Products.API && dotnet run    # :5077
 cd AK.Discount/AK.Discount.Grpc && dotnet run   # :5001
 cd AK.ShoppingCart/AK.ShoppingCart.API && dotnet run  # :5079

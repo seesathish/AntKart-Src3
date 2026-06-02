@@ -685,7 +685,7 @@ grpcurl -plaintext localhost:5001 list discount.DiscountProtoService
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `Failed to dial target host` | Service not running | `dotnet run` or `docker-compose up` |
+| `Failed to dial target host` | Service not running | `dotnet run` |
 | `server does not support the reflection API` | Running in Production (Docker) | Pass `-proto` flag or use Postman with proto file |
 | `Unauthenticated: Missing or invalid authorization header` | No Bearer token on write RPC | Add `-H "authorization: Bearer <token>"` |
 | `PermissionDenied: Admin role required` | Token doesn't have `admin` role | Log in as `admin` / `admin2` user |
@@ -828,7 +828,7 @@ Stage 3 — final:   aspnet runtime + published output
 
 The Dockerfile adds `RUN mkdir -p /app/data && chown -R $APP_UID:$APP_UID /app/data` before `USER $APP_UID` to ensure the non-root user can write the SQLite database to the volume-mounted `/app/data` directory.
 
-### 18.2 docker-compose Services
+### 18.2 Container Images & Ports
 
 | Service | Image | Port (host→container) | Storage |
 |---------|-------|-----------------------|---------|
@@ -836,28 +836,18 @@ The Dockerfile adds `RUN mkdir -p /app/data && chown -R $APP_UID:$APP_UID /app/d
 | `antkart-products-api` | `antkart-products-api` (built) | 8080→8080 | — |
 | `antkart-discount-grpc` | `antkart-discount-grpc` (built) | 8081→8080 | `discount_data` volume (SQLite) |
 
-### 18.3 Running with Docker Compose
+### 18.3 Running the Service
+
+This repository targets cloud deployment — run the service locally against live cloud services or via cloud port-forwarding. The docker-compose-based Phase-1 local orchestration (compose files, port overrides, named volumes) is preserved in the public AntKart reference repository.
 
 ```bash
-# Build and start all services
-docker-compose up --build
-
-# Start in background
-docker-compose up --build -d
-
-# View logs
-docker-compose logs -f ak-discount-grpc
-
-# Stop and remove containers
-docker-compose down
-
-# Stop and remove containers + volumes (clears DB data)
-docker-compose down -v
+cd AK.Discount/AK.Discount.Grpc && dotnet run
+# gRPC → grpc://localhost:5001
 ```
 
-### 18.4 Development Override
+### 18.4 Local Dev Ports
 
-`docker-compose.override.yml` remaps ports for local development:
+When running locally, the services listen on:
 - Products API: `localhost:5077`
 - Discount gRPC: `localhost:5001`
 - MongoDB: `localhost:27017`

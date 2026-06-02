@@ -181,11 +181,9 @@ The automated tests above use an in-memory harness. The steps below walk the **f
 
 ### Prerequisites
 
-```bash
-docker-compose up --build
-```
+The live flow runs against real RabbitMQ, PostgreSQL, MongoDB, and the Razorpay sandbox. Bring the AntKart services up — cloud-deployed, or run locally against live cloud services / via cloud port-forwarding (the docker-compose-based Phase-1 stack is preserved in the public AntKart reference repository).
 
-Wait until healthy (check `docker-compose ps`):
+Confirm the backing services are healthy:
 
 | Container | Health |
 |-----------|--------|

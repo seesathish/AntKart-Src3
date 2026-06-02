@@ -382,7 +382,7 @@ Retention period is configurable via `NotificationSettings__RetentionDays` env v
 
 ## Configuration
 
-### Local development (docker-compose)
+### Local development
 
 ```yaml
 EmailSettings__From: "antkartadmin@gmail.com"
@@ -399,23 +399,17 @@ Email UI in local dev: `http://localhost:8025` (Mailhog web interface — all ou
 
 ### Production (Gmail SMTP)
 
-Use the `docker-compose.gmail.yml` compose override (gitignored — contains credentials):
+Supply the production SMTP settings through the deployment's environment / secret store (never commit credentials):
 
 ```yaml
-# docker-compose.gmail.yml  — never commit; gitignored
-services:
-  ak-notification-api:
-    environment:
-      - EmailSettings__Host=smtp.gmail.com
-      - EmailSettings__Port=587
-      - EmailSettings__EnableSsl=true
-      - EmailSettings__Username=antkartadmin@gmail.com
-      - EmailSettings__Password=<gmail-app-password>
-      - EmailSettings__From=antkartadmin@gmail.com
-      - EmailSettings__DisplayName=AntKart
+EmailSettings__Host: smtp.gmail.com
+EmailSettings__Port: "587"
+EmailSettings__EnableSsl: "true"
+EmailSettings__Username: antkartadmin@gmail.com
+EmailSettings__Password: <gmail-app-password>   # from a secret store, never source control
+EmailSettings__From: antkartadmin@gmail.com
+EmailSettings__DisplayName: AntKart
 ```
-
-Start with: `docker-compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.gmail.yml up -d`
 
 **Gmail app password setup:**
 1. Enable 2-Step Verification on `antkartadmin@gmail.com`
@@ -448,7 +442,7 @@ public sealed record NotificationSettings
 
 ## Docker
 
-### Mailhog (added to docker-compose.yml)
+### Mailhog (SMTP trap service)
 
 ```yaml
 mailhog:
@@ -763,10 +757,7 @@ await _publishEndpoint.Publish(new UserRegisteredIntegrationEvent(
 
 Mailhog is a local SMTP trap. Every email sent by the notification service is captured there — nothing goes to a real inbox.
 
-**Start the stack (standard):**
-```bash
-docker-compose up -d
-```
+**Start the services** so the notification service and its Mailhog SMTP trap are reachable — cloud-deployed, or run locally against live cloud services / via cloud port-forwarding (the docker-compose-based Phase-1 stack is preserved in the public AntKart reference repository).
 
 **Open the inbox:** `http://localhost:8025`
 
@@ -801,7 +792,7 @@ Authorization: Bearer <token>
 
 ### Real email — Gmail SMTP
 
-Use the `docker-compose.gmail.yml` override to send real emails to actual inboxes.
+Configure the notification service with Gmail SMTP settings to send real emails to actual inboxes.
 
 #### Gmail App Password setup (one-time)
 
@@ -810,19 +801,15 @@ Use the `docker-compose.gmail.yml` override to send real emails to actual inboxe
 3. **Google Account → Security → 2-Step Verification → App passwords**
 4. Click **Create** → name it "AntKart SMTP"
 5. Copy the 16-character code shown (e.g. `xxxx xxxx xxxx xxxx`)
-6. Open `docker-compose.gmail.yml` and set:
+6. Set the password in the notification service's `EmailSettings`, supplied via the deployment's environment / secret store:
    ```yaml
-   - EmailSettings__Password=<16-char-app-password-no-spaces>
+   EmailSettings__Password: <16-char-app-password-no-spaces>
    ```
-7. This file is gitignored — never commit it
+7. Keep this value out of source control — never commit it
 
-#### Start the stack with Gmail
+#### Run with Gmail
 
-```bash
-docker-compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.gmail.yml up -d
-```
-
-The notification service starts with Gmail SMTP instead of Mailhog. Mailhog still runs but receives nothing.
+With the Gmail `EmailSettings` applied to the notification service's configuration, it uses Gmail SMTP instead of the local Mailhog trap.
 
 #### Verify real delivery
 
@@ -840,7 +827,7 @@ The notification service starts with Gmail SMTP instead of Mailhog. Mailhog stil
 |---------|-------------|-----|
 | Email not in Mailhog | Consumer not running or event not published | Check `docker logs antkart-notification-api` and RabbitMQ at `http://localhost:15672` (guest/guest) |
 | `535 Authentication failed` | Wrong Gmail password | Ensure you're using an App Password, not the account password |
-| `Connection refused port 587` | Gmail SMTP blocked | Check `EmailSettings__EnableSsl=true` and port `587` in `docker-compose.gmail.yml` |
+| `Connection refused port 587` | Gmail SMTP blocked | Check `EmailSettings__EnableSsl=true` and port `587` in the notification service's `EmailSettings` |
 | `Notification` row in DB has `Status=Failed` | Channel send threw | Check `ErrorMessage` column via `GET /api/notifications/admin` (admin JWT) |
 | Email arrives but from wrong address | `From` doesn't match Gmail account | Keep `EmailSettings__From=antkartadmin@gmail.com` |
 
@@ -855,7 +842,7 @@ When building, follow this sequence to keep the solution in a buildable state at
 3. **AK.Payments** — update domain, command, endpoint, publishers, tests
 4. **AK.UserIdentity** — add MassTransit publisher, update tests
 5. **AK.Notification** — build full service (Domain → Application → Infrastructure → API → Tests)
-6. **docker-compose.yml** — add Mailhog + ak-notification-api
+6. **Deployment config** — register the notification service (and its Mailhog SMTP trap for local dev)
 7. **ocelot.json** — add notification routes
 8. **CLAUDE.md + README.md** — update docs
 9. **test_all.sh** — add notification endpoint smoke tests

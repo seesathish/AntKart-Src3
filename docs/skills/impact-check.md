@@ -1,6 +1,6 @@
 # Skill: Impact Check Before a Change
 
-**Purpose:** Before touching any shared code — a BuildingBlocks type, an integration event contract, `ocelot.json`, `docker-compose.yml`, a base entity, or an EF migration — enumerate every service, test, endpoint, consumer, and document that will be affected. Run this before writing a single line of change.
+**Purpose:** Before touching any shared code — a BuildingBlocks type, an integration event contract, `ocelot.json`, a base entity, or an EF migration — enumerate every service, test, endpoint, consumer, and document that will be affected. Run this before writing a single line of change.
 
 ---
 
@@ -9,7 +9,6 @@
 - Changing an **integration event record** (adding/removing/renaming fields)
 - Changing a **shared interface** (`IRepository<T>`, `IUnitOfWork`, `IDomainEvent`)
 - Changing **ocelot.json** routing, rate limits, or auth policy
-- Changing **docker-compose.yml** service names, ports, or dependency chains
 - Renaming or moving a shared DTO or base class
 - Changing **Keycloak realm settings** that affect JWT claims
 
@@ -35,7 +34,6 @@ Use this matrix to determine what to check based on what you are changing:
 | `ocelot.json` route change | Gateway, affected downstream service, ocelot.Development.json, EVENTBUS.md if routing changes |
 | Integration event field added (non-breaking) | All consumers — verify they compile; new optional field with default is safe |
 | Integration event field removed or renamed (breaking) | All publishers + all consumers must update simultaneously |
-| docker-compose.yml service rename | `container_name`, `depends_on` references, `ASPNETCORE_ENVIRONMENT`, Gateway ocelot host entries |
 | Keycloak realm change | `antkart-realm.json`, all services using JWT claims, `SECURITY_TESTS.md` |
 
 ---
@@ -97,16 +95,6 @@ cat AK.Gateway/AK.Gateway.API/ocelot.Development.json
 
 Also update `ocelot.Development.json` with the localhost port equivalent whenever a new route is added.
 
-### For docker-compose.yml changes
-
-```bash
-# Find all depends_on references to a service
-grep -n "depends_on\|condition:" docker-compose.yml docker-compose.override.yml
-
-# Check container_name usage inside other containers (env vars pointing to service hostname)
-grep -n "ak-.*-api\|antkart-" docker-compose.yml
-```
-
 ---
 
 ## Impact Report Template
@@ -147,9 +135,6 @@ dotnet build
 
 # Full test suite
 dotnet test
-
-# Docker rebuild of affected services
-docker-compose up --build -d <service-names>
 
 # If security-relevant change: run security checks
 bash docs/skills/security-check.md   # or follow SECURITY_TESTS.md

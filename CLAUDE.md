@@ -26,8 +26,6 @@ AntKart/
 ├── AK.IntegrationTests/  SAGA + event bus + notification consumer tests (no API/Grpc dependency)
 ├── AntKart.sln
 ├── AntKart.postman_collection.json
-├── docker-compose.yml
-├── docker-compose.override.yml
 ├── EVENTBUS.md           Event bus & SAGA design
 ├── RESILIENCE.md         Polly circuit breaker design
 ├── OBSERVABILITY.md      ELK observability design
@@ -171,7 +169,7 @@ AK.<Service>/
 - **Transport:** HTTP REST, port 5087 (dev) / 8086 (Docker)
 - **Database:** PostgreSQL — `AKNotificationsDb` via EF Core 9 + Npgsql, auto-migrates on startup
 - **Email (local dev):** Mailhog SMTP trap — port 1025 (SMTP), port 8025 (web UI at `http://localhost:8025`)
-- **Email (production):** Gmail SMTP via `antkartadmin@gmail.com`; use `docker-compose.gmail.yml` override (gitignored — contains credentials); `EmailSettings__Password` must be a Gmail App Password (not the account password)
+- **Email (production):** Gmail SMTP via `antkartadmin@gmail.com`; credentials supplied through the notification service's `EmailSettings` (kept out of source control); `EmailSettings__Password` must be a Gmail App Password (not the account password)
 - **Email SSL:** `EmailNotificationChannel` uses explicit `SecureSocketOptions` — port 465 → `SslOnConnect`, port 587 → `StartTls`, Mailhog/plain → `None`; never pass a bare `bool` to `ConnectAsync`
 - **Architecture:** DDD + Clean Architecture (Domain → Application → Infrastructure → API)
 - **Patterns:** CQRS (MediatR 12.4.1), FluentValidation, MassTransit consumers, channel abstraction
@@ -353,9 +351,6 @@ dotnet ef migrations add <MigrationName> \
 # Run individual services (dev)
 cd AK.Products/AK.Products.API && dotnet run   # → http://localhost:5077/swagger
 cd AK.Discount/AK.Discount.Grpc && dotnet run  # → grpc://localhost:5001
-
-# Docker Compose (all services)
-docker-compose up --build
 ```
 
 ---
@@ -387,7 +382,7 @@ When asked to build a new service `AK.<Name>`, follow this order:
 
 6. **Add Dockerfile** inside the API/Grpc project folder
 
-7. **Add service to `docker-compose.yml`** and `docker-compose.override.yml`
+7. **Add the service to the cloud deployment configuration** (this repository targets cloud deployment; there is no local docker-compose stack)
 
 8. **Run `dotnet build`** — must succeed with 0 errors before proceeding
 
@@ -409,14 +404,11 @@ When asked to build a new service `AK.<Name>`, follow this order:
 
 - Build context is always the **repo root** (`.`)
 - Dockerfiles live inside the API/Grpc project folder
-- **No `version:` key** — `docker-compose.yml` and `docker-compose.override.yml` use Compose v2 format (no top-level `version:` field)
-- **Container naming:** All `container_name` values use `antkart-` prefix (e.g. `antkart-mongodb`, `antkart-keycloak`) — never `antcart-` or `ak-`
-- **Healthchecks:** `mongodb`, `redis`, `postgres-orders`, `postgres-payments` all define `healthcheck:` blocks; dependent services use `condition: service_healthy` in `depends_on`
 - **Non-root containers:** All Dockerfiles include `USER $APP_UID` before `ENTRYPOINT` — uses .NET 9 base image UID 1654
-- **`.dockerignore`:** Repo root `.dockerignore` excludes `.git`, `**/*.Tests/`, `**/bin/`, `**/obj/`, `*.md`, `coverage-results/`, etc. — keep it up to date when adding new build-irrelevant directories
-- **Seeding in Docker:** Products seed runs when `IsDevelopment()` OR `SEED_DATABASE=true` env var is set. The compose file sets `SEED_DATABASE: "true"` on `antkart-products-api` because `ASPNETCORE_ENVIRONMENT=Production` in Docker
-- SQLite DB for Discount must persist via a named volume (`discount_data:/app/data`)
-- Services that depend on infrastructure must use `condition: service_healthy` (for services with healthchecks) or `condition: service_started` in `depends_on`
+- **Container/image naming:** use the `antkart-` prefix (e.g. `antkart-mongodb`, `antkart-keycloak`) — never `antcart-` or `ak-`
+- **Seeding:** Products seed runs when `IsDevelopment()` OR `SEED_DATABASE=true` env var is set — set `SEED_DATABASE=true` when the service runs with `ASPNETCORE_ENVIRONMENT=Production`
+
+> **No local docker-compose stack.** This repository targets cloud deployment — run services locally against live cloud services or via cloud port-forwarding. The docker-compose-based Phase-1 local orchestration (compose files, `.dockerignore`, healthchecks, `depends_on` wiring, named volumes) is preserved in the public AntKart reference repository.
 
 ---
 

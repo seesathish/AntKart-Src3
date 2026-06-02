@@ -97,7 +97,7 @@ AntKart applies all twelve factors:
 | **VII. Port binding** | Each service exports HTTP on a declared port; services do not share port assignments |
 | **VIII. Concurrency** | Scale by adding container replicas; stateless design means any number of replicas serve requests without coordination |
 | **IX. Disposability** | Services start in seconds (no warm-up database seeding in production); graceful shutdown drains in-flight requests; SMTP, database, and Service Bus connections are properly disposed per-request or per-scope |
-| **X. Dev/prod parity** | `docker-compose.yml` runs the same container images locally as in AKS; seed data runs via the same code path; EF Core migrations apply via the same `dotnet ef database update` command |
+| **X. Dev/prod parity** | The same container images run locally — against live cloud services or via cloud port-forwarding — as in AKS; seed data runs via the same code path; EF Core migrations apply via the same `dotnet ef database update` command |
 | **XI. Logs** | Serilog writes structured JSON to stdout; the ELK stack (Elasticsearch + Logstash + Kibana) collects and indexes; no log files inside containers |
 | **XII. Admin processes** | EF Core migrations run as one-off `dotnet ef database update` commands, not embedded in service startup (AK.Notification auto-migrates on startup — a deliberate trade for operational simplicity in a background-service context) |
 
@@ -107,7 +107,7 @@ AntKart applies all twelve factors:
 
 | Pillar | How AntKart implements it |
 |--------|--------------------------|
-| **Containerised** | Every service has a Dockerfile at its API/Grpc project root; `docker-compose.yml` runs the full stack locally; production targets Azure Kubernetes Service (AKS) |
+| **Containerised** | Every service has a Dockerfile at its API/Grpc project root; images run locally against live cloud services (or via cloud port-forwarding); production targets Azure Kubernetes Service (AKS) |
 | **Dynamically orchestrated** | AKS manages scheduling, scaling, and health-based pod restarts; Terraform provisions the cluster and all supporting infrastructure |
 | **Microservices-based** | 8 independently deployable services, each owning its data store, with communication via Azure Service Bus (async) and Ocelot (synchronous HTTP routing) |
 | **DevOps pipeline** | GitHub Actions CI/CD: build → test → push to Azure Container Registry → deploy to AKS; all infrastructure managed by Terraform + Terragrunt; no manual steps in production |
@@ -121,7 +121,7 @@ AntKart applies all twelve factors:
 | **Distributed complexity** | MassTransit abstracts transport — the same consumer code runs against the in-memory test harness, RabbitMQ (early dev), and Azure Service Bus (production). `MassTransitExtensions.AddServiceBusMassTransit()` in BuildingBlocks encapsulates all wiring; swapping transport is a configuration change |
 | **Eventual consistency** | The Order → Stock Reservation → Payment flow is orchestrated by a MassTransit state machine SAGA (`OrderSaga` in AK.Order). The SAGA reacts to integration events, maintains durable state in PostgreSQL, and triggers compensating transactions (order cancellation) if any step fails. See ADR-002 |
 | **Partial failure / dual write** | The MassTransit EF Core outbox pattern (AK.Order, AK.Payments) writes integration events atomically with business data in the same database transaction. A background relay delivers them. No event is lost if the service crashes between the DB write and the publish. See ADR-006 |
-| **Operational overhead** | Terraform + Terragrunt provision all Azure infrastructure as code; one `terragrunt run-all apply` builds the full environment. `docker-compose up --build` runs everything locally with no manual steps. Serilog + ELK provide centralised logging across all services |
+| **Operational overhead** | Terraform + Terragrunt provision all Azure infrastructure as code; one `terragrunt run-all apply` builds the full environment. Services run locally against live cloud services (or via cloud port-forwarding) with no manual steps. Serilog + ELK provide centralised logging across all services |
 | **Testing** | Unit tests mock at interface boundaries (no DB, no HTTP). `AK.IntegrationTests` uses the MassTransit in-memory test harness — 35 integration tests cover SAGA flows and notification consumers without RabbitMQ or Azure Service Bus |
 | **Service discovery** | In Docker Compose, service names resolve via Docker's embedded DNS. In AKS, Kubernetes Services provide stable cluster-internal DNS. The Ocelot API Gateway is the single client-facing entry point, routing to all REST services |
 

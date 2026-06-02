@@ -1,16 +1,16 @@
 # AntKart — Security Test Guide
 
-This document covers ethical black-box and grey-box security tests for the AntKart platform. All tests are run against the live Docker Compose stack.
+This document covers ethical black-box and grey-box security tests for the AntKart platform. All tests are run against the live, running services.
 
-**Prerequisites:** Docker Compose stack running (`docker-compose up -d`), `curl` available, Python 3 available.
+**Prerequisites:** the AntKart services running and reachable — cloud-deployed, or run locally against live cloud services / via cloud port-forwarding (the docker-compose-based Phase-1 local stack is preserved in the public AntKart reference repository) — plus `curl` and Python 3 available.
 
 ---
 
 ## Setup
 
 ```bash
-# Start the stack
-docker-compose up -d
+# Ensure the AntKart services are running and reachable (cloud-deployed or
+# run locally against cloud services / via port-forward) before continuing.
 
 # Register two test accounts (run once)
 curl -s -X POST http://localhost:5085/api/auth/register \

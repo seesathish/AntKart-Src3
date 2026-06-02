@@ -77,7 +77,7 @@ AK.UserIdentity/
 
 ### Realm Import
 
-The realm is auto-imported from `keycloak/antkart-realm.json` on Keycloak container startup via `--import-realm` flag. No manual setup is required after `docker-compose up`.
+The realm is auto-imported from `keycloak/antkart-realm.json` on Keycloak container startup via `--import-realm` flag. No manual setup is required once Keycloak starts.
 
 **Service account:** `service-account-antkart-client` is granted `realm-management` roles (`manage-users`, `view-users`, `query-users`, `view-realm`) in the realm JSON — required for the register and admin user list endpoints to call the Keycloak Admin REST API.
 
@@ -488,19 +488,13 @@ All tests use `Moq.Protected` to mock `HttpMessageHandler` — no real HTTP call
 
 ### Development (requires Keycloak running)
 ```bash
-# Start Keycloak first
-docker-compose up keycloak
-
-# Run the service
+# With Keycloak reachable in the cloud (directly or via port-forward),
+# run the service locally:
 cd AK.UserIdentity/AK.UserIdentity.API && dotnet run
 # → http://localhost:5085/swagger
 ```
 
-### All services via Docker Compose
-```bash
-docker-compose up --build
-```
-UserIdentity API: `http://localhost:8084/swagger`
+> This repository targets cloud deployment — there is no local docker-compose stack. The docker-compose-based Phase-1 local stack is preserved in the public AntKart reference repository.
 
 ---
 

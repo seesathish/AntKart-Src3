@@ -187,27 +187,14 @@ ENTRYPOINT ["dotnet", "AK.<Name>.API.dll"]
 
 ---
 
-## Step 7 — Add to docker-compose.yml
+## Step 7 — Add to the Cloud Deployment Configuration
 
-```yaml
-  ak-<name>-api:
-    image: antkart-<name>-api
-    build:
-      context: .
-      dockerfile: AK.<Name>/AK.<Name>.API/Dockerfile
-    container_name: antkart-<name>-api
-    ports:
-      - "808X:8080"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-      - Keycloak__Authority=http://keycloak:8080/realms/antkart
-      - Keycloak__Audience=antkart-client
-      - Keycloak__AdminUrl=http://keycloak:8080
-    depends_on:
-      keycloak:
-        condition: service_healthy
-      # add postgres/redis/etc as appropriate
-```
+This repository targets cloud deployment — there is no local docker-compose stack (the docker-compose-based Phase-1 orchestration is preserved in the public AntKart reference repository). Register the new service in the deployment configuration with its container image and the standard settings:
+
+- Image `antkart-<name>-api`, built from `AK.<Name>/AK.<Name>.API/Dockerfile` (build context = repo root)
+- `ASPNETCORE_ENVIRONMENT=Production`
+- `Keycloak__Authority`, `Keycloak__Audience=antkart-client`, `Keycloak__AdminUrl`
+- Backing services (PostgreSQL / Redis / etc.) as appropriate
 
 Add the corresponding route in `ocelot.json` — see [add-gateway-route.md](add-gateway-route.md).
 

@@ -22,7 +22,7 @@ Use these to avoid rework, missed impacts, and documentation drift.
 
 | Skill | File | Use When |
 |-------|------|----------|
-| Impact Check | [impact-check.md](impact-check.md) | Before changing any shared code — BuildingBlocks, event contracts, ocelot.json, docker-compose |
+| Impact Check | [impact-check.md](impact-check.md) | Before changing any shared code — BuildingBlocks, event contracts, ocelot.json |
 | Add a Gateway Route | [add-gateway-route.md](add-gateway-route.md) | Exposing a new service or endpoint group through the Ocelot Gateway |
 | Verify IDOR Safety | [verify-idor.md](verify-idor.md) | After adding or modifying any user-scoped endpoint |
 
@@ -31,7 +31,6 @@ Use these to avoid rework, missed impacts, and documentation drift.
 | Skill | File | Use When |
 |-------|------|----------|
 | Run Security Checks | [security-check.md](security-check.md) | Before any release, after auth changes, or on a schedule |
-| Docker Health Check | [docker-health.md](docker-health.md) | After rebuilding, adding a service, or when containers are unhealthy |
 | Run Tests | [run-tests.md](run-tests.md) | Before every commit — verify count, no failures, no dropped tests |
 
 ### Documentation
@@ -53,8 +52,7 @@ Use these to avoid rework, missed impacts, and documentation drift.
 3. /verify-idor      ← confirm no IDOR vulnerabilities introduced
 4. /run-tests        ← all pass, count doesn't drop
 5. /sync-docs        ← every affected doc updated
-6. /docker-health    ← stack healthy end-to-end
-7. /security-check   ← no regressions in security baseline
+6. /security-check   ← no regressions in security baseline
 ```
 
 ### Adding cross-service messaging
@@ -65,7 +63,6 @@ Use these to avoid rework, missed impacts, and documentation drift.
    or /new-consumer           ← if event already exists
 3. /run-tests                 ← integration tests pass
 4. /sync-docs                 ← EVENTBUS.md, both service design docs
-5. /docker-health             ← RabbitMQ queues appear, messages flow
 ```
 
 ### Maintaining the platform
@@ -73,5 +70,5 @@ Use these to avoid rework, missed impacts, and documentation drift.
 ```
 Before any shared change:     /impact-check
 After any code change:        /run-tests  →  /sync-docs
-Before shipping:              /security-check  →  /docker-health
+Before shipping:              /security-check
 ```
