@@ -6,120 +6,41 @@ AntKart is a cloud-native e-commerce platform built as independently deployable 
 
 ## Architecture Overview
 
-### Diagram 1 — Service Topology
+### AntKart Cloud Architecture
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'lineColor': '#555'}}}%%
-graph LR
-    classDef gateway fill:#E74C3C,stroke:#C0392B,color:#fff,font-weight:bold
-    classDef api fill:#4A90D9,stroke:#2471A3,color:#fff
-    classDef db fill:#27AE60,stroke:#1E8449,color:#fff
-    classDef infra fill:#F39C12,stroke:#D68910,color:#fff
-    classDef external fill:#8E44AD,stroke:#6C3483,color:#fff
-    classDef client fill:#2C3E50,stroke:#1A252F,color:#fff
+> 📌 _Placeholder — the AntKart cloud architecture diagram will be added here._
 
-    CLIENT([🌐 Client]):::client
+### DevOps Architecture
 
-    GW[🔀 API Gateway\nOcelot · 9090]:::gateway
+> 📌 _Placeholder — the DevOps (CI/CD) architecture diagram will be added here._
 
-    subgraph Core Services
-        UI[👤 UserIdentity\n· 8084]:::api
-        PRD[📦 Products\n· 8080]:::api
-        CART[🛒 ShoppingCart\n· 8082]:::api
-        ORD[📋 Order\n· 8083]:::api
-        PAY[💳 Payments\n· 8085]:::api
-        DISC[🏷️ Discount gRPC\n· 8081]:::api
-        NOTIF[📧 Notification\n· 8086]:::api
-    end
+### C4 Architecture Diagrams
 
-    subgraph Data Stores
-        MONGO[(🍃 MongoDB\nProducts)]:::db
-        REDIS[(⚡ Redis\nCart)]:::db
-        PG[(🐘 PostgreSQL\nOrders · Payments\nNotifications)]:::db
-        SQLITE[(📄 SQLite\nDiscounts)]:::db
-    end
+The platform is documented with the [C4 model](https://c4model.com/) at four levels of zoom. Full model and per-service component docs: [C4Architecture.md](docs/architecture/C4Architecture.md).
 
-    subgraph Infrastructure
-        KC[🔑 Keycloak\n· 8090]:::infra
-        MQ[🐰 RabbitMQ\n· 5672]:::infra
-        ES[(🔍 Elasticsearch\n· 9200)]:::infra
-        KIB[📊 Kibana\n· 5601]:::infra
-        MAILHOG[📬 Mailhog\n· 8025]:::infra
-    end
+#### Level 1 — System Context
 
-    RZP[💳 Razorpay\nSandbox]:::external
+AntKart as a single system, with two actors (Customer, Administrator) and five external dependencies: Keycloak (identity), Razorpay (payments), SMTP (email), RabbitMQ (messaging), and ELK (observability).
 
-    CLIENT --> GW
-    GW --> UI & PRD & CART & ORD & PAY & NOTIF
-    GW -. JWT .-> KC
+![Level 1 — System Context](docs/architecture/c4-level1-system-context.png)
 
-    PRD --> MONGO & DISC
-    DISC --> SQLITE
-    CART --> REDIS
-    ORD --> PG
-    PAY --> PG
-    PAY --> RZP
-    UI --> KC
-    NOTIF --> PG
-    NOTIF --> MAILHOG
+#### Level 2 — Container
 
-    ORD <--> MQ
-    PRD <--> MQ
-    CART <--> MQ
-    PAY <--> MQ
-    UI --> MQ
-    NOTIF --> MQ
+Eight independently deployable microservices behind an Ocelot API Gateway. Each service owns its database — MongoDB (Products), PostgreSQL (Orders, Payments, Notifications), Redis (Cart), SQLite (Discount). Services communicate asynchronously over RabbitMQ via MassTransit, except AK.Discount which is called synchronously over gRPC.
 
-    UI & PRD & CART & ORD & PAY & NOTIF --> ES
-    ES --> KIB
-```
+![Level 2 — Container](docs/architecture/c4-level2-container.png)
 
-### Diagram 2 — Order + Payment Event Flow (SAGA + Notifications)
+#### Level 3 — Component: AK.Order
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#888888', 'edgeLabelBackground': '#00000000'}}}%%
-flowchart TD
-    classDef event fill:#3498DB,stroke:#2471A3,color:#fff,rx:8
-    classDef service fill:#2ECC71,stroke:#1E8449,color:#fff
-    classDef saga fill:#E67E22,stroke:#D35400,color:#fff,font-weight:bold
-    classDef decision fill:#E74C3C,stroke:#C0392B,color:#fff
-    classDef notif fill:#8E44AD,stroke:#6C3483,color:#fff
+AK.Order is the most architecturally rich service — CQRS via MediatR, SAGA orchestration with MassTransit, EF Core Outbox for guaranteed event delivery, and a domain model with an enforced state machine. Commands flow through a `ValidationBehavior` pipeline; `CancelOrder` and `UpdateOrderStatus` return `Result<T>` for expected failures while `CreateOrder` uses exceptions for unexpected ones.
 
-    A([🛍️ Client places order]):::service
-    B[📋 AK.Order\nPOST /api/orders]:::service
-    C{{OrderCreatedIntegrationEvent}}:::event
-    D[🧩 Order SAGA]:::saga
-    E[📦 AK.Products\nReserve stock]:::service
-    F{Stock\navailable?}:::decision
-    G{{StockReservedIntegrationEvent}}:::event
-    H{{StockReservationFailedIntegrationEvent}}:::event
-    I{{OrderConfirmedIntegrationEvent}}:::event
-    J{{OrderCancelledIntegrationEvent}}:::event
-    K[💳 AK.Payments\nInitiate payment]:::service
-    L[🛒 AK.ShoppingCart\nClear cart]:::service
-    M{Payment\nsucceeded?}:::decision
-    N{{PaymentSucceededIntegrationEvent}}:::event
-    O{{PaymentFailedIntegrationEvent}}:::event
-    P[📋 Order → Paid]:::service
-    Q[📋 Order → PaymentFailed]:::service
+![Level 3 — Component: AK.Order](docs/architecture/c4-level3-order-components.png)
 
-    N1[📧 Notification\n✉ Order Confirmation]:::notif
-    N2[📧 Notification\n✉ Order Confirmed]:::notif
-    N3[📧 Notification\n✉ Order Cancelled]:::notif
-    N4[📧 Notification\n✉ Payment Receipt]:::notif
-    N5[📧 Notification\n✉ Payment Failed]:::notif
+#### Order Flow — Dynamic View
 
-    A --> B --> C --> D
-    C --> N1
-    D --> E --> F
-    F -- Yes --> G --> D --> I
-    F -- No --> H --> D --> J
-    I --> K & L & N2
-    J --> N3
-    K --> M
-    M -- Yes --> N --> P & N4
-    M -- No --> O --> Q & N5
-```
+The end-to-end order journey: Customer → Gateway → Order (creates via Outbox) → RabbitMQ → Products (reserves stock) → SAGA confirms → Payment initiated → Razorpay verifies → Payment succeeded → Order updated to Paid → Notification emails sent at each stage.
+
+![Order Flow — Dynamic View](docs/architecture/c4-order-flow-dynamic.png)
 
 ### Architecture Highlights
 
@@ -131,6 +52,33 @@ flowchart TD
 - **JWT authentication via Keycloak, validated at Gateway and per-service** — Ocelot validates the Bearer token at the gateway edge; each downstream service independently re-validates via the Keycloak OIDC discovery endpoint, so a compromised gateway cannot bypass service-level auth.
 - **Polly v8 resilience (retry + circuit breaker) on all outbound calls** — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, and `AddNpgsqlResilience()` from AK.BuildingBlocks wrap every external dependency with exponential backoff retry and a half-open circuit breaker.
 - **Serilog → Elasticsearch → Kibana for structured observability** — every service ships structured JSON logs with a `X-Correlation-Id` header propagated end-to-end; Kibana dashboards provide cross-service request tracing without a separate APM agent.
+
+### Architecture Decision Records
+
+Key design and platform decisions are captured as ADRs in [docs/adr/](docs/adr/).
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| [ADR-001](docs/adr/ADR-001-microservices-architecture.md) | Microservices Architecture | Independently deployable .NET 9 services over a monolith; each owns its data and deployment lifecycle. |
+| [ADR-002](docs/adr/ADR-002-clean-architecture-and-ddd.md) | Clean Architecture & DDD | Domain / Application / Infrastructure / API layering with inward dependencies and a rich domain model. |
+| [ADR-003](docs/adr/ADR-003-fault-tolerance-with-polly.md) | Fault Tolerance with Polly | Retry + circuit breaker + timeout pipelines (Polly v8) on all outbound calls, with graceful degradation. |
+| [ADR-004](docs/adr/ADR-004-polyglot-persistence.md) | Polyglot Persistence | One database per service, each chosen to fit its workload (MongoDB, PostgreSQL, Redis, SQLite). |
+| [ADR-005](docs/adr/ADR-005-saga-orchestration.md) | SAGA Orchestration | Orchestrated SAGA (MassTransit state machine) over 2PC and pure choreography for the order workflow. |
+| [ADR-006](docs/adr/ADR-006-ocelot-api-gateway.md) | Ocelot API Gateway | Ocelot as the in-process gateway (routing, JWT, rate limiting, QoS) over YARP. |
+| [ADR-007](docs/adr/ADR-007-masstransit-over-raw-rabbitmq.md) | MassTransit over Raw RabbitMQ | MassTransit for SAGA, outbox, retry, and consumer pipelines instead of the raw RabbitMQ client. |
+| [ADR-008](docs/adr/ADR-008-shared-ddd-contracts-in-buildingblocks.md) | Shared DDD Contracts | Common DDD base types and contracts centralised in AK.BuildingBlocks. |
+| [ADR-009](docs/adr/ADR-009-domain-events-vs-integration-events.md) | Domain vs Integration Events | Two distinct event patterns — in-process domain events vs cross-service integration events. |
+| [ADR-010](docs/adr/ADR-010-CQRS-and-MediatR.md) | CQRS and MediatR | Command/query separation via MediatR with a validation pipeline behavior. |
+| [ADR-011](docs/adr/ADR-011-Repository-Specification-and-Unit-of-Work.md) | Repository, Specification & UoW | Repository, Specification, and Unit of Work patterns for persistence abstraction. |
+| [ADR-012](docs/adr/ADR-012-iac-with-terraform-terragrunt.md) | IaC with Terraform & Terragrunt | All Azure infrastructure as code, composed and kept DRY with Terragrunt. |
+| [ADR-013](docs/adr/ADR-013-key-vault-rbac-and-observability-foundation.md) | Key Vault RBAC & Observability | Key Vault RBAC authorization, workspace-based App Insights, and an ACR Basic→Premium strategy. |
+| [ADR-014](docs/adr/ADR-014-cosmosdb-and-servicebus.md) | Cosmos DB & Service Bus | Cosmos DB (Mongo API, serverless) and Azure Service Bus (Standard) as managed cloud backbones. |
+| [ADR-015](docs/adr/ADR-015-messaging-migration-to-service-bus.md) | Messaging → Service Bus | Migrate messaging from RabbitMQ to Azure Service Bus with token (managed identity) auth. |
+| [ADR-016](docs/adr/ADR-016-data-migration-cosmosdb-and-workload-identity.md) | Cosmos Data Migration & Workload Identity | Move Products persistence to Cosmos DB and establish the Workload Identity foundation. |
+| [ADR-017](docs/adr/ADR-017-entra-id-functions-eventgrid.md) | Entra ID, Functions & Event Grid | Replace Keycloak with Entra ID; isolated-worker Azure Functions and Event Grid routing. |
+| [ADR-018](docs/adr/ADR-018-aks-workload-identity-base-image.md) | AKS & Hardened Base Image | AKS cluster with Workload Identity and a custom hardened .NET base image. |
+| [ADR-019](docs/adr/ADR-019-serverless-notification-functions-eventgrid.md) | Serverless Notification | Notification as Consumption-plan Azure Functions; Service Bus vs Event Grid transport boundary. |
+| [ADR-020](docs/adr/ADR-020-api-management-managed-edge-gateway.md) | API Management Edge Gateway | Azure API Management as the managed external edge in front of internal cluster routing. |
 
 ---
 
@@ -230,184 +178,6 @@ The endpoints below use the illustrative ports from that reference setup:
 | **Mailhog Web UI** | **http://localhost:8025** (captured emails) |
 
 > **Keycloak auto-import:** The `antkart` realm is imported from `keycloak/antkart-realm.json` on first start. Pre-seeded users: `admin/admin123` (admin+user), `user1/user123` (user), `admin2/Admin2Pass!` (admin+user).
-
-### Startup order
-
-Services depend on their backing infrastructure in this order:
-
-```
-keycloak → all REST services
-rabbitmq → products, shoppingcart, order
-elasticsearch → all services (log shipping)
-kibana → elasticsearch
-gateway → keycloak + all REST services
-```
-
-### Test end-to-end async flow
-
-Two complete flows are shown. Both share the same setup (steps 1–4). The SAGA runs
-automatically in the background — no manual trigger is needed.
-
-#### Common setup
-
-```bash
-# 1. Login
-TOKEN=$(curl -s -X POST http://localhost:8084/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"user1","password":"user123"}' | jq -r '.accessToken')
-
-# 2. Fetch a product
-PRODUCT=$(curl -s "http://localhost:8080/api/v1/products?pageSize=1" | jq '.items[0]')
-PRODUCT_ID=$(echo $PRODUCT | jq -r '.id')
-SKU=$(echo $PRODUCT       | jq -r '.sku')
-PRICE=$(echo $PRODUCT     | jq -r '.price')
-
-# 3. Place order
-# ┌─ fires ──────────────────────────────────────────────────────────────────────┐
-# │  OrderCreatedIntegrationEvent                                                │
-# │    → (Notification)  Order Confirmation email                                │
-# │  SAGA starts: StockPending state                                             │
-# │    → (Products) ReserveStockConsumer decrements stock                        │
-# │    → StockReservedIntegrationEvent                                           │
-# │       → (Order SAGA)   state: StockPending → Confirmed                      │
-# │       → OrderConfirmedIntegrationEvent                                       │
-# │            → (Order)        status → Confirmed                               │
-# │            → (ShoppingCart) cart cleared                                     │
-# │            → (Notification) Order Confirmed email                            │
-# └──────────────────────────────────────────────────────────────────────────────┘
-ORDER=$(curl -s -X POST http://localhost:8083/api/orders \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d "{
-    \"shippingAddress\": {
-      \"fullName\": \"John Doe\",
-      \"addressLine1\": \"123 Main St\",
-      \"city\": \"Chennai\",
-      \"state\": \"Tamil Nadu\",
-      \"postalCode\": \"600001\",
-      \"country\": \"India\",
-      \"phone\": \"+91-9876543210\"
-    },
-    \"items\": [{
-      \"productId\": \"$PRODUCT_ID\",
-      \"sku\": \"$SKU\",
-      \"productName\": \"Test Product\",
-      \"quantity\": 1,
-      \"price\": $PRICE
-    }]
-  }")
-ORDER_ID=$(echo $ORDER     | jq -r '.id')
-ORDER_NUMBER=$(echo $ORDER | jq -r '.orderNumber')
-echo "Order: $ORDER_NUMBER  ID: $ORDER_ID"
-
-sleep 3   # wait for SAGA stock reservation to complete
-
-# 4. Initiate payment (Razorpay creates a payment session)
-PAYMENT=$(curl -s -X POST http://localhost:8085/api/payments/initiate \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d "{\"orderId\":\"$ORDER_ID\",\"orderNumber\":\"$ORDER_NUMBER\",\"amount\":$PRICE,\"method\":1}")
-PAYMENT_ID=$(echo $PAYMENT        | jq -r '.paymentId')
-RAZORPAY_ORDER_ID=$(echo $PAYMENT | jq -r '.razorpayOrderId')
-RAZORPAY_KEY_ID=$(echo $PAYMENT   | jq -r '.razorpayKeyId')
-echo "Payment: $PAYMENT_ID  Razorpay order: $RAZORPAY_ORDER_ID"
-```
-
----
-
-#### Flow A — Happy path (payment succeeds)
-
-Payment must be completed through the Razorpay checkout widget, which returns the
-`razorpayPaymentId` and `razorpaySignature`. Use the Razorpay sandbox test card:
-
-| Field | Value |
-|-------|-------|
-| Card number | `4111 1111 1111 1111` (Visa) or `5267 3169 4984 2643` (Mastercard) |
-| Expiry | Any future date |
-| CVV | Any 3 digits |
-| OTP | `1234 1234` |
-
-The widget calls your frontend callback with `razorpay_payment_id` and `razorpay_signature`.
-If running without a frontend, compute the signature from the terminal:
-
-```bash
-# Replace with values returned by the Razorpay widget / test dashboard
-RAZORPAY_PAYMENT_ID="pay_xxxxxxxxxxxx"
-RAZORPAY_KEY_SECRET="<your-razorpay-key-secret>"   # from Razorpay dashboard / local config
-
-RAZORPAY_SIGNATURE=$(printf '%s' "${RAZORPAY_ORDER_ID}|${RAZORPAY_PAYMENT_ID}" | \
-  openssl dgst -sha256 -hmac "$RAZORPAY_KEY_SECRET" | awk '{print $2}')
-
-# 5A. Verify payment (valid signature → success)
-# ┌─ fires ──────────────────────────────────────────────────────────────────────┐
-# │  PaymentSucceededIntegrationEvent                                            │
-# │    → (Order)        status → Paid                                            │
-# │    → (Notification) Payment Receipt email                                    │
-# └──────────────────────────────────────────────────────────────────────────────┘
-curl -s -X POST http://localhost:8085/api/payments/verify \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d "{
-    \"paymentId\": \"$PAYMENT_ID\",
-    \"razorpayOrderId\": \"$RAZORPAY_ORDER_ID\",
-    \"razorpayPaymentId\": \"$RAZORPAY_PAYMENT_ID\",
-    \"razorpaySignature\": \"$RAZORPAY_SIGNATURE\"
-  }" | jq '{status: .status}'
-```
-
-**Emails delivered (check Mailhog `http://localhost:8025` or Gmail inbox):**
-1. Order Confirmation  ← step 3
-2. Order Confirmed (stock reserved)  ← SAGA
-3. Payment Receipt  ← step 5A
-
----
-
-#### Flow B — Compensation path (payment fails → order cancelled)
-
-Fully testable with curl — no real card or Razorpay widget needed.
-
-```bash
-# 5B. Verify with invalid signature → payment fails
-# ┌─ fires ──────────────────────────────────────────────────────────────────────┐
-# │  PaymentFailedIntegrationEvent                                               │
-# │    → (Order)        status → PaymentFailed                                   │
-# │    → (Notification) Payment Failed email                                     │
-# └──────────────────────────────────────────────────────────────────────────────┘
-curl -s -X POST http://localhost:8085/api/payments/verify \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d "{
-    \"paymentId\": \"$PAYMENT_ID\",
-    \"razorpayOrderId\": \"$RAZORPAY_ORDER_ID\",
-    \"razorpayPaymentId\": \"pay_test_invalid\",
-    \"razorpaySignature\": \"invalid_signature\"
-  }" | jq '{status: .status}'
-
-# 6B. Customer cancels the order
-# ┌─ fires ──────────────────────────────────────────────────────────────────────┐
-# │  OrderCancelledIntegrationEvent                                              │
-# │    → (Order)        status → Cancelled                                       │
-# │    → (Notification) Order Cancelled email                                    │
-# └──────────────────────────────────────────────────────────────────────────────┘
-curl -s -X DELETE "http://localhost:8083/api/orders/$ORDER_ID" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-**Emails delivered (check Mailhog `http://localhost:8025` or Gmail inbox):**
-1. Order Confirmation  ← step 3
-2. Order Confirmed (stock reserved)  ← SAGA
-3. Payment Failed  ← step 5B
-4. Order Cancelled  ← step 6B
-
----
-
-#### Observe the async activity
-
-| Tool | URL | What to watch |
-|------|-----|---------------|
-| RabbitMQ management | http://localhost:15672 | Queue depths, message routing, consumer counts |
-| Mailhog (local email) | http://localhost:8025 | All outbound emails captured — no real delivery |
-| Kibana | http://localhost:5601 | Structured logs with `X-Correlation-Id` across all services |
 
 ### Individual services (dev)
 
