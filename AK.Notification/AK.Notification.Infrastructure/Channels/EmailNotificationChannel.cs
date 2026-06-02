@@ -49,7 +49,7 @@ internal sealed class EmailNotificationChannel(
 
         // Skip authentication for local Mailhog (no username/password configured).
         if (!string.IsNullOrEmpty(settings.Username))
-            await smtp.AuthenticateAsync(settings.Username, settings.Password, ct);
+            await smtp.AuthenticateAsync(settings.Username, settings.Password ?? string.Empty, ct);
 
         await smtp.SendAsync(email, ct);
 

@@ -322,7 +322,7 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | Microsoft.Extensions.Http.Resilience | 9.0.0 | BuildingBlocks, Products Infrastructure |
 | Microsoft.Extensions.Resilience | 9.0.0 | BuildingBlocks, Order/ShoppingCart Infrastructure |
 | Ocelot | 23.4.2 | Gateway API |
-| Razorpay | 3.1.0 | Payments Infrastructure |
+| Razorpay | 3.3.2 | Payments Infrastructure |
 | xunit | 2.9.x | Tests |
 | Moq | 4.20.x | Tests |
 | FluentAssertions | 7.x | Tests |
