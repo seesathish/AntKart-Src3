@@ -31,6 +31,7 @@ AntKart/
 ├── EVENTBUS.md           Event bus & SAGA design
 ├── RESILIENCE.md         Polly circuit breaker design
 ├── OBSERVABILITY.md      ELK observability design
+├── KNOWN-ISSUES.md       Tracker for known technical debt & deferred fixes (KI-NNN ids)
 ├── nuget.config
 └── CLAUDE.md             ← this file
 ```
