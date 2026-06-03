@@ -34,6 +34,12 @@ Before provisioning anything, it is important to understand *who* Terraform acts
 
 ---
 
+## Repository Hygiene
+
+Terraform and Terragrunt generate local working files — the `.terraform/` provider directory, the `.terragrunt-cache/`, and `*.tfstate` files — that are transient or environment-specific and are **gitignored**; they are never committed. The one deliberate exception is the **provider lock file** (`.terraform.lock.hcl`), which **is committed**: it pins the exact provider versions so every run — on any machine or in a pipeline — resolves the same providers, the infrastructure equivalent of pinned package versions and the basis for reproducible builds. State itself lives only in the remote Azure backend (Step 2), never in the repository.
+
+---
+
 ## Infrastructure Components
 
 Each component below is documented with the same four-part structure. Sections are filled in as the component is built, capturing the real configuration, the real commands, and the real verification output.

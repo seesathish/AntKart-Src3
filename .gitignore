@@ -365,3 +365,18 @@ FodyWeavers.xsd
 
 # Structurizr CLI local cache (Lucene index + thumbnails — generated tooling state)
 docs/architecture/.structurizr/
+
+# Terraform / Terragrunt working files — never commit these
+**/.terraform/
+**/.terragrunt-cache/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars        # may contain secrets; supply values via Terragrunt inputs or env
+override.tf
+override.tf.json
+
+# DO commit the provider lock file — it pins provider versions for reproducible
+# builds (the infrastructure equivalent of pinned package versions), so every
+# run resolves the exact same providers.
+!**/.terraform.lock.hcl
