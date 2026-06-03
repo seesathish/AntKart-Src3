@@ -30,7 +30,7 @@ Before provisioning anything, it is important to understand *who* Terraform acts
 - **Authorization via RBAC roles.** Authenticating proves *identity*; it does not grant *permission*. The service principal is assigned **role-based access control (RBAC)** roles, scoped to the subscription (and, where needed, to specific resources), that allow it to create and manage exactly the resources it needs — and no more (least privilege).
 - **Remote state with locking.** Terraform records what it has created in **state**. State is stored **remotely** (not on a single machine) so the team shares one source of truth, and it is protected by **locking** so two runs cannot modify the same infrastructure concurrently and corrupt it.
 
-> _The exact provider configuration, credential setup, role assignments, and backend bootstrap commands are captured in the numbered sections below as each step is completed._
+> The Terraform service principal and its RBAC assignment are created in **Step 1** below — with the Azure CLI, because the automation identity must exist before Terraform can authenticate as it. The remote state backend and Terragrunt root are bootstrapped in **Step 2**.
 
 ---
 
@@ -40,17 +40,78 @@ Each component below is documented with the same four-part structure. Sections a
 
 ### 1. Terraform Identity & Access (Service Principal, RBAC)
 
+> This step uses the **Azure CLI, not Terraform** — the automation identity must exist before Terraform can authenticate as it, so there is no `.tf` script here, only documented commands.
+
 #### Understand
-_To be completed as this component is built._
+
+**Tenant (directory) vs. subscription.** A **tenant** is the *identity* boundary — it holds users, groups, service principals, and app registrations. A **subscription** is the *billing and resource* boundary — it holds and pays for the resources you create. One tenant can contain **many** subscriptions; each subscription belongs to **exactly one** tenant. A single user can belong to **many** tenants. In short: the tenant answers "who are you", the subscription answers "where do resources live and who pays".
+
+**Authentication vs. authorization.** These are two separate things:
+- **Authentication** proves *who* an identity is. A **service principal** is a non-human identity (the automation equivalent of a user account) used to authenticate with no person present.
+- **Authorization** decides *what* that identity may do. It is granted by an **RBAC role assignment**, which binds a role (a set of permissions) to an identity at a scope. Authenticating successfully grants nothing on its own — a role assignment is what confers permission.
+
+**Why a service principal instead of a personal login.**
+- **Non-interactive** — automation cannot answer an MFA prompt; a service principal authenticates with credentials, no human interaction.
+- **Least privilege & bounded blast radius** — it carries only the permissions it needs, and if its secret leaks you rotate one secret rather than exposing a person's full access.
+- **Auditability** — automated actions are attributable to the automation identity, kept distinct from human activity in the logs.
+- **Clean lifecycle** — it can be created, scoped, rotated, and deleted independently of any individual's account.
+
+**Why Contributor specifically.** The **Contributor** role can create, read, update, and delete resources — everything an IaC identity needs — but it **cannot grant access to others** (it cannot create role assignments). Granting access requires **Owner** or **User Access Administrator**. Withholding that from the Terraform identity is a deliberate least-privilege choice: the automation that *builds* resources should not also be able to *hand out permissions*.
+
+**How Terraform consumes this.** The `azurerm` provider authenticates as the service principal using four environment variables — `ARM_CLIENT_ID` (the SP's application id), `ARM_CLIENT_SECRET` (its secret), `ARM_TENANT_ID` (the directory), and `ARM_SUBSCRIPTION_ID` (where resources are created). When these are present, Terraform runs as the service principal with its Contributor permissions, with no `az login` and no interactive sign-in.
 
 #### Build
-_To be completed as this component is built._
+
+This step has **no Terraform script**. There is a bootstrapping order: you cannot use Terraform to create the very identity Terraform signs in with, so the service principal and its role assignment are created once, up front, with the **Azure CLI**.
+
+The only outputs that matter for later steps are the four `ARM_*` values. The **client secret is sensitive** — it is never written to a `.tf` file, a variables file, or anything committed to the repository. It is supplied to Terraform only through environment variables (and later through a secret store or pipeline secret).
 
 #### Execute
-_To be completed as this component is built._
+
+Run from PowerShell, signed in to the correct tenant (`az login`) with the target subscription selected. Replace `<subscription-id>` (and the captured `<appId>` / `<password>` / `<tenant>`) with real values.
+
+```powershell
+# 0. Select the target subscription (the resource home and the role-assignment scope)
+az account set --subscription "<subscription-id>"
+
+# 1. Create the service principal with Contributor scoped to the subscription.
+#    This prints appId, password, and tenant exactly once — capture them now.
+az ad sp create-for-rbac `
+  --name "antkart-terraform-sp" `
+  --role "Contributor" `
+  --scopes "/subscriptions/<subscription-id>"
+
+# 2. Set the four ARM_* environment variables for this session so Terraform
+#    authenticates as the service principal. Use the values printed in step 1.
+$env:ARM_CLIENT_ID       = "<appId>"
+$env:ARM_CLIENT_SECRET   = "<password>"
+$env:ARM_TENANT_ID       = "<tenant>"
+$env:ARM_SUBSCRIPTION_ID = "<subscription-id>"
+```
+
+What each does:
+- **Step 0** — sets the active subscription so the service principal and its role assignment land in the right place.
+- **Step 1** — creates the `antkart-terraform-sp` service principal and assigns it **Contributor** at subscription scope; prints the credentials once.
+- **Step 2** — exports the four `ARM_*` variables so the `azurerm` provider authenticates as the service principal for the rest of the session.
+
+`az ad sp create-for-rbac` prints the password only once. If it is lost, reset it (see the security note) rather than recreating the service principal.
 
 #### Verify
-_To be completed as this component is built._
+
+```powershell
+# Confirm the role assignment: expect Contributor at the subscription scope.
+az role assignment list --assignee "<appId>" -o table
+```
+
+A **correct result** shows one row with **Principal** = the SP's `appId`, **Role** = `Contributor`, and **Scope** = `/subscriptions/<subscription-id>`.
+
+In the portal:
+- **Microsoft Entra ID → App registrations** → search `antkart-terraform-sp` to see the identity.
+- **Subscription → Access control (IAM) → Role assignments** → filter by the SP name → it appears with the **Contributor** role at subscription scope.
+
+Optional end-to-end check once the variables are set: a later Terraform `plan` that authenticates without prompting confirms the credentials and permissions are wired correctly.
+
+> **Security note.** The client secret (`ARM_CLIENT_SECRET`) is a credential equivalent to a password. Store it only in environment variables now, and in a secret store or pipeline secret later — **never** in the repository, a `.tf` file, or a committed variables file. Secrets can and should be rotated: `az ad sp credential reset --id <appId>` issues a new secret and invalidates the old one, without recreating the service principal or its role assignment.
 
 ### 2. Remote State Backend & Terragrunt Root
 
