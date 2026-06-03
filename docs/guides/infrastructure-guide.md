@@ -144,7 +144,7 @@ Optional end-to-end check once the variables are set: a later Terraform `plan` t
 
 This step adds two things under `infrastructure/`:
 
-- **`infrastructure/environments/dev/root.hcl`** — the Terragrunt root. Its `remote_state` block declares the **`azurerm`** backend and points it at a dedicated state **resource group**, **storage account**, and blob **container**. The `generate` directive writes a `backend.tf` into each child module at init time, so every module inherits the backend without copy-paste. The `key` is derived per module (`${path_relative_to_include()}/terraform.tfstate`), giving each module its own isolated state blob so two modules can never write to the same state. `use_azuread_auth = true` means the backend authenticates with the caller's Entra identity (the Step 1 service principal) — **no storage key and no secret in the repo**. A `generate "provider"` block writes a shared `azurerm` provider into each module, reading the `ARM_*` variables to authenticate. State **locking** is built into the `azurerm` backend via a **blob lease**, and the storage account encrypts state **at rest** by default.
+- **`infrastructure/environments/dev/root.hcl`** — the Terragrunt root. Its `remote_state` block declares the **`azurerm`** backend and points it at a dedicated state **resource group**, **storage account**, and blob **container**. The `generate` directive writes a `backend.tf` into each child module at init time, so every module inherits the backend without copy-paste. The `key` is derived per module (`${path_relative_to_include()}/terraform.tfstate`), giving each module its own isolated state blob so two modules can never write to the same state. `use_azuread_auth = true` means the backend authenticates to the state storage with the caller's **Azure AD (Entra) identity** — the Step 1 service principal — **rather than a storage account access key**. This keeps the state backend consistent with the platform's secret-less, Entra-based security model and avoids storage account keys entirely: the storage account has **shared-key access disabled** (so Azure AD is the only supported path), and the service principal is granted the **Storage Blob Data Contributor** role on the state account to read and write the state blobs — **no storage key and no secret in the repo**. A `generate "provider"` block writes a shared `azurerm` provider into each module, reading the `ARM_*` variables to authenticate. State **locking** is built into the `azurerm` backend via a **blob lease**, and the storage account encrypts state **at rest** by default.
 - **`infrastructure/modules/`** — established now (empty) as the home for the reusable resource modules added from Step 3 onward.
 
 The `root.hcl` is heavily commented and explained block by block in the file itself; the key blocks are `locals` (the backend coordinates), `remote_state` (backend + `generate "backend.tf"` + per-module `key` + Entra auth), `generate "provider"` (the shared provider), and `inputs` (environment-wide values).
@@ -221,6 +221,15 @@ az storage container show --name $STATE_CONTAINER --account-name $STATE_SA --aut
 ```
 
 A **correct result** shows the storage account with `provisioningState = Succeeded` and `kind = StorageV2`, and the container reported as present.
+
+Confirm the account is hardened for Azure AD-only access:
+
+```powershell
+az storage account show --name $STATE_SA --resource-group $STATE_RG `
+  --query "{minTls:minimumTlsVersion, sharedKey:allowSharedKeyAccess}" -o table
+```
+
+A **correct result** shows `minimumTlsVersion = TLS1_2` and `allowSharedKeyAccess = False` — confirming the backend is reachable only over TLS 1.2+ and only via Azure AD (no storage account keys).
 
 **State locking** is active automatically: while a `terragrunt apply` runs, the backend holds a **lease** on the state blob, and a second concurrent apply is refused until it is released. You can observe the lease during an apply:
 

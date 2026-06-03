@@ -60,10 +60,13 @@ remote_state {
     # modules can never write to the same state.
     key = "${path_relative_to_include()}/terraform.tfstate"
 
-    # use_azuread_auth: authenticate to the storage backend with the caller's
-    # Microsoft Entra (Azure AD) identity — the service principal from Step 1,
-    # or an interactive `az login`. No storage account key is used or stored,
-    # so there is no secret in this file or anywhere in the repository.
+    # use_azuread_auth: tells the azurerm backend to authenticate to the state
+    # storage using Azure AD (Microsoft Entra) — the service principal's
+    # identity from Step 1 — rather than a storage account access key. The state
+    # storage account has shared-key access DISABLED, so Azure AD is the only
+    # supported path; the service principal is granted the Storage Blob Data
+    # Contributor role on the state storage account so it can read and write the
+    # state blobs. No storage key or secret appears in this file or the repo.
     # (State is also encrypted at rest by the storage account by default.)
     use_azuread_auth = true
   }
