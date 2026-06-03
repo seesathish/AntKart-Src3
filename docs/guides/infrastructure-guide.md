@@ -252,17 +252,92 @@ az storage blob list `
 
 ### 3. Resource Group
 
+> This step adds the **first Terraform module** (`modules/resource-group`) and the **first Terragrunt live unit** (`environments/dev/resource-group`) — the first thing actually provisioned.
+
 #### Understand
-_To be completed as this component is built._
+
+**What an Azure Resource Group is.** A **resource group** is a logical container for related Azure resources. It is the unit of **lifecycle** (resources in a group are typically created and deleted together), **access control** (RBAC can be scoped to the group), **tagging**, and **cost grouping** (costs roll up by group). Almost every resource lives in exactly one resource group, so it is the natural first thing to create — the parent scope everything else is placed in.
+
+**The module-vs-live split.** The platform separates *how* from *what*:
+- The **reusable module** (`infrastructure/modules/resource-group`) defines **how** a resource group is built — its inputs, the resource, and its outputs — with **no hardcoded environment values**.
+- The **environment (live) config** (`infrastructure/environments/dev/resource-group`) supplies **what** — this environment's name, location, and tags — and **reuses** the module via Terragrunt.
+
+This keeps the setup **DRY** (the resource is defined once) and ensures environments are **structurally identical** — dev, and any future environment, run the same module and differ only in their inputs. Every component from here on follows this split.
+
+**`prevent_destroy`.** A resource group is a **stateful container** that holds every resource in the environment, so the module sets `lifecycle { prevent_destroy = true }` on it: Terraform will refuse any plan that would delete the resource group until the guard is intentionally removed, protecting against an accidental teardown that would take everything with it.
 
 #### Build
-_To be completed as this component is built._
+
+This step adds the first **module** and its first **live unit**:
+
+- **`infrastructure/modules/resource-group/`** — the reusable module:
+  - **`variables.tf`** — the inputs: `name`, `location`, and `tags`, each with a description. `name` and `location` are required (no defaults); `tags` defaults to an empty map. No environment values are baked in.
+  - **`main.tf`** — a single `azurerm_resource_group` built entirely from those inputs, with `lifecycle { prevent_destroy = true }`.
+  - **`outputs.tf`** — exports `name`, `id`, and `location`, which later modules consume as their parent scope.
+- **`infrastructure/environments/dev/resource-group/terragrunt.hcl`** — the live unit:
+  - `include "root"` pulls in `root.hcl` (the shared Azure AD backend + provider).
+  - `terraform { source = "../../../modules/resource-group" }` points at the module.
+  - `inputs { ... }` supplies dev's values: `name = "rg-antkart-dev-eastus"`, `location = "eastus"`, and `tags` (`environment`, `project`, `managed-by`).
+
+All files are heavily commented and explained inline.
 
 #### Execute
-_To be completed as this component is built._
+
+> **Heads-up — a resource group named `rg-antkart-dev-eastus` already exists** (created manually in earlier work). Terraform must **create and own** what it manages, so before applying you must resolve this so Terraform is not fighting a resource it did not create. Choose one:
+>
+> - **(a) Recommended — delete the pre-existing RG for a clean start.** It is empty, so removing it lets Terraform create and own it cleanly. Confirm it is empty first, then delete:
+>   ```powershell
+>   # Confirm the group is empty (expect: an empty list / no rows) BEFORE deleting
+>   az resource list --resource-group "rg-antkart-dev-eastus" -o table
+>   # Delete it — only after confirming it is empty
+>   az group delete --name "rg-antkart-dev-eastus" --yes
+>   ```
+> - **(b) Alternative — import it into Terraform state** instead of deleting (use this only if it ever holds resources worth keeping):
+>   ```powershell
+>   terragrunt import azurerm_resource_group.this `
+>     "/subscriptions/<subscription-id>/resourceGroups/rg-antkart-dev-eastus"
+>   ```
+>
+> Decide before `apply`. With the empty group, option (a) is the clean choice. **Do not run anything until you have decided.**
+
+Run from the live unit's folder:
+
+```powershell
+cd infrastructure/environments/dev/resource-group
+
+# 1. First init — wires up the Azure AD state backend, generates backend.tf and
+#    provider.tf from the root, downloads the provider, and on this first run
+#    creates the state blob for this unit in the tfstate container.
+terragrunt init
+
+# 2. Plan — review what will change before applying.
+terragrunt plan
+
+# 3. Apply — create the resource group. Confirm when prompted.
+terragrunt apply
+```
+
+What each does:
+- **`terragrunt init`** — generates `backend.tf`/`provider.tf` from the root, connects to the Azure AD remote state, and initializes the provider.
+- **`terragrunt plan`** — shows the intended changes; a correct plan reports **1 to add, 0 to change, 0 to destroy** (the resource group).
+- **`terragrunt apply`** — creates the resource group and writes this unit's state to the backend.
 
 #### Verify
-_To be completed as this component is built._
+
+```powershell
+# 1. The resource group exists with the expected location and tags
+az group show --name "rg-antkart-dev-eastus" -o table
+
+# 2. The state blob now appears in the tfstate container (Azure AD auth)
+az storage blob list `
+  --account-name $STATE_SA --container-name $STATE_CONTAINER `
+  --auth-mode login -o table
+```
+
+A **correct result**:
+- `terragrunt apply` ends with `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.`
+- `az group show` reports the group with `Location = eastus`, `ProvisioningState = Succeeded`, and the tags applied.
+- `az storage blob list` now shows a blob at **`resource-group/terraform.tfstate`** — confirming the remote state, locking, and Azure AD auth from Step 2 work end to end.
 
 ### 4. Networking (VNet, Subnets, NSGs)
 
