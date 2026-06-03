@@ -347,6 +347,8 @@ A **correct result**:
 
 ### 4. Networking (VNet, Subnets, NSGs)
 
+> Background reading: [Networking & Kubernetes Concepts](networking-concepts.md) — IP addressing & CIDR, VNet/subnet/NSG, Kubernetes fundamentals, and the Azure CNI IP-sizing math behind how these subnets are sized.
+
 #### Understand
 _To be completed as this component is built._
 
