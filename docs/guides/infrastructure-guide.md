@@ -128,17 +128,118 @@ Optional end-to-end check once the variables are set: a later Terraform `plan` t
 
 ### 2. Remote State Backend & Terragrunt Root
 
+> This step bootstraps the state backend with the **Azure CLI** (the storage must exist before Terraform can write state to it) and adds the first **Terragrunt** configuration under `infrastructure/`.
+
 #### Understand
-_To be completed as this component is built._
+
+**What Terraform state is.** Terraform keeps a **state file** — the source-of-truth mapping between the resources declared in code and the real resources that exist in Azure. It records each resource's identity and attributes so Terraform knows what already exists, what to change, and what to destroy. Without state, Terraform cannot tell "create this" apart from "this already exists".
+
+**Why state must be remote.** By default, state is a local file, which is fragile: it lives on one machine, is easily lost, and cannot be shared. Storing it **remotely** (in Azure Storage) makes it **shareable** across developer machines and pipelines — everyone reads and writes one authoritative copy — and **durable**, protected by the storage account's redundancy rather than a single laptop.
+
+**Why state must be locked.** If two `apply` operations run against the same state at once, they can interleave writes and corrupt it. The backend therefore **locks** the state for the duration of an operation, **serializing** applies so only one runs at a time; a second is refused until the first releases the lock. Locking — together with a single shared remote state — also prevents **configuration drift**: there is one source of truth that everyone plans and applies against, so the code and the real infrastructure stay aligned.
+
+**The Terragrunt root (`root.hcl`).** Rather than repeat the backend configuration in every module, the platform configures it **once** in a Terragrunt root file. Every module includes this root, so they all inherit the same backend — the setup is **DRY**, and because it lives in exactly one place it cannot drift between modules. The root also generates a shared provider so every module authenticates the same way.
 
 #### Build
-_To be completed as this component is built._
+
+This step adds two things under `infrastructure/`:
+
+- **`infrastructure/environments/dev/root.hcl`** — the Terragrunt root. Its `remote_state` block declares the **`azurerm`** backend and points it at a dedicated state **resource group**, **storage account**, and blob **container**. The `generate` directive writes a `backend.tf` into each child module at init time, so every module inherits the backend without copy-paste. The `key` is derived per module (`${path_relative_to_include()}/terraform.tfstate`), giving each module its own isolated state blob so two modules can never write to the same state. `use_azuread_auth = true` means the backend authenticates with the caller's Entra identity (the Step 1 service principal) — **no storage key and no secret in the repo**. A `generate "provider"` block writes a shared `azurerm` provider into each module, reading the `ARM_*` variables to authenticate. State **locking** is built into the `azurerm` backend via a **blob lease**, and the storage account encrypts state **at rest** by default.
+- **`infrastructure/modules/`** — established now (empty) as the home for the reusable resource modules added from Step 3 onward.
+
+The `root.hcl` is heavily commented and explained block by block in the file itself; the key blocks are `locals` (the backend coordinates), `remote_state` (backend + `generate "backend.tf"` + per-module `key` + Entra auth), `generate "provider"` (the shared provider), and `inputs` (environment-wide values).
 
 #### Execute
-_To be completed as this component is built._
+
+State backends are bootstrapped with the **Azure CLI**, because the storage account must exist before Terraform/Terragrunt can write state to it — the same bootstrapping order as the Step 1 identity. Run from PowerShell, signed in with `az login` (and `ARM_*` set from Step 1).
+
+**(a) Create the state backend — resource group, storage account, data-plane role, container:**
+
+```powershell
+# Names — keep the storage account name globally unique, lowercase, 3-24 chars
+$STATE_RG        = "rg-antkart-tfstate"
+$STATE_SA        = "stantkarttfstate"   # change if this name is already taken
+$STATE_CONTAINER = "tfstate"
+$LOCATION        = "eastus"
+
+# 1. Dedicated resource group for Terraform state (kept apart from app resources)
+az group create --name $STATE_RG --location $LOCATION
+
+# 2. Storage account: locally redundant, TLS 1.2+, no public blob access, and
+#    shared-key access disabled so ALL access is via Entra identity (no keys).
+az storage account create `
+  --name $STATE_SA `
+  --resource-group $STATE_RG `
+  --location $LOCATION `
+  --sku Standard_LRS `
+  --kind StorageV2 `
+  --min-tls-version TLS1_2 `
+  --allow-blob-public-access false `
+  --allow-shared-key-access false
+
+# 3. Grant the Terraform service principal DATA-plane access to the state.
+#    Control-plane Contributor does NOT include blob data access, so the
+#    identity that reads/writes state needs Storage Blob Data Contributor.
+$SA_ID = az storage account show --name $STATE_SA --resource-group $STATE_RG --query id -o tsv
+az role assignment create `
+  --assignee "<terraform-sp-appId>" `
+  --role "Storage Blob Data Contributor" `
+  --scope $SA_ID
+
+# 4. Blob container that will hold the state files (created via Entra auth)
+az storage container create `
+  --name $STATE_CONTAINER `
+  --account-name $STATE_SA `
+  --auth-mode login
+```
+
+**(b) Initialize Terragrunt.** `root.hcl` is included by child modules; it is not applied on its own. Terragrunt initializes the backend the first time a module that includes it is run — the **Resource Group** in Step 3. On that first init, Terragrunt generates `backend.tf` and `provider.tf` in the module and connects it to the remote state:
+
+```powershell
+# Run from a module directory that includes the root (the first is Step 3).
+cd infrastructure/environments/dev/<module>
+terragrunt init     # wires up the backend; the first apply then creates the state blob
+```
+
+> From `infrastructure/environments/dev`, `terragrunt run-all init` initializes every module at once, once modules exist.
+
+What each does:
+- **`az group create`** — creates the dedicated resource group that holds the state storage account.
+- **`az storage account create`** — creates the state storage account with key access disabled (Entra-only), TLS 1.2+, and no public blob access.
+- **`az role assignment create` (Storage Blob Data Contributor)** — grants the Terraform identity data-plane access so it can read/write state blobs (Contributor alone cannot).
+- **`az storage container create`** — creates the `tfstate` container that holds the per-module state blobs.
+- **`terragrunt init`** — generates the backend/provider into a module and connects it to the remote state (run from Step 3 onward).
 
 #### Verify
-_To be completed as this component is built._
+
+```powershell
+# State storage account exists and is provisioned
+az storage account show --name $STATE_SA --resource-group $STATE_RG -o table
+
+# State container exists (Entra-auth data-plane call)
+az storage container show --name $STATE_CONTAINER --account-name $STATE_SA --auth-mode login -o table
+```
+
+A **correct result** shows the storage account with `provisioningState = Succeeded` and `kind = StorageV2`, and the container reported as present.
+
+**State locking** is active automatically: while a `terragrunt apply` runs, the backend holds a **lease** on the state blob, and a second concurrent apply is refused until it is released. You can observe the lease during an apply:
+
+```powershell
+az storage blob show `
+  --account-name $STATE_SA --container-name $STATE_CONTAINER `
+  --name "<module>/terraform.tfstate" --auth-mode login `
+  --query "properties.lease" -o json
+# during an apply: leaseState = "leased"
+```
+
+**The state blob appears after the first apply.** Before Step 3 the container is empty; after the first module's `terragrunt apply`, a state blob appears at the module's key:
+
+```powershell
+az storage blob list `
+  --account-name $STATE_SA --container-name $STATE_CONTAINER `
+  --auth-mode login -o table
+# e.g. resource-group/terraform.tfstate
+```
 
 ### 3. Resource Group
 
