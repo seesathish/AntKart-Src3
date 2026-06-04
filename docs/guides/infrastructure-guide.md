@@ -650,6 +650,8 @@ A **correct result**:
 
 ### 8. Cosmos DB
 
+> Background reading: [Azure Cosmos DB Concepts](cosmosdb-concepts.md) — the resource hierarchy, the multi-API (MongoDB) model, Request Units, provisioned vs serverless, throttling (429), and partition keys.
+
 #### Understand
 _To be completed as this component is built._
 
