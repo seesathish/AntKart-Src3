@@ -576,16 +576,77 @@ A **correct result**:
 ### 7. Log Analytics & Application Insights
 
 #### Understand
-_To be completed as this component is built._
+
+This step provisions the **observability foundation** — the destination where the platform's telemetry is stored and visualized. Three pieces work together, each with a distinct role:
+
+- **OpenTelemetry** — the **instrumentation in the application code** that generates traces, metrics, and logs and propagates a **correlation ID** across calls. It is added later, in the code phase; it is the *source* of telemetry.
+- **Application Insights** — the **APM (application performance monitoring) layer** that collects and visualizes application telemetry: requests, dependencies, exceptions, and **distributed traces**. It is where you see how the application behaves.
+- **Log Analytics Workspace** — the **central store** that holds the telemetry, queried with **KQL** (Kusto Query Language).
+
+**Why centralized telemetry is essential in microservices.** A single user request does not run in one process — it **fragments across many services and pods** (gateway → order → products → payments → notification, each possibly several replicas). Without a shared store and a **correlation ID** threading the logs and traces together, you cannot reassemble the request's full journey. The correlation ID lets you follow one request across every hop. This matters far more than in a monolith, where one request runs in a single process and its logs are naturally together.
+
+**Why the workspace comes first.** Modern Application Insights is **workspace-based**: it stores its data **in a Log Analytics workspace** rather than in its own classic store. So the workspace is created first, and App Insights points at it (`workspace_id`), unifying application telemetry and platform logs in one queryable place.
+
+> This step provisions the **destination** only. The application **instrumentation** (OpenTelemetry, correlation IDs) that produces the telemetry is wired later, in the code phase.
 
 #### Build
-_To be completed as this component is built._
+
+This step adds a reusable **observability module** and its **dev live unit**:
+
+- **`infrastructure/modules/observability/`**:
+  - **`variables.tf`** — `resource_group_name`, `location`, `log_analytics_name`, `app_insights_name`, `retention_days` (default `30` — the workspace minimum, kept short for dev to keep cost low), and `tags`.
+  - **`main.tf`** — an `azurerm_log_analytics_workspace` (`sku = "PerGB2018"`, `retention_in_days` from the variable) and an `azurerm_application_insights` with `application_type = "web"` and **`workspace_id`** pointing at the workspace (**workspace-based mode**). A comment notes that the application later uses this resource's **connection string** (and legacy instrumentation key) to send telemetry.
+  - **`outputs.tf`** — `workspace_id`, `workspace_name`, `app_insights_id`, and the **`connection_string`** and **`instrumentation_key`** (both marked **`sensitive`**). App config consumes the connection string.
+- **`infrastructure/environments/dev/observability/terragrunt.hcl`**:
+  - `include "root"` for the shared backend/provider.
+  - a **`dependency "resource_group"`** consuming the resource group's `name` and `location` outputs (with `mock_outputs` for `init`/`plan`/`validate`, matching the other units).
+  - `terraform { source = "../../../modules/observability" }`.
+  - `inputs`: `log_analytics_name = "log-antkart-dev"`, `app_insights_name = "appi-antkart-dev"`, `retention_days = 30`, matching tags.
+
+Like the other units, this module **depends on the Resource Group** only through the Terragrunt dependency / outputs mechanism — never hardcoded.
 
 #### Execute
-_To be completed as this component is built._
+
+Run from the observability unit's folder:
+
+```powershell
+cd infrastructure/environments/dev/observability
+
+# 1. Init — generates backend.tf/provider.tf and resolves the resource_group dependency
+terragrunt init
+
+# 2. Plan — review before applying
+terragrunt plan
+
+# 3. Apply — create the workspace and App Insights
+terragrunt apply
+```
+
+What each does:
+- **`terragrunt init`** — generates the backend/provider, initializes the provider, and resolves the `resource_group` dependency.
+- **`terragrunt plan`** — shows the intended changes; a correct plan reports **2 to add** (the workspace and App Insights), **0 to change, 0 to destroy**.
+- **`terragrunt apply`** — creates both resources and writes this unit's state to the backend.
 
 #### Verify
-_To be completed as this component is built._
+
+```powershell
+$RG = "rg-antkart-dev-eastus"
+
+# Log Analytics workspace (name, SKU, retention)
+az monitor log-analytics workspace show --resource-group $RG --workspace-name "log-antkart-dev" `
+  --query "{name:name, sku:sku.name, retentionInDays:retentionInDays}" -o json
+
+# Application Insights (name, type, and that it is workspace-based)
+az monitor app-insights component show --resource-group $RG --app "appi-antkart-dev" `
+  --query "{name:name, appType:applicationType, workspace:workspaceResourceId}" -o json
+```
+
+> The `app-insights` commands require the Azure CLI **`application-insights`** extension. If prompted, install it with `az extension add --name application-insights` (or allow the auto-install) and re-run.
+
+A **correct result**:
+- `terragrunt apply` ends with `Apply complete! Resources: 2 added, 0 changed, 0 destroyed.`
+- `az monitor log-analytics workspace show` reports `name = log-antkart-dev`, `sku = PerGB2018`, `retentionInDays = 30`.
+- `az monitor app-insights component show` reports `name = appi-antkart-dev`, `appType = web`, and a non-empty `workspace` (the workspace's resource id) — confirming it is **workspace-based**.
 
 ### 8. Cosmos DB
 
