@@ -350,16 +350,82 @@ A **correct result**:
 > Background reading: [Networking & Kubernetes Concepts](networking-concepts.md) — IP addressing & CIDR, VNet/subnet/NSG, Kubernetes fundamentals, and the Azure CNI IP-sizing math behind how these subnets are sized.
 
 #### Understand
-_To be completed as this component is built._
+
+A quick recap (full detail in the [Networking & Kubernetes Concepts](networking-concepts.md) primer): a **VNet** is the private address space; **subnets** are non-overlapping per-workload slices of it; **NSGs** are stateful firewalls attached to subnets.
+
+This step provisions a VNet and three subnets, each with its own NSG:
+
+| Network | Range | Addresses | Why this size |
+|---------|-------|-----------|---------------|
+| **VNet** | `10.0.0.0/16` | 65,536 | The private space every subnet is carved from, sized large so there is room to grow. |
+| **AKS subnet** | `10.0.0.0/22` | 1,024 | The **large** one: with traditional Azure CNI, **each pod consumes a subnet IP and each node pre-reserves a block of them**, so the cluster needs hundreds of addresses plus upgrade/scale headroom. |
+| **Private-endpoints subnet** | `10.0.4.0/24` | 256 | Holds private endpoints to managed services; each consumes one IP, so a few hundred is ample. |
+| **Gateway / APIM subnet** | `10.0.5.0/27` | 32 | A small, dedicated slice for the edge/gateway. |
+
+Every subnet range sits **inside the VNet's `/16`** and the ranges **must not overlap**: `10.0.0.0/22` covers the third octet `.0`–`.3`, `10.0.4.0/24` is `.4`, and `10.0.5.0/27` sits in `.5`. Each subnet gets its **own NSG** so traffic to the cluster, the endpoints, and the gateway is controlled independently.
 
 #### Build
-_To be completed as this component is built._
+
+This step adds a reusable **networking module** and its **dev live unit**:
+
+- **`infrastructure/modules/networking/`**:
+  - **`variables.tf`** — `resource_group_name`, `location`, `vnet_name`, `vnet_address_space`, a structured `subnets` map (each entry: `address_prefixes`, plus optional `service_endpoints` and `private_endpoint_network_policies`), and `tags`. No environment values baked in.
+  - **`main.tf`** — an `azurerm_virtual_network`; the subnets via `azurerm_subnet` using **`for_each` over the `subnets` map** (so adding a subnet is a data change, not new code); one `azurerm_network_security_group` per subnet with an explicit **deny-by-default baseline** (allow intra-VNet, allow Azure Load Balancer probes, deny all other inbound — NSGs are stateful, so return traffic needs no separate rule); and `azurerm_subnet_network_security_group_association` to attach each NSG to its subnet.
+  - **`outputs.tf`** — `vnet_id`, `vnet_name`, and `subnet_ids` (a map of subnet name → id) that later modules (AKS, private endpoints, gateway) consume.
+- **`infrastructure/environments/dev/networking/terragrunt.hcl`**:
+  - `include "root"` for the shared backend/provider.
+  - a **`dependency "resource_group"`** block pointing at the `../resource-group` unit; it consumes that unit's `name` and `location` **outputs** rather than hardcoding them, and Terragrunt uses the dependency to apply the resource group **first**.
+  - `terraform { source = "../../../modules/networking" }`.
+  - `inputs` with dev's values: VNet `10.0.0.0/16`; subnets `aks = 10.0.0.0/22`, `private-endpoints = 10.0.4.0/24` (with `private_endpoint_network_policies = "Disabled"`), `gateway = 10.0.5.0/27`; matching tags.
+
+This module **depends on the Resource Group** from Step 3, but only through the **Terragrunt dependency / outputs** mechanism — never hardcoded values — so the wiring stays correct if the resource group changes.
 
 #### Execute
-_To be completed as this component is built._
+
+Run from the networking unit's folder:
+
+```powershell
+cd infrastructure/environments/dev/networking
+
+# 1. Init — generates backend.tf/provider.tf and resolves the resource_group dependency
+terragrunt init
+
+# 2. Plan — review before applying
+terragrunt plan
+
+# 3. Apply — create the VNet, subnets, NSGs, and associations
+terragrunt apply
+```
+
+What each does:
+- **`terragrunt init`** — generates the backend/provider, initializes the provider, and resolves the `resource_group` dependency.
+- **`terragrunt plan`** — shows the intended changes; a correct plan reports the **VNet + 3 subnets + 3 NSGs + 3 NSG-subnet associations** being **added** (≈ 10 to add), **0 to destroy**.
+- **`terragrunt apply`** — creates the resources and writes this unit's state to the backend.
+
+> The resource group must already exist (Step 3). Terragrunt applies the dependency first; if it has not been applied yet, apply the `resource-group` unit before this one (or run `terragrunt run-all apply` from `environments/dev`).
 
 #### Verify
-_To be completed as this component is built._
+
+```powershell
+$RG = "rg-antkart-dev-eastus"
+
+# VNet and its address space (expect 10.0.0.0/16)
+az network vnet show --resource-group $RG --name "vnet-antkart-dev-eastus" `
+  --query "{name:name, addressSpace:addressSpace.addressPrefixes}" -o json
+
+# Subnets and their prefixes
+az network vnet subnet list --resource-group $RG --vnet-name "vnet-antkart-dev-eastus" `
+  --query "[].{name:name, prefix:addressPrefix}" -o table
+
+# NSGs (expect one per subnet)
+az network nsg list --resource-group $RG --query "[].name" -o table
+```
+
+A **correct result**:
+- `terragrunt apply` ends with `Apply complete! Resources: N added, 0 changed, 0 destroyed.` (N = the VNet + 3 subnets + 3 NSGs + 3 associations).
+- `az network vnet show` reports the address space `10.0.0.0/16`.
+- `az network vnet subnet list` shows `aks` → `10.0.0.0/22`, `private-endpoints` → `10.0.4.0/24`, `gateway` → `10.0.5.0/27`.
+- `az network nsg list` shows `nsg-aks`, `nsg-private-endpoints`, and `nsg-gateway`, each associated to its subnet.
 
 ### 5. Container Registry
 
