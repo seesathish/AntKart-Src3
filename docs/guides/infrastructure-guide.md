@@ -502,16 +502,76 @@ A **correct result**:
 ### 6. Key Vault
 
 #### Understand
-_To be completed as this component is built._
+
+**Azure Key Vault** is a secure, managed store for **secrets** (connection strings, passwords, API keys), **keys** (cryptographic keys), and **certificates**. It is where sensitive values live so they never end up in the wrong place.
+
+**Why secrets belong here, not in config / source / logs:**
+
+- **Compliance** — secrets must never be committed to source control or baked into build artifacts; a vault keeps them out of both.
+- **Separation of config from credentials** — application configuration can live with the code; the credentials it references stay in the vault.
+- **Rotation without redeploying** — a secret can be updated in the vault and picked up at runtime, with no rebuild or redeploy of the app.
+- **Least-privilege access** — only authorized identities can read a secret. Developers can read the code without ever seeing the secret values.
+- **Audit logging** — every access to the vault is logged, so who read what and when is fully traceable.
+
+**Access models — RBAC vs access policies.** Key Vault offers two ways to authorize access: the legacy **access policies** (a per-vault list managed separately from the rest of Azure) and **Azure RBAC** (the same role-based model used everywhere else). This platform uses **Azure RBAC** (`enable_rbac_authorization = true`) so vault access is consistent with the platform's RBAC model and managed in one place.
+
+**Soft delete & purge protection.** Soft delete is always on: when a vault is deleted it enters a **soft-deleted** state and its **name stays reserved for a retention period**, so the name cannot be reused immediately (you must recover or purge it first). **Purge protection**, when enabled, additionally prevents an early permanent purge — a soft-deleted vault must wait out the full retention window. Production enables purge protection; a disposable dev vault leaves it off for clean teardown.
+
+> **Who reads secrets?** Application identities are **not** granted access here. The built-in **Key Vault Secrets User** role (read secrets at runtime) is assigned to the app/managed identities in the **managed-identity step**, not in this one.
 
 #### Build
-_To be completed as this component is built._
+
+This step adds a reusable **key-vault module** and its **dev live unit**:
+
+- **`infrastructure/modules/key-vault/`**:
+  - **`variables.tf`** — `resource_group_name`, `location`, `key_vault_name` (globally unique, 3–24 chars, alphanumeric/hyphens), `tenant_id` (optional), `sku` (default `"standard"`), `soft_delete_retention_days` (default `7` for dev), `purge_protection_enabled` (default `false` for dev), and `tags`.
+  - **`main.tf`** — an `azurerm_key_vault` with **`enable_rbac_authorization = true`** (RBAC mode, not access policies), the SKU, and the soft-delete / purge settings. The **tenant id** comes from a `data.azurerm_client_config.current` data source (so the environment never hardcodes it), with an optional input override. A comment notes that the `Key Vault Secrets User` role for app identities is granted in a later step.
+  - **`outputs.tf`** — `id` (to scope RBAC role assignments), `name`, and `vault_uri` (the endpoint apps call to read secrets).
+- **`infrastructure/environments/dev/key-vault/terragrunt.hcl`**:
+  - `include "root"` for the shared backend/provider.
+  - a **`dependency "resource_group"`** consuming the resource group's `name` and `location` outputs (with `mock_outputs` for `init`/`plan`/`validate`, matching the other units).
+  - `terraform { source = "../../../modules/key-vault" }`.
+  - `inputs`: `key_vault_name = "kv-antkart-dev"`, `purge_protection_enabled = false`, matching tags. The **tenant id is not set** — the module resolves it from the current Azure context.
+
+Like the other units, this module **depends on the Resource Group** only through the Terragrunt dependency / outputs mechanism.
 
 #### Execute
-_To be completed as this component is built._
+
+Run from the Key Vault unit's folder:
+
+```powershell
+cd infrastructure/environments/dev/key-vault
+
+# 1. Init — generates backend.tf/provider.tf and resolves the resource_group dependency
+terragrunt init
+
+# 2. Plan — review before applying
+terragrunt plan
+
+# 3. Apply — create the Key Vault
+terragrunt apply
+```
+
+What each does:
+- **`terragrunt init`** — generates the backend/provider, initializes the provider, and resolves the `resource_group` dependency.
+- **`terragrunt plan`** — shows the intended changes; a correct plan reports **1 to add** (the vault), **0 to change, 0 to destroy**.
+- **`terragrunt apply`** — creates the vault and writes this unit's state to the backend.
+
+> **Two name caveats:** (a) the vault name is **globally unique**; (b) if `kv-antkart-dev` was used before and soft-deleted, the name **may still be reserved** during the retention window — in that case recover/purge the soft-deleted vault, or pick a new name in the unit's `inputs`.
 
 #### Verify
-_To be completed as this component is built._
+
+```powershell
+$RG = "rg-antkart-dev-eastus"
+
+# Name, RBAC authorization, purge protection, and soft-delete retention
+az keyvault show --resource-group $RG --name "kv-antkart-dev" `
+  --query "{name:name, rbacAuthorization:properties.enableRbacAuthorization, purgeProtection:properties.enablePurgeProtection, softDeleteDays:properties.softDeleteRetentionInDays}" -o json
+```
+
+A **correct result**:
+- `terragrunt apply` ends with `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.`
+- `az keyvault show` reports `name = kv-antkart-dev`, `rbacAuthorization = true`, `purgeProtection = null/false` (dev), and `softDeleteDays = 7`.
 
 ### 7. Log Analytics & Application Insights
 
