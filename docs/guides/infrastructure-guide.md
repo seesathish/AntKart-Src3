@@ -513,7 +513,7 @@ A **correct result**:
 - **Least-privilege access** — only authorized identities can read a secret. Developers can read the code without ever seeing the secret values.
 - **Audit logging** — every access to the vault is logged, so who read what and when is fully traceable.
 
-**Access models — RBAC vs access policies.** Key Vault offers two ways to authorize access: the legacy **access policies** (a per-vault list managed separately from the rest of Azure) and **Azure RBAC** (the same role-based model used everywhere else). This platform uses **Azure RBAC** (`enable_rbac_authorization = true`) so vault access is consistent with the platform's RBAC model and managed in one place.
+**Access models — RBAC vs access policies.** Key Vault offers two ways to authorize access: the legacy **access policies** (a per-vault list managed separately from the rest of Azure) and **Azure RBAC** (the same role-based model used everywhere else). This platform uses **Azure RBAC** (`rbac_authorization_enabled = true`) so vault access is consistent with the platform's RBAC model and managed in one place.
 
 **Soft delete & purge protection.** Soft delete is always on: when a vault is deleted it enters a **soft-deleted** state and its **name stays reserved for a retention period**, so the name cannot be reused immediately (you must recover or purge it first). **Purge protection**, when enabled, additionally prevents an early permanent purge — a soft-deleted vault must wait out the full retention window. Production enables purge protection; a disposable dev vault leaves it off for clean teardown.
 
@@ -525,7 +525,7 @@ This step adds a reusable **key-vault module** and its **dev live unit**:
 
 - **`infrastructure/modules/key-vault/`**:
   - **`variables.tf`** — `resource_group_name`, `location`, `key_vault_name` (globally unique, 3–24 chars, alphanumeric/hyphens), `tenant_id` (optional), `sku` (default `"standard"`), `soft_delete_retention_days` (default `7` for dev), `purge_protection_enabled` (default `false` for dev), and `tags`.
-  - **`main.tf`** — an `azurerm_key_vault` with **`enable_rbac_authorization = true`** (RBAC mode, not access policies), the SKU, and the soft-delete / purge settings. The **tenant id** comes from a `data.azurerm_client_config.current` data source (so the environment never hardcodes it), with an optional input override. A comment notes that the `Key Vault Secrets User` role for app identities is granted in a later step.
+  - **`main.tf`** — an `azurerm_key_vault` with **`rbac_authorization_enabled = true`** (RBAC mode, not access policies), the SKU, and the soft-delete / purge settings. The **tenant id** comes from a `data.azurerm_client_config.current` data source (so the environment never hardcodes it), with an optional input override. A comment notes that the `Key Vault Secrets User` role for app identities is granted in a later step.
   - **`outputs.tf`** — `id` (to scope RBAC role assignments), `name`, and `vault_uri` (the endpoint apps call to read secrets).
 - **`infrastructure/environments/dev/key-vault/terragrunt.hcl`**:
   - `include "root"` for the shared backend/provider.

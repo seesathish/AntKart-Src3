@@ -24,7 +24,7 @@ should understand why.
 
 ### Chosen approach
 
-`enable_rbac_authorization = true` on all Key Vault resources.
+`rbac_authorization_enabled = true` on all Key Vault resources.
 
 Role assignments manage access:
 - Deploying SP: `Key Vault Secrets Officer` (manage secrets — scoped to the vault)
@@ -46,7 +46,7 @@ Access Policies is Key Vault's original authorization system, predating Azure RB
 
 Access Policies is not deprecated, but it is the legacy path. All new Azure Landing Zone guidance recommends RBAC. Choosing RBAC now avoids a migration (which requires re-granting all access) when Conditional Access or PIM is required in a later compliance review.
 
-**Accepted tradeoff**: `enable_rbac_authorization = true` is an irreversible change on a vault. Once set, access policies are ignored and cannot be re-enabled without recreating the vault. This is acceptable because we are choosing RBAC deliberately and will not revert.
+**Accepted tradeoff**: `rbac_authorization_enabled = true` is an irreversible change on a vault. Once set, access policies are ignored and cannot be re-enabled without recreating the vault. This is acceptable because we are choosing RBAC deliberately and will not revert.
 
 ---
 
@@ -113,7 +113,7 @@ The module structure requires no changes for steps 3-4 — they are additive res
 
 ### Negative
 
-- **Key Vault RBAC**: `enable_rbac_authorization = true` is irreversible on an existing vault. Reverting requires vault recreation and re-granting all access. This is acceptable as a deliberate choice.
+- **Key Vault RBAC**: `rbac_authorization_enabled = true` is irreversible on an existing vault. Reverting requires vault recreation and re-granting all access. This is acceptable as a deliberate choice.
 - **Log Analytics ordering dependency**: `app-insights` cannot be deployed before `log-analytics`. This adds one step to the initial provisioning order and to any fresh environment build.
 - **ACR Basic**: no private endpoint support. During dev, ACR traffic traverses the public internet. ACR does enforce TLS and registry authentication — images are not publicly readable. This is acceptable risk for a dev environment.
 

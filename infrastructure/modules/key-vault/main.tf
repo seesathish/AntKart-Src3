@@ -30,7 +30,7 @@ resource "azurerm_key_vault" "this" {
   #     like "Key Vault Secrets User" are assigned to identities at a scope.
   # We use RBAC so authorization is consistent with the whole platform and
   # managed in one place.
-  enable_rbac_authorization = true
+  rbac_authorization_enabled = true
 
   # --- Soft delete & purge protection ----------------------------------------
   # Soft delete is always on: a deleted vault enters a SOFT-DELETED state and its
