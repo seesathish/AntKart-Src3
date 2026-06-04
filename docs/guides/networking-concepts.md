@@ -6,16 +6,31 @@ A learner-friendly reference for the networking and Kubernetes ideas behind the 
 
 ## 1. IP Addressing & CIDR
 
-**What an IP address is.** An IPv4 address is a 32-bit number that identifies a device on a network. It is written as four 8-bit numbers (octets), each 0–255, separated by dots — for example `10.0.4.17`. Every machine that talks on a network needs one.
+**What an IP address is.** An IPv4 address is a **32-bit** number that identifies a device on a network. Those 32 bits are written as **4 octets × 8 bits = 32 bits**, where each octet is one number from 0–255, separated by dots.
 
-**What CIDR notation means.** A network is a *range* of addresses, written as an address followed by a slash and a number: `10.0.0.0/16`. The number after the slash — the **prefix length** — says how many of the 32 bits are fixed as the *network* portion. The remaining bits are free to number individual *hosts*.
+Take the sample address `10.0.4.17`:
 
-- A `/16` fixes the first 16 bits, leaving 16 bits for hosts → a large range.
-- A `/24` fixes the first 24 bits, leaving 8 bits for hosts → a small range.
+| Octet | 1 | 2 | 3 | 4 |
+|-------|---|---|---|---|
+| Decimal | 10 | 0 | 4 | 17 |
+| Binary (8 bits each) | `00001010` | `00000000` | `00000100` | `00010001` |
 
-So the **total addresses** in a block is `2^(32 − n)`, where `n` is the prefix length.
+Four octets of 8 bits each = 32 bits in total. Every machine that talks on a network needs one of these addresses.
 
-**Usable addresses in Azure.** Azure reserves **5 addresses in every subnet** (the network address, the default gateway, two for Azure-internal DNS mapping, and the broadcast address). So **usable = total − 5**.
+**What CIDR notation means.** A network is a *range* of addresses, written as an address followed by a slash and a number — for example `10.0.0.0/16`. The number after the slash, the **prefix length** `/n`, says that the **first `n` bits are the fixed network prefix** (the same for every address in the range) and the **remaining `32 − n` bits are free for hosts** (they vary, one value per address). So:
+
+- **Total addresses in a block = `2^(32 − n)`.**
+- A bigger host portion (smaller `n`) means more addresses.
+
+**Worked example — `/24`.** In `10.0.4.0/24`, the prefix is 24 bits — that is the **first three octets** (`10.0.4`), fixed — leaving the **last octet (8 bits)** for hosts. 8 host bits → `2^8 = 256` addresses, the range `10.0.4.0` through `10.0.4.255`.
+
+**Worked example — `/22`.** In `10.0.0.0/22`, the prefix is 22 bits, leaving **`32 − 22 = 10` host bits** → `2^10 = 1,024` addresses. Those 10 host bits are the **whole 4th octet (8 bits) plus the bottom 2 bits of the 3rd octet** — so the 3rd octet counts `0, 1, 2, 3` (`2^2 = 4` values) and the 4th octet runs `0–255`: `4 × 256 = 1,024`. The full range of `10.0.0.0/22` is therefore:
+
+- **Network address (first):** `10.0.0.0`
+- **Broadcast address (last):** `10.0.3.255`
+- It spans **four consecutive `/24` blocks** — `10.0.0.x`, `10.0.1.x`, `10.0.2.x`, `10.0.3.x` (the 3rd octet `.0` through `.3`).
+
+**Common block sizes.** Azure reserves 5 addresses per subnet (explained below), so usable = total − 5:
 
 | CIDR | Host bits (32 − n) | Total addresses (2^(32−n)) | Usable in Azure (− 5) |
 |------|--------------------|----------------------------|-----------------------|
@@ -29,19 +44,48 @@ So the **total addresses** in a block is `2^(32 − n)`, where `n` is the prefix
 
 ---
 
-## 2. VNet, Subnet, and NSG
+## 2. The 5 Reserved Addresses (per subnet)
 
-**Virtual Network (VNet)** — your own private, isolated network in the cloud, defined by a large address range (commonly a `/16`). Nothing outside the VNet can reach into it unless you explicitly allow it. It is the private address space everything else is carved from.
+Azure reserves **5 addresses in every subnet** — this is **per subnet**, not per VNet, so a subnet's usable count is always its total minus 5. For a subnet `x.y.z.0/24` they are:
 
-**Subnet** — a slice of the VNet's range, dedicated to a particular workload or tier (for example: one subnet for the Kubernetes cluster, one for private endpoints, one for the gateway). Subnets within a VNet **must not overlap** — each owns a distinct portion of the VNet's addresses. Resources draw their IP from the subnet they live in.
+| Reserved address | Example (`x.y.z.0/24`) | Why |
+|------------------|------------------------|-----|
+| **Network address** (the first) | `x.y.z.0` | Identifies the subnet itself; not assignable to a host. |
+| **Default gateway** | `x.y.z.1` | The router the subnet uses to reach other subnets and the internet. |
+| **Azure DNS mapping** | `x.y.z.2` | Reserved by the platform to map to the Azure-provided DNS service. |
+| **Azure DNS mapping** | `x.y.z.3` | Second address reserved for Azure-managed DNS. |
+| **Broadcast address** (the last) | `x.y.z.255` | The all-hosts broadcast address; not assignable. |
 
-**Network Security Group (NSG)** — a **stateful firewall** attached to a subnet (or a network interface). It holds an ordered list of **allow/deny rules** that match on source, destination, port, and protocol, evaluated by priority.
-
-> **"Stateful"** means the NSG tracks connections: if you allow an inbound request, the **return traffic is automatically allowed** — you don't have to write a second rule for the response. (A *stateless* firewall would need an explicit rule for each direction.)
+So a `/24` has 256 total but **251 usable**, a `/27` has 32 total but **27 usable**, and so on.
 
 ---
 
-## 3. Kubernetes Fundamentals (smallest to largest)
+## 3. VNet, Subnet, and NSG
+
+**Virtual Network (VNet).** A VNet is **your own isolated, private network in Azure**, defined by an **address space you choose** (commonly a `/16`). Resources placed inside it **communicate privately** over that address space without traversing the public internet, and nothing outside can reach in unless you explicitly allow it. A VNet **does not overlap** with other networks you connect it to (overlapping ranges cannot be routed between). Because changing a VNet's range later means **re-addressing everything inside it — disruptive and risky — you size it generously up front**, leaving plenty of room to add subnets and grow.
+
+**Subnet.** A subnet is a **non-overlapping slice of the VNet's range, dedicated to one workload** (for example: the Kubernetes cluster, the private endpoints, the gateway). Each subnet's range must **fit within the VNet** and **not overlap any other subnet** in it. Workloads are separated into different subnets for good reasons:
+
+- **Isolation** — a problem or compromise in one subnet is contained, not free to roam the whole network.
+- **Distinct security rules** — each subnet can have its own firewall (NSG) rules suited to what it hosts.
+- **Distinct sizing** — each subnet is sized to its own IP demand (the cluster needs many addresses; an endpoints subnet needs few).
+
+**Network Security Group (NSG).** An NSG is a **stateful firewall attached to a subnet** (or to an individual network interface). It holds an ordered list of **allow/deny rules**, each matching on **source, destination, port, and protocol**, evaluated in **priority** order (lower number wins) until one matches.
+
+> **"Stateful"** means the NSG tracks connections: if you **allow an inbound** request, the **matching return traffic is automatically allowed** — you do **not** write a separate outbound rule for the response. (A *stateless* firewall would need an explicit rule for each direction.)
+
+**A simple concrete example.** To expose a web endpoint over HTTPS and nothing else, a subnet's NSG might say:
+
+| Priority | Direction | Source | Destination | Port | Protocol | Action |
+|----------|-----------|--------|-------------|------|----------|--------|
+| 100 | Inbound | Internet | Subnet | 443 | TCP | **Allow** |
+| 4096 | Inbound | Any | Any | Any | Any | **Deny** |
+
+Rule 100 allows inbound HTTPS on port 443; the low-priority catch-all at 4096 denies everything else. Because the NSG is stateful, the responses to those allowed 443 requests flow back out automatically — no extra outbound rule needed.
+
+---
+
+## 4. Kubernetes Fundamentals (smallest to largest)
 
 It helps to build the picture from the smallest piece up:
 
@@ -55,7 +99,7 @@ It helps to build the picture from the smallest piece up:
 
 ---
 
-## 4. Azure CNI & IP-Consumption Math
+## 5. Azure CNI & IP-Consumption Math
 
 How pods get their IPs determines how big the cluster's subnet must be.
 
@@ -76,18 +120,20 @@ This is why the **AKS subnet is sized `/22` (1,019 usable)** — comfortably abo
 
 ---
 
-## 5. How This Maps to Our Design
+## 6. The Network We Build
 
-The platform's address plan applies the ideas above:
+Putting the concepts together, the platform's address plan is:
 
-| Network | Size | Why |
-|---------|------|-----|
-| **VNet** | `/16` (65,531 usable) | A large private space to carve every subnet from, with ample room to add subnets and grow without re-addressing. |
-| **AKS subnet** | `/22` (1,019 usable) | Sized for pod IP consumption under traditional Azure CNI (~31 IPs/node) plus upgrade/scale surge headroom — see the math above. |
-| **Private endpoints subnet** | small (e.g. `/27`) | Each private endpoint consumes only one IP; a handful of managed-service endpoints needs very few addresses. |
-| **Gateway / edge subnet** | small (e.g. `/27`) | The gateway/ingress front door needs only a small, dedicated slice. |
+| Network | Range / size | Addresses | NSG | Why this size |
+|---------|--------------|-----------|-----|---------------|
+| **VNet** | `10.0.0.0/16` | 65,536 | — | A large private space to carve every subnet from, with ample room to grow without re-addressing. |
+| **AKS subnet** | `/22` | 1,024 | yes | The big one: with traditional Azure CNI **each pod consumes a subnet IP and each node pre-reserves a block of them**, plus upgrade/scale surge — so it needs hundreds to ~1,000 addresses. |
+| **Private endpoints subnet** | `/24` | 256 | yes | Each private endpoint to a managed service consumes only one IP; a few hundred addresses is plenty. |
+| **Gateway subnet** | `/27` | 32 | yes | The gateway/edge front door needs only a small, dedicated slice. |
 
-The principle is simple: **size each subnet to its real IP demand**. The cluster subnet is large because Azure CNI consumes an IP per pod; the supporting subnets are small because they hold only a few endpoints. Keeping them separate also lets each have its own NSG rules, so the cluster, the private endpoints, and the edge are each firewalled to exactly the traffic they should see.
+Every subnet sits **inside the VNet's `10.0.0.0/16`**, the ranges **do not overlap**, and each carries **its own NSG** so the cluster, the private endpoints, and the gateway are firewalled to exactly the traffic they should see.
+
+The headline point: **the AKS subnet is the large one (`/22`)** because, under traditional Azure CNI, pod IPs and per-node reservations come straight out of it. The supporting subnets are small because they hold only a few endpoints — **size each subnet to its real IP demand**.
 
 ---
 
