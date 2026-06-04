@@ -427,19 +427,77 @@ A **correct result**:
 - `az network vnet subnet list` shows `aks` → `10.0.0.0/22`, `private-endpoints` → `10.0.4.0/24`, `gateway` → `10.0.5.0/27`.
 - `az network nsg list` shows `nsg-aks`, `nsg-private-endpoints`, and `nsg-gateway`, each associated to its subnet.
 
-### 5. Container Registry
+### 5. Azure Container Registry
 
 #### Understand
-_To be completed as this component is built._
+
+A **container registry** is a private repository for **container images** — the packaged, ready-to-run artifacts the platform's services are built into. Images are pushed to the registry and later pulled by whatever runs them (the Kubernetes cluster, in a later step).
+
+The platform uses a **private Azure Container Registry (ACR)** rather than a public registry because:
+
+- **Images stay inside the Azure tenant** — access is controlled through Azure AD (Microsoft Entra) identities and RBAC, not exposed publicly.
+- **Proximity to the cluster** — pulls happen within Azure's network, so they are faster and more reliable than pulling across the public internet.
+- **No public rate limits** — public registries throttle anonymous pulls; a private ACR does not.
+- **Integrated authentication** — workloads authenticate with their Azure identity. The built-in **`AcrPull`** role grants pull access; AKS uses it in a later step.
+- **Foundation for supply-chain security** — it is where image scanning and signing are layered on later.
+
+**Tiers.** The **Basic** tier is used for dev. **Premium** (for production) adds **private endpoints**, **geo-replication**, and **content trust**.
+
+> **Who pulls images?** When AKS is introduced, it is the cluster's **kubelet identity** — the identity the nodes use to pull images — that is granted `AcrPull`, **not** the cluster's control-plane identity. That role assignment is made with the AKS wiring, not in this step.
 
 #### Build
-_To be completed as this component is built._
+
+This step adds a reusable **container-registry module** and its **dev live unit**:
+
+- **`infrastructure/modules/container-registry/`**:
+  - **`variables.tf`** — `resource_group_name`, `location`, `acr_name` (globally unique, alphanumeric, 5–50 chars), `sku` (default `"Basic"`), and `tags`. No environment values baked in.
+  - **`main.tf`** — an `azurerm_container_registry` built from the inputs, with **`admin_enabled = false`**. Disabling the admin account removes the single static username/password and forces all access through Azure AD identities and RBAC — consistent with the platform's secret-less model. A comment notes that `AcrPull` for the AKS kubelet identity is granted in a later step, not here.
+  - **`outputs.tf`** — `id`, `name`, and `login_server`, consumed by later steps (AKS scopes its `AcrPull` to the `id`; build/push uses the `login_server`).
+- **`infrastructure/environments/dev/container-registry/terragrunt.hcl`**:
+  - `include "root"` for the shared backend/provider.
+  - a **`dependency "resource_group"`** consuming the resource group's `name` and `location` outputs (with `mock_outputs` for `init`/`plan`/`validate`, matching the networking unit's pattern).
+  - `terraform { source = "../../../modules/container-registry" }`.
+  - `inputs`: `acr_name = "acrantkartdev"`, `sku = "Basic"`, and matching tags.
+
+Like the networking unit, this module **depends on the Resource Group** only through the Terragrunt dependency / outputs mechanism — never hardcoded.
 
 #### Execute
-_To be completed as this component is built._
+
+Run from the ACR unit's folder:
+
+```powershell
+cd infrastructure/environments/dev/container-registry
+
+# 1. Init — generates backend.tf/provider.tf and resolves the resource_group dependency
+terragrunt init
+
+# 2. Plan — review before applying
+terragrunt plan
+
+# 3. Apply — create the container registry
+terragrunt apply
+```
+
+What each does:
+- **`terragrunt init`** — generates the backend/provider, initializes the provider, and resolves the `resource_group` dependency.
+- **`terragrunt plan`** — shows the intended changes; a correct plan reports **1 to add** (the registry), **0 to change, 0 to destroy**.
+- **`terragrunt apply`** — creates the registry and writes this unit's state to the backend.
+
+> **The ACR name must be globally unique** (it becomes `<name>.azurecr.io`). If `apply` fails because the name is taken, change `acr_name` in the unit's `inputs` and re-run.
 
 #### Verify
-_To be completed as this component is built._
+
+```powershell
+$RG = "rg-antkart-dev-eastus"
+
+# Registry name, SKU, login server, and that the admin account is disabled
+az acr show --resource-group $RG --name "acrantkartdev" `
+  --query "{name:name, sku:sku.name, loginServer:loginServer, adminEnabled:adminUserEnabled}" -o json
+```
+
+A **correct result**:
+- `terragrunt apply` ends with `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.`
+- `az acr show` reports `name = acrantkartdev`, `sku = Basic`, `loginServer = acrantkartdev.azurecr.io`, and **`adminEnabled = false`** — confirming access is via Azure AD, not the admin account.
 
 ### 6. Key Vault
 
