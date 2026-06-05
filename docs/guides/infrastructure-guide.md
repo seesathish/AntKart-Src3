@@ -653,16 +653,77 @@ A **correct result**:
 > Background reading: [Azure Cosmos DB Concepts](cosmosdb-concepts.md) — the resource hierarchy, the multi-API (MongoDB) model, Request Units, provisioned vs serverless, throttling (429), and partition keys.
 
 #### Understand
-_To be completed as this component is built._
+
+This step provisions a fully-managed document database for the **product catalog**. The concepts are covered in the [Cosmos DB Concepts primer](cosmosdb-concepts.md); the decisions that shape this module:
+
+- **Request Units (RUs)** are Cosmos's single currency of work — every read, write, and query consumes RUs.
+- **Serverless** is chosen because the dev workload is **spiky and mostly idle**: you pay per RU consumed, with near-zero idle cost. Provisioned (reserved RU/s billed 24/7) is the right model for **steady production traffic**, not a mostly-idle dev database.
+- **MongoDB API** so the catalog's existing data-access code carries over by **changing only the connection string**, not the data layer.
+- **429 throttling** (exceeding available throughput) is **expected behaviour**, handled by **client-side retry with backoff** — the platform's resilience policies do this transparently (see the [Fault Tolerance with Polly ADR](../adr/ADR-003-fault-tolerance-with-polly.md)).
+- The **partition key** is a deliberate data-modelling choice made during the **data-migration work**, not here — so this module creates the account and database, and the application/seeder creates collections (with their keys) at runtime.
+
+Note the account name is **globally unique and lowercase** (it becomes part of the endpoint hostname).
 
 #### Build
-_To be completed as this component is built._
+
+This step adds a reusable **cosmosdb module** and its **dev live unit**:
+
+- **`infrastructure/modules/cosmosdb/`**:
+  - **`variables.tf`** — `resource_group_name`, `location`, `account_name` (globally unique, lowercase, 3–44 chars), `database_name`, `mongo_server_version` (default `"7.0"`), and `tags`.
+  - **`main.tf`** — an `azurerm_cosmosdb_account` with `kind = "MongoDB"`, `offer_type = "Standard"`, the **`capabilities { name = "EnableServerless" }`** serverless mode, the MongoDB server version, `consistency_policy` of **`Session`** (the default — reads-your-own-writes within a session, balancing consistency and performance), and a single-region `geo_location`. It carries **`lifecycle { prevent_destroy = true }`** to protect this stateful data resource. A second resource, `azurerm_cosmosdb_mongo_database`, creates the **`antkart-products`** database. Collections and partition keys are **not** defined here — the app/seeder creates them at runtime.
+  - **`outputs.tf`** — `id`, `name`, `endpoint`, and `database_name`. The **connection string and keys are intentionally not output** (they are secrets stored in Key Vault later — a comment says exactly that).
+- **`infrastructure/environments/dev/cosmosdb/terragrunt.hcl`**:
+  - `include "root"` for the shared backend/provider.
+  - a **`dependency "resource_group"`** consuming the resource group's `name` and `location` outputs (with `mock_outputs` for `init`/`plan`/`validate`, matching the other units).
+  - `terraform { source = "../../../modules/cosmosdb" }`.
+  - `inputs`: `account_name = "cosmos-antkart-dev"`, `database_name = "antkart-products"`, matching tags.
+
+> **`prevent_destroy` choice:** for a disposable dev resource this is acceptable either way; it is **enabled here** to protect the catalog data from an accidental teardown. To intentionally remove the account during teardown, drop the guard first.
 
 #### Execute
-_To be completed as this component is built._
+
+Run from the Cosmos DB unit's folder:
+
+```powershell
+cd infrastructure/environments/dev/cosmosdb
+
+# 1. Init — generates backend.tf/provider.tf and resolves the resource_group dependency
+terragrunt init
+
+# 2. Plan — review before applying
+terragrunt plan
+
+# 3. Apply — create the account and database (this takes SEVERAL MINUTES)
+terragrunt apply
+```
+
+What each does:
+- **`terragrunt init`** — generates the backend/provider, initializes the provider, and resolves the `resource_group` dependency.
+- **`terragrunt plan`** — shows the intended changes; a correct plan reports **2 to add** (the account and the Mongo database), **0 to change, 0 to destroy**.
+- **`terragrunt apply`** — creates both resources.
+
+> **Cosmos account creation is slow** — expect it to take **several minutes**. Repeated `Still creating...` messages during `apply` are normal, not a hang.
 
 #### Verify
-_To be completed as this component is built._
+
+```powershell
+$RG = "rg-antkart-dev-eastus"
+
+# Account: name, kind (MongoDB), and the serverless capability
+az cosmosdb show --resource-group $RG --name "cosmos-antkart-dev" `
+  --query "{name:name, kind:kind, capabilities:capabilities[].name}" -o json
+
+# The MongoDB database exists
+az cosmosdb mongodb database list --resource-group $RG --account-name "cosmos-antkart-dev" `
+  --query "[].name" -o table
+```
+
+A **correct result**:
+- `terragrunt apply` ends with `Apply complete! Resources: 2 added, 0 changed, 0 destroyed.`
+- `az cosmosdb show` reports `name = cosmos-antkart-dev`, `kind = MongoDB`, and `capabilities` includes **`EnableServerless`**.
+- `az cosmosdb mongodb database list` shows **`antkart-products`**.
+
+> **Where the connection string lives:** the Cosmos connection string (and account keys) are **not** in Terraform outputs or the repo. They are retrieved later and stored in **Key Vault** during the secrets / data-migration step, and the application reads them from there at runtime.
 
 ### 9. Service Bus
 
