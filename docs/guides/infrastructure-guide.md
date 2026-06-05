@@ -937,16 +937,74 @@ A **correct result**:
 > Background reading: [Azure Functions & Event Grid Concepts](serverless-eventing-concepts.md) — what serverless means, the trigger model, the instance lifecycle and cold starts, and the Consumption plan.
 
 #### Understand
-_To be completed as this component is built._
+
+This step provisions the **serverless home** the notification function deploys into later (concepts in the [serverless-eventing guide](serverless-eventing-concepts.md)). The function **code** is deployed in a later phase; here we build **where it lands**. Three pieces, each with a reason:
+
+- **Consumption plan** (`azurerm_service_plan`, SKU **`Y1`**) — **pay-per-execution, scale-to-zero** hosting. Right for an event-driven, spiky, mostly-idle workload like notification.
+- **Dedicated storage account** — the Functions **runtime's internal plumbing** (trigger state, execution leases, host metadata). It is **required by the platform**, not application data, so it gets its own account.
+- **Function App shell** — created now with the **runtime settings**, so application code can be deployed into it later.
+
+**An honest exception.** On the Consumption plan the runtime's storage connection (`AzureWebJobsStorage`) uses the **storage account's shared key** — a **deliberate, narrowly-scoped exception** to the platform's Entra-only pattern. It applies **only to the runtime's internal plumbing**, never to application data or to other services. (Identity-based storage connections are the production hardening path.) **Application-level** access to other services stays **identity-based**.
+
+This unit depends on **both** the **resource group** *and* the **observability** unit — it needs the App Insights **connection string** so the Function App reports telemetry from day one. This is the **multi-dependency pattern**: Terragrunt applies both upstream units first and passes their outputs in.
 
 #### Build
-_To be completed as this component is built._
+
+This step adds a reusable **function-app module** and its **dev live unit**:
+
+- **`infrastructure/modules/function-app/`**:
+  - **`variables.tf`** — `resource_group_name`, `location`, `function_app_name`, `storage_account_name` (globally unique, lowercase alphanumeric, 3–24 chars), `app_insights_connection_string` (**`sensitive = true`**), and `tags`.
+  - **`main.tf`** — an `azurerm_service_plan` (`os_type = "Linux"`, `sku_name = "Y1"`); an `azurerm_storage_account` dedicated to the runtime (`Standard_LRS`, `min_tls_version = "TLS1_2"`, `allow_nested_items_to_be_public = false`, with the documented-exception comment about shared key + the runtime); and an `azurerm_linux_function_app` linked to the plan and storage, running the **.NET 9 isolated** worker (`application_stack { dotnet_version = "9.0", use_dotnet_isolated_runtime = true }`), with the **App Insights connection string** in `app_settings`, **`https_only = true`**, and an **`identity { type = "SystemAssigned" }`** block (a comment notes this identity receives data-plane roles in a later step).
+  - **`outputs.tf`** — `id`, `name`, `default_hostname`, and the system-assigned identity's **`principal_id`** (consumed by the role-assignment step). No keys or connection strings.
+- **`infrastructure/environments/dev/function-app/terragrunt.hcl`**:
+  - `include "root"` for the shared backend/provider.
+  - **two dependencies** — `dependency "resource_group"` and `dependency "observability"` (each with `mock_outputs`; the observability mock provides a placeholder connection string so `init`/`plan`/`validate` work before observability is applied).
+  - `terraform { source = "../../../modules/function-app" }`.
+  - `inputs`: `function_app_name = "func-antkart-notifications-dev"`, `storage_account_name = "stantkartfuncdev"`, `app_insights_connection_string` from the observability dependency, matching tags.
 
 #### Execute
-_To be completed as this component is built._
+
+Run from the Function App unit's folder:
+
+```powershell
+cd infrastructure/environments/dev/function-app
+
+# 1. Init — generates backend.tf/provider.tf and resolves BOTH dependencies
+terragrunt init
+
+# 2. Plan — review before applying
+terragrunt plan
+
+# 3. Apply — create the plan, storage account, and Function App
+terragrunt apply
+```
+
+What each does:
+- **`terragrunt init`** — generates the backend/provider, initializes the provider, and resolves the `resource_group` **and** `observability` dependencies.
+- **`terragrunt plan`** — shows the intended changes; a correct plan reports **3 to add** (the service plan, the storage account, and the Function App), **0 to change, 0 to destroy**.
+- **`terragrunt apply`** — creates the three resources. (Terragrunt applies the resource group and observability units first.)
 
 #### Verify
-_To be completed as this component is built._
+
+```powershell
+$RG = "rg-antkart-dev-eastus"
+$FN = "func-antkart-notifications-dev"
+
+# Function App: name, state (expect Running), kind
+az functionapp show --resource-group $RG --name $FN `
+  --query "{name:name, state:state, kind:kind}" -o json
+
+# Runtime config (linux FX version / app settings presence)
+az functionapp config show --resource-group $RG --name $FN --query "{linuxFxVersion:linuxFxVersion}" -o json
+
+# Function list — EMPTY until code is deployed (expected at this stage)
+az functionapp function list --resource-group $RG --name $FN -o table
+```
+
+A **correct result**:
+- `terragrunt apply` ends with `Apply complete! Resources: 3 added, 0 changed, 0 destroyed.`
+- `az functionapp show` reports `name = func-antkart-notifications-dev`, `state = Running`, and a `kind` of `functionapp,linux`.
+- the **function list is empty** — that is expected: the shell exists, the code is deployed in a later phase.
 
 ### 12. Entra ID App Registration & Roles
 
