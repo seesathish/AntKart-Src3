@@ -873,16 +873,64 @@ A **correct result**:
 > Background reading: [Azure Functions & Event Grid Concepts](serverless-eventing-concepts.md) — push-based reactive eventing, retry/dead-lettering, and how Functions and Event Grid partner.
 
 #### Understand
-_To be completed as this component is built._
+
+**Event Grid** is **push-based, near-real-time event routing** (full detail in the [serverless-eventing concepts guide](serverless-eventing-concepts.md)): publishers send events to a **topic**; **subscriptions** push them to **handlers**; events that can't be delivered are **retried with backoff (up to 24 hours)** and can be **dead-lettered to storage**. In one line: where **Service Bus** carries durable work that **must not be lost** (consumers *pull*), **Event Grid** carries lightweight **"this happened"** notifications (it *pushes*).
+
+This step creates the **custom topic** — the **publish endpoint** that producers send events to. **Event subscriptions are created later**, once real handlers exist: a subscription needs a concrete destination, so wiring one now would point at nothing.
+
+**Cost:** pay-per-operation — effectively **free at dev volumes**, with **no idle cost**.
 
 #### Build
-_To be completed as this component is built._
+
+This step adds a reusable **eventgrid module** and its **dev live unit**:
+
+- **`infrastructure/modules/eventgrid/`**:
+  - **`variables.tf`** — `resource_group_name`, `location`, `topic_name`, and `tags`.
+  - **`main.tf`** — an `azurerm_eventgrid_topic` with **`local_auth_enabled = false`** (key-based publishing disabled — publishers authenticate with their Microsoft Entra identity, consistent with the secret-less model) and **`input_schema = "EventGridSchema"`** (Event Grid's native schema; **CloudEvents** is the open-standard alternative — either works, the platform uses the native schema). Comments explain the push model and why subscriptions come later.
+  - **`outputs.tf`** — `id`, `name`, and `endpoint`. **No access keys** — a comment notes publishing uses Entra identities granted the **EventGrid Data Sender** role in a later step.
+- **`infrastructure/environments/dev/eventgrid/terragrunt.hcl`**:
+  - `include "root"` for the shared backend/provider.
+  - a **`dependency "resource_group"`** consuming the resource group's `name` and `location` outputs (with `mock_outputs` for `init`/`plan`/`validate`, matching the other units).
+  - `terraform { source = "../../../modules/eventgrid" }`.
+  - `inputs`: `topic_name = "evgt-antkart-dev"`, matching tags.
 
 #### Execute
-_To be completed as this component is built._
+
+Run from the Event Grid unit's folder:
+
+```powershell
+cd infrastructure/environments/dev/eventgrid
+
+# 1. Init — generates backend.tf/provider.tf and resolves the resource_group dependency
+terragrunt init
+
+# 2. Plan — review before applying
+terragrunt plan
+
+# 3. Apply — create the Event Grid topic
+terragrunt apply
+```
+
+What each does:
+- **`terragrunt init`** — generates the backend/provider, initializes the provider, and resolves the `resource_group` dependency.
+- **`terragrunt plan`** — shows the intended changes; a correct plan reports **1 to add** (the topic), **0 to change, 0 to destroy**.
+- **`terragrunt apply`** — creates the topic and writes this unit's state to the backend.
 
 #### Verify
-_To be completed as this component is built._
+
+```powershell
+$RG = "rg-antkart-dev-eastus"
+
+# Topic name, publish endpoint, and provisioning state
+az eventgrid topic show --name "evgt-antkart-dev" --resource-group $RG `
+  --query "{name:name, endpoint:endpoint, provisioningState:provisioningState}" -o json
+```
+
+A **correct result**:
+- `terragrunt apply` ends with `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.`
+- `az eventgrid topic show` reports `name = evgt-antkart-dev`, `provisioningState = Succeeded`, and an `endpoint` URL (the publish endpoint).
+
+> **No access keys** are output or stored. Publishing identities are granted the **EventGrid Data Sender** role on this topic in the managed-identity step, and each publisher authenticates with **its own identity** — never an access key.
 
 ### 11. Function App (Hosting)
 
