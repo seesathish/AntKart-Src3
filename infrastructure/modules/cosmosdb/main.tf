@@ -34,6 +34,14 @@ resource "azurerm_cosmosdb_account" "this" {
     name = "EnableServerless"
   }
 
+  # Azure implicitly registers EnableMongo on MongoDB-kind accounts server-side.
+  # Declaring it here keeps the configuration aligned with the account's actual
+  # state, so Terraform doesn't plan a destructive replacement to "remove" a
+  # capability it never added (which prevent_destroy would block).
+  capabilities {
+    name = "EnableMongo"
+  }
+
   # --- Consistency -----------------------------------------------------------
   # Session is Cosmos's default and the usual choice: within a client session
   # you always read your own writes, while avoiding the latency/cost of the
