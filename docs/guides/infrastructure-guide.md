@@ -782,16 +782,87 @@ A **correct result**:
 ### 9. Service Bus
 
 #### Understand
-_To be completed as this component is built._
+
+**Azure Service Bus** is a fully-managed **enterprise message broker** for messages that **must not be lost** — commands and business data. (Contrast with **Event Grid**, the lightweight push-notification service for announcing that *something happened*; Service Bus carries the durable work.)
+
+**Queue vs. topic — two messaging shapes:**
+
+- **Queue** — **point-to-point / competing consumers**: exactly **one** consumer processes each message. Used for **commands**, which have a single owner.
+- **Topic + subscriptions** — **publish/subscribe**: **every subscription receives its own copy** of each message. Used for **integration events**, which have many independent listeners (adding a listener never affects the others).
+
+**At-least-once delivery → idempotent consumers.** Service Bus guarantees a message is delivered *at least* once, which means it may **occasionally arrive twice** (e.g. a consumer crashes after processing but before acknowledging). Consumers must therefore be **idempotent** — processing the same message twice has the same effect as once.
+
+**Dead-lettering.** Every queue and subscription has a built-in **dead-letter sub-queue**. After a message exceeds its **max delivery attempts**, it is moved there instead of being dropped, so it can be **inspected and resubmitted** — nothing is silently lost.
+
+**Tier and cost.** The **Standard** tier is **required for topics** (Basic offers queues only). It is a flat **~US$10/month** — the single largest cost of the current infrastructure.
+
+> The application's messaging library may provision **additional topology at runtime** in the code phase. The entities created here establish the **core, IaC-managed backbone**.
 
 #### Build
-_To be completed as this component is built._
+
+This step adds a reusable **servicebus module** and its **dev live unit**:
+
+- **`infrastructure/modules/servicebus/`**:
+  - **`variables.tf`** — `resource_group_name`, `location`, `namespace_name` (globally unique), `queue_names` (default `["order-commands"]`), `topic_name` (default `"integration-events"`), `subscription_names` (default `["products", "notification"]`), and `tags`.
+  - **`main.tf`** — an `azurerm_servicebus_namespace` (`sku = "Standard"`, **`local_auth_enabled = false`** so the data plane accepts only Microsoft Entra identities — no SAS connection strings, consistent with the secret-less model — and `minimum_tls_version = "1.2"`); the queue(s) via `azurerm_servicebus_queue` (`for_each`); the topic via `azurerm_servicebus_topic`; and the subscriptions via `azurerm_servicebus_subscription` (`for_each`, each with **`max_delivery_count = 10`** and a comment that exceeding it dead-letters the message). The queue-vs-topic mapping (commands have one owner; events have many listeners) is explained inline.
+  - **`outputs.tf`** — `id`, `name`, and `hostname` (`<name>.servicebus.windows.net`, for the application's identity-based connection later). **No connection strings** — a comment notes data-plane access is via Entra roles granted in a later step.
+- **`infrastructure/environments/dev/servicebus/terragrunt.hcl`**:
+  - `include "root"` for the shared backend/provider.
+  - a **`dependency "resource_group"`** consuming the resource group's `name` and `location` outputs (with `mock_outputs` for `init`/`plan`/`validate`, matching the other units).
+  - `terraform { source = "../../../modules/servicebus" }`.
+  - `inputs`: `namespace_name = "sb-antkart-dev"`, matching tags; the queue/topic/subscription names use the module defaults.
 
 #### Execute
-_To be completed as this component is built._
+
+Run from the Service Bus unit's folder:
+
+```powershell
+cd infrastructure/environments/dev/servicebus
+
+# 1. Init — generates backend.tf/provider.tf and resolves the resource_group dependency
+terragrunt init
+
+# 2. Plan — review before applying
+terragrunt plan
+
+# 3. Apply — create the namespace, queue, topic, and subscriptions
+terragrunt apply
+```
+
+What each does:
+- **`terragrunt init`** — generates the backend/provider, initializes the provider, and resolves the `resource_group` dependency.
+- **`terragrunt plan`** — shows the intended changes; a correct plan reports **5 to add** (namespace + 1 queue + 1 topic + 2 subscriptions), **0 to change, 0 to destroy**.
+- **`terragrunt apply`** — creates the entities and writes this unit's state to the backend.
+
+> The Standard namespace is a flat **~US$10/month** — budget for it.
 
 #### Verify
-_To be completed as this component is built._
+
+```powershell
+$RG = "rg-antkart-dev-eastus"
+$NS = "sb-antkart-dev"
+
+# Namespace: name, SKU, status
+az servicebus namespace show --resource-group $RG --name $NS `
+  --query "{name:name, sku:sku.name, status:status}" -o json
+
+# Queues (expect order-commands)
+az servicebus queue list --resource-group $RG --namespace-name $NS --query "[].name" -o table
+
+# Topics (expect integration-events)
+az servicebus topic list --resource-group $RG --namespace-name $NS --query "[].name" -o table
+
+# Subscriptions on the topic (expect products, notification)
+az servicebus topic subscription list --resource-group $RG --namespace-name $NS `
+  --topic-name "integration-events" --query "[].name" -o table
+```
+
+A **correct result**:
+- `terragrunt apply` ends with `Apply complete! Resources: 5 added, 0 changed, 0 destroyed.`
+- `az servicebus namespace show` reports `name = sb-antkart-dev`, `sku = Standard`, `status = Active`.
+- the queue list shows `order-commands`; the topic list shows `integration-events`; the subscription list shows `products` and `notification`.
+
+> **No connection strings** are output or stored. Application identities are granted Service Bus **data-plane roles** in the managed-identity step, and each service authenticates with **its own identity** (token auth), connecting via the namespace hostname — never a SAS key.
 
 ### 10. Event Grid
 
