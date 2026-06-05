@@ -40,6 +40,60 @@ Terraform and Terragrunt generate local working files — the `.terraform/` prov
 
 ---
 
+## Diagnostics & Day-to-Day Commands
+
+Reference material for working with — and troubleshooting — Terraform/Terragrunt with confidence. Read it once; return to it whenever a plan or apply looks off.
+
+### The commands you use every day
+
+| Command | What it does | When to use it |
+|---------|--------------|----------------|
+| `terragrunt init` | Wires up the backend and downloads the providers for a unit. | On first use of a unit, and after backend or module/source changes. |
+| `terragrunt plan` | A **safe, read-only** comparison of configuration vs. state vs. real Azure. Changes nothing. | Anytime — and **always before `apply`**. |
+| `terragrunt apply` | Executes the plan, **after explicit confirmation**, creating/updating/deleting real resources. | When the plan shows exactly what you intend. |
+| `terragrunt output` | Shows a unit's outputs; sensitive ones are masked. | To read a unit's results. Use `terragrunt output -raw <name>` to reveal a sensitive value **deliberately, only when needed**. |
+| `terragrunt state list` | Lists what Terraform currently tracks — its "memory". | To see which resources state believes exist. |
+| `terragrunt untaint <resource>` | Clears a resource's "must be replaced" mark, once you have verified it is actually healthy. | After confirming a resource flagged for replacement is genuinely fine. |
+| `az <service> show ...` | Verifies the **real** resource in Azure, independent of Terraform. | To check ground truth — what actually exists, regardless of state. |
+
+> **Read `plan` correctly.** `plan` is a health check, not an action. The message **`No changes. Your infrastructure matches the configuration.`** means **configuration, state, and real Azure all agree** — that is the confirmation of health you are looking for, *not* an "empty" or failed result.
+
+### When something unexpected happens: the diagnostic workflow
+
+When a plan or apply surprises you, work through this calm, ordered playbook — don't reach for destroy/recreate.
+
+1. **Check reality first.** Does the resource actually exist, and is it healthy? Azure is the ground truth:
+   ```powershell
+   az <service> show --resource-group <rg> --name <name> --query "{name:name, state:provisioningState}" -o json
+   ```
+2. **Check Terraform's memory.** Does state contain what you expect?
+   ```powershell
+   terragrunt state list
+   ```
+3. **Read the plan for the *why*, not just the summary.** The cause is in the diff, not the "N to add/change/destroy" line:
+   - **`# ... is tainted, so must be replaced`** — a previous `apply` failed mid-way and marked the resource for replacement.
+   - **an attribute marked `# forces replacement`** — configuration and reality have drifted; the **marked attribute names the exact cause**.
+4. **Fix the configuration to describe full reality** (or `untaint` if the resource is verified healthy). **Never delete/recreate reflexively** — that risks data and is rarely the right fix.
+5. **Confirm with a re-plan.** `No changes.` is the proof the fix worked — achieved **without touching any resource**.
+
+### A real scenario: provider drift
+
+Cloud platforms sometimes add **server-side defaults the configuration never declared**. For example, a Cosmos DB MongoDB-kind account implicitly receives an `EnableMongo` capability from Azure, even though the configuration only declared `EnableServerless`.
+
+What happens on the next `plan`:
+
+- Terraform sees a capability in reality that is not in the configuration, so it plans to **"remove"** it.
+- For Cosmos capabilities, removing one **forces a destroy-and-recreate** of the whole account — and `lifecycle.prevent_destroy` on that stateful resource **correctly blocks it**, so the apply fails loudly rather than destroying data.
+
+**The remedy** is not to fight the platform: **declare the platform-added setting in the configuration** so config matches reality (here, add a second `capabilities { name = "EnableMongo" }` block). The re-plan then reports **`No changes.`**
+
+Two lasting lessons:
+
+- **(a) Put `prevent_destroy` on stateful resources *before* you need it.** It is what turned a silent, destructive replacement into a safe, blocking error.
+- **(b) Read plan diffs line by line.** The `# forces replacement` marker named the exact culprit, turning a confusing failure into a one-line fix.
+
+---
+
 ## Infrastructure Components
 
 Each component below is documented with the same four-part structure. Sections are filled in as the component is built, capturing the real configuration, the real commands, and the real verification output.
