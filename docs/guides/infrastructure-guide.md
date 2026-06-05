@@ -101,6 +101,8 @@ Each component below is documented with the same four-part structure. Sections a
 ### 1. Terraform Identity & Access (Service Principal, RBAC)
 
 > This step uses the **Azure CLI, not Terraform** — the automation identity must exist before Terraform can authenticate as it, so there is no `.tf` script here, only documented commands.
+>
+> Background reading: [Identity Concepts](identity-concepts.md) — tenant vs subscription, authentication vs authorization, RBAC roles and scopes, and service principals vs managed identities.
 
 #### Understand
 
@@ -781,6 +783,8 @@ A **correct result**:
 
 ### 9. Service Bus
 
+> Background reading: [Reliable Messaging with Azure Service Bus](messaging-concepts.md) — message brokers, queue vs topic/subscriptions, at-least-once delivery & idempotency, dead-lettering, tiers, and Service Bus vs Event Grid vs Event Hubs.
+
 #### Understand
 
 **Azure Service Bus** is a fully-managed **enterprise message broker** for messages that **must not be lost** — commands and business data. (Contrast with **Event Grid**, the lightweight push-notification service for announcing that *something happened*; Service Bus carries the durable work.)
@@ -866,6 +870,8 @@ A **correct result**:
 
 ### 10. Event Grid
 
+> Background reading: [Azure Functions & Event Grid Concepts](serverless-eventing-concepts.md) — push-based reactive eventing, retry/dead-lettering, and how Functions and Event Grid partner.
+
 #### Understand
 _To be completed as this component is built._
 
@@ -879,6 +885,8 @@ _To be completed as this component is built._
 _To be completed as this component is built._
 
 ### 11. Function App (Hosting)
+
+> Background reading: [Azure Functions & Event Grid Concepts](serverless-eventing-concepts.md) — what serverless means, the trigger model, the instance lifecycle and cold starts, and the Consumption plan.
 
 #### Understand
 _To be completed as this component is built._
@@ -894,6 +902,8 @@ _To be completed as this component is built._
 
 ### 12. Entra ID App Registration & Roles
 
+> Background reading: [Identity Concepts](identity-concepts.md) — app registrations (identity + contract), tokens and claims (issuer, audience, roles), and how APIs validate them.
+
 #### Understand
 _To be completed as this component is built._
 
@@ -907,6 +917,8 @@ _To be completed as this component is built._
 _To be completed as this component is built._
 
 ### 13. Managed Identities & Workload Identity Foundation
+
+> Background reading: [Identity Concepts](identity-concepts.md) — managed identities vs service principals, workload identity federation (the no-stored-secret chain), and `DefaultAzureCredential`.
 
 #### Understand
 _To be completed as this component is built._

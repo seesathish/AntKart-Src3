@@ -20,7 +20,8 @@ The clean application baseline: independently deployable .NET microservices buil
 
 All cloud resources are provisioned as code with Terraform and Terragrunt — networking, container registry, secrets, data stores, messaging, and supporting services — so the environment is reproducible, reviewable, and version-controlled.
 
-→ [Infrastructure Guide](docs/guides/infrastructure-guide.md) · [Networking & Kubernetes Concepts](docs/guides/networking-concepts.md) · [Cosmos DB Concepts](docs/guides/cosmosdb-concepts.md)
+→ [Infrastructure Guide](docs/guides/infrastructure-guide.md)
+→ Concept primers: [Networking & Kubernetes](docs/guides/networking-concepts.md) · [Cosmos DB](docs/guides/cosmosdb-concepts.md) · [Messaging](docs/guides/messaging-concepts.md) · [Serverless & Eventing](docs/guides/serverless-eventing-concepts.md) · [Identity](docs/guides/identity-concepts.md)
 
 ### 3. Cloud-Native Code
 
