@@ -92,6 +92,21 @@ Two lasting lessons:
 - **(a) Put `prevent_destroy` on stateful resources *before* you need it.** It is what turned a silent, destructive replacement into a safe, blocking error.
 - **(b) Read plan diffs line by line.** The `# forces replacement` marker named the exact culprit, turning a confusing failure into a one-line fix.
 
+### Common platform errors and how to read them
+
+Most provisioning errors become clear **once you read the error body, not just the status code**. The status (401/403/500) gives a category; the **message text** gives the actual cause and the fix.
+
+| Symptom | What it really means | Fix |
+|---------|----------------------|-----|
+| **A secret was accidentally exposed** (committed, logged, printed) | The credential is compromised the moment it leaves a trusted boundary | **Rotate it immediately** (e.g. `az ad sp credential reset`, regenerate the key), then remove it from wherever it leaked — a rotated secret makes the exposed one useless. |
+| **Provider drift** — plan wants to "remove" a setting you never declared | The cloud added a **server-side default** the config doesn't mention, so Terraform plans to take it away (for some settings, a destroy-and-recreate) | **Declare the platform-added setting** so config matches reality; the re-plan then says `No changes`. (See the provider-drift scenario above.) |
+| **Quota wall** — a `401` / `403` whose **body says "additional quota required"** | Not an auth problem despite the status code — the subscription has **no remaining capacity** for that SKU/region | **Request the quota** for the **specific SKU and region** (portal → Quotas, or a support request). Auth is fine; capacity is the blocker. |
+| **Insufficient privileges on a directory object** — `403 Authorization_RequestDenied` | The identity has **resource-plane** rights (subscription RBAC) but **not directory-plane** rights (Entra) — e.g. creating an app registration | **Run that unit as an admin user**, or grant the identity the **directory role** it needs (Application Administrator / `Application.ReadWrite.All`). |
+| **State-lock authorization failure** — `403 AuthorizationPermissionMismatch` while "Initializing the backend" | The identity can authenticate but **lacks data-plane access to the state storage** | Grant it **Storage Blob Data Contributor** on the **state storage account** (control-plane Contributor does not include blob data access), or run as the identity that has it. |
+| **Identifier-URI policy rejection** — the tenant refuses a friendly `api://<name>` URI | The app is issuing **v1 access tokens**, under which the tenant's identifier-URI policy rejects the friendly form | Set **`requested_access_token_version = 2`** on the app's `api` block — v2 permits the friendly identifier URI (and emits cleaner claims). |
+
+> **The meta-lesson: read the error *body*, not just the status code.** A `403` can mean "you lack a role", "you lack a directory permission", "you lack data-plane access", or even "you're out of quota" — and the **message text** is what tells them apart. The status narrows the category; the body names the cause and points at the fix.
+
 ---
 
 ## Infrastructure Components
@@ -1154,13 +1169,79 @@ A **correct result**:
 ### 14. Governance, Tagging & Cost Controls
 
 #### Understand
-_To be completed as this component is built._
+
+Governance closes the milestone: it makes the environment **well-architected** — cost-aware, reproducible, protected, consistently tagged, and secret-less — and **records the evidence**. This step adds a **cost budget with alerts** and a **shared provider-version pin**, then **audits** the protections, tags, and secret-less posture already in place.
 
 #### Build
-_To be completed as this component is built._
+
+- **Shared provider pin.** `environments/dev/root.hcl` now generates a `versions.tf` into every unit pinning **`azurerm ~> 4.76`**, so all units resolve the **same** provider version (resolving the earlier 4.75 / 4.76 drift). The **`azuread ~> 3.0`** constraint stays in the app-registration unit — its only consumer. Pinning gives **reproducible, drift-free** provisioning: without a shared constraint, different units (or runs on different days) could pull different provider versions.
+- **Budget + cost alerts.** `infrastructure/modules/governance/` creates an `azurerm_consumption_budget_resource_group` set to **US$200 / month**, with notifications at **50%** and **80%** (actual spend) and **100%** (forecast) emailing a contact address (parameterized as `contact_emails`). FinOps in one idea: a budget does not cap spend — it **watches** it and **alerts** you, so the bill is never a surprise.
 
 #### Execute
-_To be completed as this component is built._
+
+**Re-pin providers (follow-up — per unit).** After the shared `versions.tf` change, align each unit's lock file and re-commit it:
+
+```powershell
+# Run in each unit folder, e.g. infrastructure/environments/dev/<unit>
+terragrunt init -upgrade
+# then re-commit the updated .terraform.lock.hcl
+```
+
+**Apply the budget.**
+
+```powershell
+cd infrastructure/environments/dev/governance
+terragrunt init
+terragrunt plan      # expect: 1 to add (the budget), 0 to change, 0 to destroy
+terragrunt apply
+```
+
+> Set `contact_emails` to a **real address** in the unit's `inputs` before applying — that is who receives the alerts.
 
 #### Verify
-_To be completed as this component is built._
+
+```powershell
+$RG = "rg-antkart-dev-eastus"
+az consumption budget list --resource-group $RG `
+  --query "[].{name:name, amount:amount, timeGrain:timeGrain}" -o table
+```
+
+A **correct result**: `terragrunt apply` ends with `1 added, 0 changed, 0 destroyed`, and the budget `budget-antkart-dev` appears at amount `200`, `Monthly`.
+
+#### Governance Evidence (Audit)
+
+The Well-Architected / governance evidence for the milestone.
+
+**Stateful-resource protection (`prevent_destroy`).** Every resource that holds data is guarded against accidental teardown:
+
+| Resource | Protection |
+|----------|------------|
+| Resource group | `lifecycle { prevent_destroy = true }` |
+| Cosmos DB account | `lifecycle { prevent_destroy = true }` |
+| Key Vault | Soft-delete retention (always on) + purge protection (enabled in production) — a deleted vault is recoverable and its name stays reserved |
+
+Stateless / rebuildable resources (networking, registry, messaging, Function hosting) are intentionally not guarded — they can be recreated without data loss.
+
+**Standard tags.** Every taggable Azure resource carries the standard tags:
+
+| Tag | Value (dev) |
+|-----|-------------|
+| `environment` | `dev` |
+| `project` | `antkart` |
+| `managed-by` | `terraform` |
+
+(Directory objects — the app registration — use Entra's list-style tags `["antkart", "dev"]`; role assignments and the budget are not taggable.)
+
+**Secret-less, identity-based posture.** Every data plane accepts Microsoft Entra identities; shared keys / SAS / admin accounts are disabled — the one documented exception being the Functions runtime's internal storage:
+
+| Resource | Key / SAS / admin | Identity-based access |
+|----------|-------------------|-----------------------|
+| Key Vault | RBAC authorization (access policies off) | Entra — **Key Vault Secrets User** |
+| Service Bus | `local_auth_enabled = false` (SAS off) | Entra — **Data Receiver / Data Sender** |
+| Event Grid topic | `local_auth_enabled = false` (keys off) | Entra — **EventGrid Data Sender** |
+| Container Registry | `admin_enabled = false` | Entra — AcrPull (granted with AKS) |
+| Storage (Terraform state) | shared-key access disabled | Entra — Storage Blob Data Contributor |
+| Cosmos DB | connection string vaulted (not exposed) | App reads the secret from Key Vault (Secrets User) |
+| Storage (Functions runtime) | **shared key enabled — documented exception** | `AzureWebJobsStorage` only (runtime plumbing) |
+
+The automation identity is itself least-privilege (Contributor + Role Based Access Control Administrator, subscription-scoped), and every workload role is scoped to a specific resource — never the subscription.

@@ -92,6 +92,33 @@ generate "provider" {
   EOF
 }
 
+# generate "versions": Terragrunt writes a shared required_providers constraint
+# into every unit, so they all resolve the SAME provider version. Pinning matters
+# for REPRODUCIBLE, DRIFT-FREE provisioning: without a shared constraint,
+# different units (or the same unit on different days) can pull different provider
+# versions, so a plan that was clean yesterday can change for no code reason.
+#
+# Only azurerm is pinned here because every unit uses it. The azuread provider is
+# used by a single unit (the app registration), so its constraint lives in that
+# unit's own versions.tf rather than being required everywhere it isn't used.
+#
+# After changing this constraint, run `terragrunt init -upgrade` in each unit to
+# align its .terraform.lock.hcl, then re-commit the updated lock files.
+generate "versions" {
+  path      = "versions.tf"
+  if_exists = "overwrite_terragrunt"
+  contents  = <<-EOF
+    terraform {
+      required_providers {
+        azurerm = {
+          source  = "hashicorp/azurerm"
+          version = "~> 4.76"
+        }
+      }
+    }
+  EOF
+}
+
 # inputs: values passed down to every child module. Environment-wide settings
 # (such as the environment name) live here so each module doesn't repeat them.
 # Resource-specific inputs are added by the modules from Step 3 onward.
