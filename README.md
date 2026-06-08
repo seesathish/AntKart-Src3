@@ -1,6 +1,32 @@
 # AntKart
 
-AntKart is a cloud-native e-commerce platform built as independently deployable .NET 9 microservices with Clean Architecture, DDD, CQRS, Event Bus (SAGA), API Gateway, Resilience, and full Observability.
+**AntKart is a cloud-native e-commerce platform** built as eight independently deployable **.NET 9 microservices** — and, just as deliberately, a **from-scratch, learnable reference** for how a modern distributed system is designed, built, and moved onto managed cloud infrastructure.
+
+It pairs production-grade patterns — Clean Architecture, DDD, CQRS, an event-driven **SAGA**, an API gateway, resilience, and full observability — with a documentation set that teaches the *why* behind every decision. The same eight services run two ways: an **application baseline** you can clone and run locally, and a **secret-less, identity-based Azure deployment** provisioned entirely as code.
+
+Whether you want to study enterprise patterns, learn cloud-native concepts from the ground up, or rebuild your own deployment, AntKart is structured to be **read and rebuilt, not just run**.
+
+---
+
+## What You Can Learn Here
+
+AntKart is built around **two complementary challenges** — take either, or do both in order:
+
+### 1. Learn enterprise cloud-native concepts from scratch
+
+The concept guides assume **no prior cloud experience** and build each idea from first principles, with diagrams and a worked rationale — then link to the [ADR](docs/adr/README.md) that applies it in the platform:
+
+[IaC fundamentals](docs/guides/iac-concepts.md) · [Networking & Kubernetes](docs/guides/networking-concepts.md) · [Identity](docs/guides/identity-concepts.md) · [Messaging](docs/guides/messaging-concepts.md) · [Serverless & Eventing](docs/guides/serverless-eventing-concepts.md) · [Cosmos DB](docs/guides/cosmosdb-concepts.md)
+
+### 2. Rebuild your own cloud deployment from the application baseline
+
+Start from the running [application baseline](#quick-start-run-it-locally) and reproduce the managed-Azure platform yourself, one resource at a time:
+
+- **Provision infrastructure as code** — Terraform modules + Terragrunt live units, plan-reviewed before every apply.
+- **Map each baseline component to its managed equivalent** — Keycloak → Entra ID, RabbitMQ → Service Bus, MongoDB → Cosmos DB (see the [mapping](#two-layers-application-baseline-and-cloud-native-target)).
+- **Adopt a secret-less, identity-based posture** — managed identities, least-privilege RBAC, and no connection strings.
+
+The [Infrastructure Guide](docs/guides/infrastructure-guide.md) walks every resource as **Understand → Build → Execute → Verify**.
 
 ---
 
@@ -72,17 +98,40 @@ The cloud-native platform doesn't replace the baseline — it **maps it onto man
 
 The diagrams below name both forms (`Keycloak / Entra ID`, `RabbitMQ / Service Bus`, `MongoDB / Cosmos DB`) so they hold true for either layer.
 
+### Technology Stack
+
+| Layer | Application baseline | Cloud-native equivalent |
+|-------|----------------------|-------------------------|
+| **Language / framework** | .NET 9 · ASP.NET Core Minimal APIs · gRPC | _same_ |
+| **Architecture & patterns** | Clean Architecture · DDD · CQRS (MediatR 12) · SAGA · EF Core Outbox · `Result<T>` · FluentValidation pipeline | _same_ |
+| **API gateway** | Ocelot | Azure API Management _(target)_ |
+| **Identity** | Keycloak (OIDC / JWT) | Microsoft Entra ID |
+| **Messaging** | RabbitMQ + MassTransit | Azure Service Bus + MassTransit |
+| **Product store** | MongoDB | Azure Cosmos DB (MongoDB API) |
+| **Relational / cache** | PostgreSQL · Redis · SQLite | Managed Azure data services |
+| **Email** | MailKit · SMTP / Mailhog | SMTP / managed email |
+| **Payments** | Razorpay (sandbox) | Razorpay |
+| **Resilience** | Polly v8 (retry · circuit breaker · timeout) | _same_ |
+| **Infrastructure as code** | — | Terraform + Terragrunt |
+| **Container / orchestration** | Docker | Azure Kubernetes Service (AKS) + Azure Container Registry _(target)_ |
+| **Serverless / eventing** | — | Azure Functions + Event Grid _(target)_ |
+| **Secrets / access** | Connection strings | Key Vault + managed identities — **no secrets** |
+| **Observability** | Serilog → Elasticsearch → Kibana | Azure Monitor / Application Insights |
+| **Testing** | xUnit · Moq · FluentAssertions — **618 tests** | _same_ |
+
 ### System Context
 
 Two actors — **Customer** and **Administrator** — interact with the AntKart platform, which depends on external/cloud services for identity, payments, email, messaging, and observability.
 
 ```mermaid
 flowchart TB
-    customer([Customer])
-    admin([Administrator])
+    customer(["Customer"])
+    admin(["Administrator"])
+
     subgraph AK["AntKart Platform"]
       sys["Eight .NET 9 microservices<br/>behind an API gateway"]
     end
+
     idp[["Identity provider<br/>Keycloak / Microsoft Entra ID"]]
     pay[["Razorpay<br/>payment gateway"]]
     mail[["Email / SMTP"]]
@@ -96,6 +145,16 @@ flowchart TB
     AK -->|send transactional email| mail
     AK -->|publish / consume events| bus
     AK -->|ship logs, metrics, traces| obs
+
+    classDef actor fill:#ede9fe,stroke:#7c3aed,stroke-width:1px,color:#4c1d95
+    classDef platform fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    classDef external fill:#e2e8f0,stroke:#64748b,stroke-width:1px,color:#1e293b
+    classDef broker fill:#cffafe,stroke:#0891b2,stroke-width:1px,color:#155e75
+
+    class customer,admin actor
+    class sys platform
+    class idp,pay,mail,obs external
+    class bus broker
 ```
 
 ### Containers & Services
@@ -106,9 +165,10 @@ Eight independently deployable microservices sit behind an **Ocelot API gateway*
 flowchart TB
     client(["Customer / Admin"])
     gw["AK.Gateway<br/>Ocelot API Gateway"]
-    client --> gw
+    client -->|HTTPS + JWT| gw
 
-    subgraph Services["Microservices"]
+    subgraph Services["Microservices (.NET 9)"]
+      direction LR
       prod["AK.Products<br/>REST"]
       cart["AK.ShoppingCart<br/>REST"]
       ord["AK.Order<br/>REST + SAGA"]
@@ -126,18 +186,43 @@ flowchart TB
     gw --> ident
     ord -->|gRPC| disc
 
-    prod --> mongo[("MongoDB / Cosmos DB")]
-    disc --> sqlite[("SQLite")]
-    cart --> redis[("Redis")]
-    ord --> pg1[("PostgreSQL")]
-    pay --> pg2[("PostgreSQL")]
-    notif --> pg3[("PostgreSQL")]
-    ident --> idp[["Keycloak / Entra ID"]]
+    subgraph Data["Data stores (one per service)"]
+      direction LR
+      mongo[("MongoDB / Cosmos DB")]
+      sqlite[("SQLite")]
+      redis[("Redis")]
+      pgOrd[("PostgreSQL")]
+      pgPay[("PostgreSQL")]
+      pgNot[("PostgreSQL")]
+    end
 
-    ord -. publish / consume .-> bus{{"Message broker<br/>RabbitMQ / Service Bus"}}
-    prod -. .-> bus
-    pay -. .-> bus
-    notif -. .-> bus
+    prod --> mongo
+    disc --> sqlite
+    cart --> redis
+    ord --> pgOrd
+    pay --> pgPay
+    notif --> pgNot
+    ident -->|OIDC| idp[["Keycloak / Entra ID"]]
+
+    bus{{"Message broker<br/>RabbitMQ / Service Bus"}}
+    ord -.->|publish / consume| bus
+    prod -.->|event| bus
+    pay -.->|event| bus
+    notif -.->|event| bus
+
+    classDef actor fill:#ede9fe,stroke:#7c3aed,stroke-width:1px,color:#4c1d95
+    classDef gateway fill:#ffedd5,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef service fill:#dbeafe,stroke:#2563eb,stroke-width:1px,color:#1e3a8a
+    classDef store fill:#dcfce7,stroke:#16a34a,stroke-width:1px,color:#14532d
+    classDef external fill:#e2e8f0,stroke:#64748b,stroke-width:1px,color:#1e293b
+    classDef broker fill:#cffafe,stroke:#0891b2,stroke-width:1px,color:#155e75
+
+    class client actor
+    class gw gateway
+    class prod,cart,ord,pay,notif,ident,disc service
+    class mongo,sqlite,redis,pgOrd,pgPay,pgNot store
+    class idp external
+    class bus broker
 ```
 
 ### Order Flow — End-to-End SAGA
@@ -146,6 +231,7 @@ The order journey is orchestrated by the **MassTransit SAGA** in AK.Order, with 
 
 ```mermaid
 sequenceDiagram
+    autonumber
     actor C as Customer
     participant GW as Gateway
     participant O as AK.Order
@@ -160,22 +246,33 @@ sequenceDiagram
     O->>O: persist order + outbox (one transaction)
     O-->>C: 201 Created (Pending)
     O->>B: OrderCreated
+
+    rect rgb(219, 234, 254)
+    Note over B,P: Stock reservation (SAGA)
     B->>P: reserve stock
     alt stock available
       P->>B: StockReserved
       B->>O: SAGA → Confirmed
+      rect rgb(220, 252, 231)
+      Note over O,RZ: Payment
       O->>B: PaymentInitiated
       B->>PAY: create payment
       PAY->>RZ: charge & verify signature
       RZ-->>PAY: success
       PAY->>B: PaymentSucceeded
       B->>O: SAGA → Paid
+      end
     else stock unavailable
       P->>B: StockReservationFailed
       B->>O: SAGA → Cancelled
     end
-    B->>N: integration events at each stage
+    end
+
+    rect rgb(207, 250, 254)
+    Note over B,N: Notifications at each stage
+    B->>N: integration events
     N-->>C: transactional emails
+    end
 ```
 
 ### Component View — AK.Order
@@ -184,27 +281,73 @@ AK.Order is the most architecturally rich service: **CQRS via MediatR**, **SAGA 
 
 ```mermaid
 flowchart LR
-    api["Minimal API<br/>endpoints"] --> med["MediatR<br/>send command / query"]
-    med --> vb["ValidationBehavior<br/>FluentValidation"]
-    vb --> ch["Command / Query<br/>handlers"]
-    ch --> dom["Domain model<br/>Order aggregate + state machine"]
-    ch --> repo["Repository<br/>EF Core"]
-    repo --> pg[("PostgreSQL")]
-    ch --> ob["EF Core Outbox"]
-    ob --> saga["OrderSaga<br/>MassTransit"]
-    saga --> bus{{"Message broker"}}
+    subgraph APILayer["API layer"]
+      api["Minimal API<br/>endpoints"]
+    end
+
+    subgraph AppLayer["Application layer — CQRS"]
+      direction TB
+      med["MediatR<br/>send command / query"]
+      vb["ValidationBehavior<br/>FluentValidation"]
+      ch["Command / Query<br/>handlers"]
+    end
+
+    subgraph DomainLayer["Domain layer"]
+      dom["Order aggregate<br/>+ state machine"]
+    end
+
+    subgraph InfraLayer["Infrastructure layer"]
+      direction TB
+      repo["Repository<br/>EF Core"]
+      ob["EF Core Outbox"]
+      saga["OrderSaga<br/>MassTransit"]
+    end
+
+    api --> med --> vb --> ch
+    ch --> dom
+    ch --> repo --> pg[("PostgreSQL")]
+    ch --> ob --> saga -->|publish| bus{{"Message broker"}}
+
+    classDef apilayer fill:#ffedd5,stroke:#ea580c,stroke-width:1px,color:#7c2d12
+    classDef applayer fill:#dbeafe,stroke:#2563eb,stroke-width:1px,color:#1e3a8a
+    classDef domainlayer fill:#fae8ff,stroke:#a21caf,stroke-width:1px,color:#701a75
+    classDef infralayer fill:#e2e8f0,stroke:#64748b,stroke-width:1px,color:#1e293b
+    classDef store fill:#dcfce7,stroke:#16a34a,stroke-width:1px,color:#14532d
+    classDef broker fill:#cffafe,stroke:#0891b2,stroke-width:1px,color:#155e75
+
+    class api apilayer
+    class med,vb,ch applayer
+    class dom domainlayer
+    class repo,ob,saga infralayer
+    class pg store
+    class bus broker
 ```
 
 ### Architecture Highlights
 
+**Application patterns**
+
 - **Clean Architecture + DDD per service** — each microservice has Domain, Application, Infrastructure, and API layers with strict inward dependency rules; domain entities use private setters and factory methods with no framework leakage.
-- **CQRS via MediatR 12 in every service** — commands and queries are fully separated; a `ValidationBehavior<TRequest, TResponse>` pipeline ensures all requests are validated by FluentValidation before reaching handlers.
-- **MassTransit SAGA orchestrates order → stock → payment → notification** — the `OrderSaga` in AK.Order transitions through `Initial → StockPending → Confirmed/Cancelled` states, coordinating AK.Products, AK.ShoppingCart, AK.Payments, and AK.Notification over RabbitMQ without any direct service-to-service HTTP calls.
-- **AK.Notification is fully event-driven** — consumes six integration events (`UserRegistered`, `OrderCreated`, `OrderConfirmed`, `OrderCancelled`, `PaymentSucceeded`, `PaymentFailed`) and dispatches transactional emails via MailKit. Local dev uses an SMTP trap (e.g. Mailhog at `http://localhost:8025`); production uses Gmail SMTP with an App Password supplied through the notification service's `EmailSettings`.
-- **EF Core Outbox pattern in Order and Payments** — integration events are written atomically to the same PostgreSQL transaction as the business data, guaranteeing at-least-once delivery and preventing dual-write inconsistencies.
-- **JWT authentication via Keycloak, validated at Gateway and per-service** — Ocelot validates the Bearer token at the gateway edge; each downstream service independently re-validates via the Keycloak OIDC discovery endpoint, so a compromised gateway cannot bypass service-level auth.
-- **Polly v8 resilience (retry + circuit breaker) on all outbound calls** — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, and `AddNpgsqlResilience()` from AK.BuildingBlocks wrap every external dependency with exponential backoff retry and a half-open circuit breaker.
-- **Serilog → Elasticsearch → Kibana for structured observability** — every service ships structured JSON logs with a `X-Correlation-Id` header propagated end-to-end; Kibana dashboards provide cross-service request tracing without a separate APM agent.
+- **CQRS via MediatR 12 in every service** — commands and queries are fully separated; a `ValidationBehavior<TRequest, TResponse>` pipeline validates every request via FluentValidation before it reaches a handler.
+- **MassTransit SAGA orchestrates order → stock → payment → notification** — the `OrderSaga` in AK.Order transitions through `Initial → StockPending → Confirmed/Cancelled`, coordinating Products, ShoppingCart, Payments, and Notification over the broker with **no direct service-to-service HTTP calls**.
+- **EF Core Outbox in Order and Payments** — integration events are written atomically in the same transaction as the business data, guaranteeing at-least-once delivery and preventing dual-write inconsistencies.
+- **`Result<T>` for expected failures, exceptions for unexpected ones** — `CancelOrder` and `UpdateOrderStatus` return `Result<T>`; `CreateOrder` uses exceptions — a deliberate contrast the design docs walk through.
+- **Polly v8 resilience on every outbound call** — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, and `AddNpgsqlResilience()` from AK.BuildingBlocks wrap each dependency with exponential-backoff retry and a half-open circuit breaker.
+- **Fully event-driven notification** — AK.Notification consumes six integration events and dispatches transactional emails via MailKit, with a channel abstraction ready for SMS/WhatsApp.
+
+**Cloud-native posture**
+
+- **Infrastructure as code** — Terraform modules (the *how*) plus Terragrunt live units (the *what*), a shared remote-state backend, and a `plan` reviewed before every `apply`.
+- **Secret-less, Entra-only data planes** — local/shared-key auth is disabled (`local_auth_enabled = false`); every data plane accepts Microsoft Entra identities only, so there are **no connection-string secrets**.
+- **Least-privilege RBAC + managed identities** — each service gets its own managed identity granted only the data-plane roles it needs; workload identity federation lets pods authenticate with nothing stored in the cluster.
+- **Key Vault for everything sensitive** — secrets are read at startup via `DefaultAzureCredential`, never committed.
+- **Observability built in** — structured Serilog JSON logs with an end-to-end `X-Correlation-Id`, shipped to ELK locally and to Azure Monitor / Application Insights in the cloud.
+
+**Engineering discipline**
+
+- **Everything as code** — application, infrastructure, gateway routing, and identity config all live in the repository; nothing is clicked together by hand.
+- **Documented decisions** — every significant choice is captured as an [ADR](docs/adr/README.md), and every cloud concept has a from-scratch [primer](#what-you-can-learn-here).
+- **Test-backed** — **618 unit and integration tests** (xUnit · Moq · FluentAssertions), including a MassTransit in-memory harness for the SAGA and event bus.
 
 ### Architecture Decision Records
 
