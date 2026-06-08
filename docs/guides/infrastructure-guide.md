@@ -1079,21 +1079,77 @@ A **correct result**:
 
 > The output **`client_id`** is a **real value** (not a placeholder) consumed by the application's auth configuration in the data/identity migration phase — the audience/authority the API validates tokens against.
 
-### 13. Managed Identities & Workload Identity Foundation
+### 13. Data-Plane Role Assignments
 
 > Background reading: [Identity Concepts](identity-concepts.md) — managed identities vs service principals, workload identity federation (the no-stored-secret chain), and `DefaultAzureCredential`.
 
 #### Understand
-_To be completed as this component is built._
+
+This is where the **secret-less model completes** (concepts in the [identity guide](identity-concepts.md)). Every resource so far was configured to **accept only Microsoft Entra identities** — keys/SAS disabled (Key Vault uses RBAC, Service Bus and Event Grid have `local_auth_enabled = false`, Cosmos uses Entra auth). Now the **consuming workload's managed identity** — the Function App's system-assigned identity from Step 11 — is granted the **specific, least-privilege data-plane roles** it needs to actually use those resources.
+
+**Control plane vs. data plane:**
+
+- **Control-plane** roles (Contributor, Key Vault Administrator, …) **manage the resource** — create, configure, delete it.
+- **Data-plane** roles **use the data inside** — read a secret, receive/send a message, publish an event.
+
+These grants are all **data-plane**, each **scoped to the specific resource, never the subscription** (least privilege in both the role *and* the scope):
+
+- **Key Vault Secrets User** on the Key Vault — **read** secret values (not Secrets *Officer*, which could also create/delete/manage secrets).
+- **Azure Service Bus Data Receiver** + **Azure Service Bus Data Sender** on the Service Bus namespace — **receive and send** messages (not *Owner*).
+- **EventGrid Data Sender** on the Event Grid topic — **publish** events (not *Contributor*).
+
+> **AcrPull is not here.** Pull access for the **AKS kubelet identity** is a **different identity, created with the cluster**, so it is deferred to the **AKS milestone**.
 
 #### Build
-_To be completed as this component is built._
+
+This step adds a reusable **role-assignments module** and its **dev live unit**:
+
+- **`infrastructure/modules/role-assignments/`**:
+  - **`variables.tf`** — `principal_id` (the managed identity), `key_vault_id`, `servicebus_namespace_id`, `eventgrid_topic_id`.
+  - **`main.tf`** — four `azurerm_role_assignment` resources: **Key Vault Secrets User** (scope = Key Vault), **Azure Service Bus Data Receiver** and **Azure Service Bus Data Sender** (scope = Service Bus namespace), and **EventGrid Data Sender** (scope = Event Grid topic) — each with `principal_id` from the variable and `principal_type = "ServicePrincipal"` (so the provider doesn't have to look up a just-created identity that may not have replicated yet). Comments explain each role's least-privilege choice and scope.
+  - **`outputs.tf`** — the four role assignment ids, for reference / audit.
+- **`infrastructure/environments/dev/role-assignments/terragrunt.hcl`**:
+  - `include "root"`.
+  - **four dependencies** — `function_app` (for `principal_id`), `key_vault` (for `id`), `servicebus` (for `id`), and `eventgrid` (for `id`), each with `mock_outputs`. This unit **composes several upstream units' outputs** into one set of grants.
+  - `terraform { source = "../../../modules/role-assignments" }`, with `inputs` wiring each value from its dependency.
+
+> **Permissions & propagation.** Creating role assignments requires the automation SP to hold **Role Based Access Control Administrator** — which it does (Step 1). After apply, **RBAC propagation can take a minute or two** before the new access is effective.
 
 #### Execute
-_To be completed as this component is built._
+
+```powershell
+cd infrastructure/environments/dev/role-assignments
+
+# 1. Init — generates backend.tf/provider.tf and resolves all four dependencies
+terragrunt init
+
+# 2. Plan — review before applying
+terragrunt plan
+
+# 3. Apply — create the four role assignments
+terragrunt apply
+```
+
+What each does:
+- **`terragrunt init`** — generates the backend/provider and resolves the `function_app`, `key_vault`, `servicebus`, and `eventgrid` dependencies.
+- **`terragrunt plan`** — a correct plan reports **4 to add** (the four role assignments), **0 to change, 0 to destroy**.
+- **`terragrunt apply`** — creates the assignments. (Terragrunt applies the four upstream units first.)
 
 #### Verify
-_To be completed as this component is built._
+
+```powershell
+# List the assignments for the Function App's managed identity (use its principal id)
+az role assignment list --assignee "<principal-id>" --all `
+  --query "[].{role:roleDefinitionName, scope:scope}" -o table
+```
+
+A **correct result**:
+- `terragrunt apply` ends with `Apply complete! Resources: 4 added, 0 changed, 0 destroyed.`
+- the list shows four scoped, least-privilege grants: **Key Vault Secrets User** (Key Vault scope), **Azure Service Bus Data Receiver** and **Azure Service Bus Data Sender** (namespace scope), and **EventGrid Data Sender** (topic scope). Allow a minute or two for RBAC to propagate before access works.
+
+> **This completes the secret-less wiring:** the application authenticates with its **managed identity** and is authorized by these **scoped roles** — **no secrets anywhere**.
+>
+> **Connection-string-to-Key-Vault flow (intent).** Storing the **Cosmos connection string as a Key Vault secret** happens in the **data-migration phase**; the application then reads it at runtime via its **Key Vault Secrets User** role. The secret is **not created now** — this step only establishes the **access path**.
 
 ### 14. Governance, Tagging & Cost Controls
 
