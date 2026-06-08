@@ -138,3 +138,7 @@ The headline point: **the AKS subnet is the large one (`/22`)** because, under t
 ---
 
 This primer supports the **Networking** step of the [Infrastructure Guide](infrastructure-guide.md), where these concepts are turned into the actual VNet, subnets, and NSGs.
+
+---
+
+**Navigation:** [← Development Guide](../../DevelopmentGuide.md) · **Applied in:** [Infrastructure Guide](infrastructure-guide.md)

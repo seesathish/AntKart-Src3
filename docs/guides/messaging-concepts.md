@@ -126,3 +126,7 @@ Crucially, the **data plane accepts Microsoft Entra identities only** — local 
 ---
 
 This primer supports the **Service Bus** step of the [Infrastructure Guide](infrastructure-guide.md), where these concepts become the actual namespace, queue, topic, and subscriptions.
+
+---
+
+**Navigation:** [← Development Guide](../../DevelopmentGuide.md) · **Applied in:** [Infrastructure Guide](infrastructure-guide.md)

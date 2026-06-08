@@ -128,3 +128,7 @@ The platform's **notification capability** runs as a **Consumption-plan Azure Fu
 ---
 
 This primer supports the **Event Grid** and **Function App** steps of the [Infrastructure Guide](infrastructure-guide.md), where these concepts become the actual eventing and hosting resources.
+
+---
+
+**Navigation:** [← Development Guide](../../DevelopmentGuide.md) · **Applied in:** [Infrastructure Guide](infrastructure-guide.md)

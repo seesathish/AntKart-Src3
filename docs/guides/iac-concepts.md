@@ -76,3 +76,7 @@ The golden rule: **`plan` before `apply`, every time** — you never change infr
 ---
 
 This primer underpins the [Infrastructure Guide](infrastructure-guide.md), whose numbered steps build real resources using exactly these concepts.
+
+---
+
+**Navigation:** [← Development Guide](../../DevelopmentGuide.md) · **Next:** [Infrastructure Guide](infrastructure-guide.md) · **Related:** [Networking & Kubernetes](networking-concepts.md), [Identity](identity-concepts.md)

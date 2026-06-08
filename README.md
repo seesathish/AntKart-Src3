@@ -4,6 +4,20 @@ AntKart is a cloud-native e-commerce platform built as independently deployable 
 
 ---
 
+## Documentation Map — Where to Start
+
+Pick the path that matches your goal:
+
+| You want to… | Start here → then |
+|--------------|-------------------|
+| **Understand the project** | [Architecture overview](#architecture-overview) (below) → [Development Guide](DevelopmentGuide.md) — the master index of *how* the platform is built |
+| **Learn the cloud-native concepts from scratch** | The concept guides, in reading order: [IaC fundamentals](docs/guides/iac-concepts.md) → [Networking & Kubernetes](docs/guides/networking-concepts.md) → [Identity](docs/guides/identity-concepts.md) → [Messaging](docs/guides/messaging-concepts.md) → [Serverless & Eventing](docs/guides/serverless-eventing-concepts.md) → [Cosmos DB](docs/guides/cosmosdb-concepts.md) |
+| **Build / deploy it yourself** | [infrastructure/README](infrastructure/README.md) → [Infrastructure Guide](docs/guides/infrastructure-guide.md) (step-by-step) → the phase guides in the [Development Guide](DevelopmentGuide.md) |
+
+The [Development Guide](DevelopmentGuide.md) is the **spine**: each delivery phase links to its build guide, the concepts to read first, and the decisions ([ADRs](docs/adr/README.md)) behind it.
+
+---
+
 ## Architecture Overview
 
 ### AntKart Cloud Architecture

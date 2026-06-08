@@ -160,3 +160,7 @@ The two choices line up neatly: serverless keeps the dev database cheap and hand
 ---
 
 This primer supports the **Cosmos DB** step of the [Infrastructure Guide](infrastructure-guide.md), where these concepts become the actual Cosmos account and database.
+
+---
+
+**Navigation:** [← Development Guide](../../DevelopmentGuide.md) · **Applied in:** [Infrastructure Guide](infrastructure-guide.md)

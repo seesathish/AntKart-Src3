@@ -1245,3 +1245,7 @@ Stateless / rebuildable resources (networking, registry, messaging, Function hos
 | Storage (Functions runtime) | **shared key enabled — documented exception** | `AzureWebJobsStorage` only (runtime plumbing) |
 
 The automation identity is itself least-privilege (Contributor + Role Based Access Control Administrator, subscription-scoped), and every workload role is scoped to a specific resource — never the subscription.
+
+---
+
+**Navigation:** **Prerequisite:** [IaC fundamentals](iac-concepts.md) · **Related concepts:** [Networking](networking-concepts.md), [Cosmos DB](cosmosdb-concepts.md), [Messaging](messaging-concepts.md), [Serverless & Eventing](serverless-eventing-concepts.md), [Identity](identity-concepts.md) · [← Development Guide](../../DevelopmentGuide.md)

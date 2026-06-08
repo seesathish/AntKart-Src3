@@ -1,22 +1,66 @@
 # Infrastructure
 
-This directory holds the Infrastructure-as-Code for the platform's cloud environment, provisioned with **Terraform** and **Terragrunt**. For the concepts, the per-resource walkthroughs (Understand → Build → Execute → Verify), and the verification steps, see the [Infrastructure Guide](../docs/guides/infrastructure-guide.md).
+This directory holds the Infrastructure-as-Code for the platform's cloud environment, provisioned with **Terraform** and **Terragrunt**.
 
-## Layout
+- **New to Terraform/Terragrunt?** Start with the [IaC fundamentals primer](../docs/guides/iac-concepts.md).
+- **Want the full step-by-step walkthrough?** See the [Infrastructure Guide](../docs/guides/infrastructure-guide.md) (each resource as Understand → Build → Execute → Verify, plus a diagnostics playbook).
+
+## Layout — modules vs. environments
 
 ```
 infrastructure/
-├── modules/            Reusable Terraform modules (one per resource type)
+├── modules/            Reusable Terraform modules — one per resource type (HOW)
 └── environments/
-    └── dev/            Terragrunt live configuration for the dev environment
+    └── dev/            Terragrunt "live" units — one per deployed thing (WHAT)
+        └── <unit>/terragrunt.hcl
 ```
 
-- **`modules/`** — reusable, parameterised Terraform modules, one per resource type (resource group, networking, container registry, key vault, data stores, messaging, hosting, identity, and so on). A module describes *how* a resource is built: it takes inputs and exposes outputs, with no environment-specific values baked in.
-- **`environments/dev/`** — the Terragrunt "live" configuration that wires the modules together for the `dev` environment, supplies their inputs, and manages the remote state backend. Additional environments are added as sibling folders under `environments/`.
+- **`modules/`** — reusable, parameterised Terraform modules (resource group, networking, container registry, key vault, cosmosdb, servicebus, eventgrid, function-app, app-registration, role-assignments, governance). A module describes *how* a resource is built — it takes inputs and exposes outputs, with **no environment-specific values baked in**.
+- **`environments/dev/`** — the Terragrunt **live units** that wire the modules together for the `dev` environment, supply their inputs, and inherit the shared remote-state backend and provider/version config from `environments/dev/root.hcl`. Additional environments are added as sibling folders under `environments/`.
+
+## Running a unit
+
+Each live unit is run from its own folder with Terragrunt:
+
+```powershell
+cd infrastructure/environments/dev/<unit>
+terragrunt init     # wire the backend, download providers, resolve dependencies
+terragrunt plan     # safe, read-only preview of what would change
+terragrunt apply    # make it real, after confirmation
+```
+
+`plan` before `apply`, every time. To act on every unit at once, `terragrunt run-all <command>` from `environments/dev` respects the dependency order below.
+
+## Dependency ordering
+
+Two bootstrap steps run **with the Azure CLI before any Terraform** (the identity and state backend must exist first — see Steps 1–2 of the Infrastructure Guide):
+
+1. **Terraform service principal + RBAC** (Contributor + Role Based Access Control Administrator).
+2. **Remote-state storage account + container** (the `azurerm` backend), then the Terragrunt root.
+
+Then the units apply in dependency order (Terragrunt enforces this via `dependency` blocks):
+
+- **`resource-group`** — first; almost everything else depends on it.
+- **`networking`, `container-registry`, `key-vault`, `observability`, `cosmosdb`, `servicebus`, `eventgrid`** — each depends on `resource-group`.
+- **`function-app`** — depends on `resource-group` **and** `observability` (for the App Insights connection string).
+- **`role-assignments`** — depends on `function-app`, `key-vault`, `servicebus`, and `eventgrid` (grants the Function App's managed identity scoped data-plane roles).
+- **`app-registration`** — independent of the resource group (a directory object, not a resource-group resource).
+- **`governance`** — depends on `resource-group` (a budget scoped to it).
+
+## Authentication prerequisites
+
+- **Run as the Terraform service principal.** Set the four `ARM_*` environment variables before running any unit, so Terraform (and the state backend) authenticate as the automation identity:
+  ```powershell
+  $env:ARM_CLIENT_ID       = "<appId>"
+  $env:ARM_CLIENT_SECRET   = "<password>"
+  $env:ARM_TENANT_ID       = "<tenant>"
+  $env:ARM_SUBSCRIPTION_ID = "<subscription-id>"
+  ```
+  The same identity needs **Storage Blob Data Contributor** on the state storage account (data-plane access to read/write state) — control-plane Contributor alone is not enough.
+- **Directory-plane note for `app-registration`.** That unit uses the **`azuread`** provider (Microsoft Graph / the directory), not the resource manager. The service principal's subscription roles do **not** grant directory permissions — if its apply fails with an insufficient-privileges / Graph error, grant the SP the **Application Administrator** Entra role (or `Application.ReadWrite.All`), or run that one unit as a signed-in admin user.
 
 ## Status
 
-The directory home is established here; the Terraform and Terragrunt configuration is added step by step as each component is built.
+The **dev environment foundation is complete** — all units above are implemented as reusable modules with matching Terragrunt live configuration, a shared remote-state backend, a shared provider-version pin, least-privilege identity-based access, and a cost budget with alerts.
 
-- The first identity step — the Terraform service principal and its RBAC assignment — has **no Terraform script**. It is created with the Azure CLI because the automation identity must exist before Terraform can authenticate (see **Step 1** of the [Infrastructure Guide](../docs/guides/infrastructure-guide.md)).
-- **Step 2** adds the remote-state backend and the Terragrunt root configuration here, after which `modules/` and `environments/dev/` begin to fill in.
+For the concepts behind each resource and the per-resource verification commands, see the [Infrastructure Guide](../docs/guides/infrastructure-guide.md); for the reasoning behind the platform choices, see the [Architecture Decision Records](../docs/adr/README.md).

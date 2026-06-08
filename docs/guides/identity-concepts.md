@@ -140,3 +140,7 @@ flowchart LR
 ---
 
 This primer supports the **Terraform identity**, **Entra ID app registration**, and **managed identity / workload identity** steps of the [Infrastructure Guide](infrastructure-guide.md).
+
+---
+
+**Navigation:** [← Development Guide](../../DevelopmentGuide.md) · **Applied in:** [Infrastructure Guide](infrastructure-guide.md)
