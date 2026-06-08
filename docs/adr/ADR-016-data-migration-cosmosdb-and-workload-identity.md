@@ -2,7 +2,7 @@
 
 **Status:** Accepted  
 **Date:** 2026-05-31  
-**Week:** 5 — Second Application Code Change  
+**Area:** Second Application Code Change  
 **Relates to:** ADR-014 (Cosmos DB and Service Bus infrastructure provisioning), ADR-015 (Service Bus token auth)
 
 ---
@@ -11,14 +11,14 @@
 
 Phase 1 of AntKart used a local MongoDB Docker container (`mongodb:latest`) as the persistence layer for AK.Products. Six months of product data (300 seed records) lived in a container volume on the developer's machine.
 
-For Phase 2 (Azure deployment), the managed Cosmos DB account (`cosmos-antkart-dev`, MongoDB API, Serverless) was provisioned in Week 3. The Cosmos database `antkart-products` exists but is empty — the application still points at localhost.
+For Phase 2 (Azure deployment), the managed Cosmos DB account (`cosmos-antkart-dev`, MongoDB API, Serverless) was provisioned as part of the core infrastructure. The Cosmos database `antkart-products` exists but is empty — the application still points at localhost.
 
-This ADR covers Week 5 decisions about:
+This ADR covers decisions about:
 1. How to connect AK.Products to Cosmos DB without embedding the account key in source control
 2. Why the Cosmos auth pattern differs from Service Bus
 3. How MongoClient should be registered to satisfy Cosmos's connection model
 4. What the partition/shard strategy should be
-5. How to lay the groundwork for Workload Identity in AKS (Week 7) now, while AKS doesn't yet exist
+5. How to lay the groundwork for Workload Identity in AKS now, while AKS doesn't yet exist
 
 ---
 
@@ -26,7 +26,7 @@ This ADR covers Week 5 decisions about:
 
 ### Decision
 
-The Cosmos DB connection string is stored in Key Vault as secret `cosmos-connection-string` (written by the Cosmos DB Terraform module in Week 3). At application startup, `ServiceCollectionExtensions.AddInfrastructure()` calls `SecretClient.GetSecret()` using `DefaultAzureCredential` to retrieve the connection string. The retrieved string is used to construct `MongoClient`. It never appears in `appsettings.json` or any committed file.
+The Cosmos DB connection string is stored in Key Vault as secret `cosmos-connection-string` (written by the Cosmos DB Terraform module). At application startup, `ServiceCollectionExtensions.AddInfrastructure()` calls `SecretClient.GetSecret()` using `DefaultAzureCredential` to retrieve the connection string. The retrieved string is used to construct `MongoClient`. It never appears in `appsettings.json` or any committed file.
 
 `appsettings.json` contains only non-secret references:
 ```json
@@ -38,7 +38,7 @@ The Cosmos DB connection string is stored in Key Vault as secret `cosmos-connect
 
 ### Why the Cosmos pattern differs from Service Bus
 
-In Week 4, Service Bus was configured with `h.TokenCredential = new DefaultAzureCredential()`. No connection string. No key. `DefaultAzureCredential` is passed directly to the Service Bus SDK for all operations — authentication is token-based end to end.
+When messaging was migrated, Service Bus was configured with `h.TokenCredential = new DefaultAzureCredential()`. No connection string. No key. `DefaultAzureCredential` is passed directly to the Service Bus SDK for all operations — authentication is token-based end to end.
 
 Cosmos DB MongoDB API cannot do this at the wire protocol level:
 
@@ -79,10 +79,10 @@ The connection string lives only in Key Vault. The application has no static sec
 
 ### Consequences
 
-- Developer must run `az login` before starting AK.Products (same requirement as Service Bus — already established in Week 4)
+- Developer must run `az login` before starting AK.Products (same requirement as Service Bus — already established during the messaging migration)
 - Developer identity needs `Key Vault Secrets User` on `kv-antkart-dev` (documented in DevelopmentGuide Section 5)
 - If Key Vault is unreachable, the service fails to start — fail-fast is the intended behaviour
-- In AKS (Week 7): `mi-ak-products-dev` managed identity has `Key Vault Secrets User` — no developer action needed
+- In AKS: `mi-ak-products-dev` managed identity has `Key Vault Secrets User` — no developer action needed
 
 ---
 
@@ -147,16 +147,16 @@ The shard key would be set in the Cosmos collection creation step (Terraform) an
 
 ---
 
-## Decision 5 — Workload Identity foundation: create User-Assigned Managed Identity now (Week 5), federate in Week 7
+## Decision 5 — Workload Identity foundation: create the User-Assigned Managed Identity now, federate when AKS exists
 
 ### Decision
 
-A Terraform identity module (`infrastructure/modules/identity/`) is created in Week 5. It provisions:
+A Terraform identity module (`infrastructure/modules/identity/`) is created now. It provisions:
 - `mi-ak-products-dev` — User-Assigned Managed Identity
 - `Key Vault Secrets User` role assignment on `kv-antkart-dev`
 - `Azure Service Bus Data Owner` role assignment on `sb-antkart-dev`
 
-The federated credential (linking this identity to AKS pods via OIDC) is **not** created in Week 5 — the AKS cluster does not yet exist. The federation step is an additive resource added in Week 7.
+The federated credential (linking this identity to AKS pods via OIDC) is **not** created now — the AKS cluster does not yet exist. The federation step is an additive resource added when AKS is introduced.
 
 ### Why User-Assigned (not System-Assigned)
 
@@ -171,10 +171,10 @@ User-assigned identities are independent Azure resources. They persist across re
 ### Why create the identity before AKS exists
 
 Two reasons:
-1. **RBAC verification**: Creating the identity and granting roles now lets us verify that the role assignments are correct before AKS is deployed. If an RBAC grant fails (wrong scope, wrong principal type, permission error), we discover it in Week 5 — not on first pod startup in Week 7 when multiple changes are happening at once.
-2. **Shorter critical path in Week 7**: In Week 7, the only identity step remaining is adding the federated credential. The harder parts (identity creation, role grants) are already done and validated.
+1. **RBAC verification**: Creating the identity and granting roles now lets us verify that the role assignments are correct before AKS is deployed. If an RBAC grant fails (wrong scope, wrong principal type, permission error), we discover it now — not on first pod startup in AKS when multiple changes are happening at once.
+2. **Shorter critical path when AKS is introduced**: At that point, the only identity step remaining is adding the federated credential. The harder parts (identity creation, role grants) are already done and validated.
 
-### Week 7 federation step (informational)
+### Federation step when AKS is introduced (informational)
 
 When the AKS cluster is provisioned, the following Terraform resource completes the Workload Identity setup:
 
@@ -202,8 +202,8 @@ After these two steps, a pod in the `ak-products` namespace running as `ak-produ
 
 - `mi-ak-products-dev` incurs no cost (managed identities are free; role assignments are free)
 - RBAC changes (adding or removing roles) do not require redeploying the application
-- The `products_client_id` and `products_identity_id` outputs must be noted before Week 7
-- Future services (Order, Payments, etc.) get their own managed identities when they are migrated to cloud resources in later weeks
+- The `products_client_id` and `products_identity_id` outputs must be noted before the federation step
+- Future services (Order, Payments, etc.) get their own managed identities when they are migrated to cloud resources
 
 ---
 

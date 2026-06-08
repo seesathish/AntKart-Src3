@@ -8,7 +8,7 @@
 
 ## Context
 
-Week 2 of Phase 2 provisions four Azure services: Azure Container Registry (ACR),
+Phase 2 provisions four Azure services: Azure Container Registry (ACR),
 Azure Key Vault, Azure Log Analytics Workspace, and Azure Application Insights.
 Three architectural decisions made during their design require explicit documentation
 because each has a commonly-used alternative that was rejected, and future maintainers
@@ -28,7 +28,7 @@ should understand why.
 
 Role assignments manage access:
 - Deploying SP: `Key Vault Secrets Officer` (manage secrets — scoped to the vault)
-- AKS node managed identity: `Key Vault Secrets User` (read-only — assigned in AKS module, Week 3)
+- AKS node managed identity: `Key Vault Secrets User` (read-only — assigned in the AKS module)
 
 ### Rejected alternative: Access Policies
 
@@ -81,7 +81,7 @@ Start with `sku = "Basic"` in dev. Design the module so upgrading to Premium for
 ### Rejected alternatives
 
 **Option A: Start with Premium immediately.**
-Cost: ~$50/month for dev (vs. $5 for Basic). Premium features (private endpoints, geo-replication) are not needed until the AKS cluster is hardened into a fully private configuration. Starting with Premium pays for features we don't use for 2-3 weeks.
+Cost: ~$50/month for dev (vs. $5 for Basic). Premium features (private endpoints, geo-replication) are not needed until the AKS cluster is hardened into a fully private configuration. Starting with Premium pays for features we don't use yet.
 
 **Option B: Docker Hub with a private plan.**
 Docker Hub's private registry plan is cheaper (~$9/month for a team) but:

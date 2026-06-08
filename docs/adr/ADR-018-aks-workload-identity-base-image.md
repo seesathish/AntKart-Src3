@@ -7,7 +7,7 @@ Accepted
 
 ## Context
 
-Phase 2C (Week 7) moves AntKart services from Docker Compose into Kubernetes. Three decisions had to be made together because each one constrains the others:
+This phase moves AntKart services from Docker Compose into Kubernetes. Three decisions had to be made together because each one constrains the others:
 
 1. **How to run the cluster** — AKS sizing, node pools, networking plugin, SKU tier, autoscaling, observability.
 2. **How services authenticate to Azure resources inside the cluster** — without secrets, without rotation, with one DefaultAzureCredential line of code that works identically on a developer laptop and in AKS.
@@ -31,7 +31,7 @@ These three decisions are interconnected: chiseled images need Workload Identity
 | **Network policy** | Calico | Enables `NetworkPolicy` resources. Cannot be added after cluster creation; turning it on at create is forward-proofing. |
 | **AKS API server** | Public (Free tier limitation) | Private AKS requires Standard tier. Public + RBAC + Azure AD integration is acceptable for dev. |
 | **Image pulls** | AcrPull on the kubelet identity | Granting to the cluster identity is the most common AKS gotcha; the actual image puller is the kubelet identity. Module gets it right. |
-| **Observability** | Container Insights → existing Log Analytics workspace | Reuse the workspace from Week 5. Managed-identity auth, no shared keys. |
+| **Observability** | Container Insights → existing Log Analytics workspace | Reuse the existing Log Analytics workspace. Managed-identity auth, no shared keys. |
 | **Estimated dev cost** | ~$90/month running 24/7 | Destroy-when-idle pattern documented in DevelopmentGuide §7.10 brings this to ~$0. |
 
 ### Decision 2 — Workload Identity for secret-less Azure access
@@ -39,7 +39,7 @@ These three decisions are interconnected: chiseled images need Workload Identity
 | Aspect | Choice | Rationale |
 |--------|--------|-----------|
 | **Cluster flags** | `oidc_issuer_enabled = true` + `workload_identity_enabled = true` | Free to enable. The two flags together expose the OIDC issuer URL and project service-account tokens into pods. |
-| **Federation scope (Week 7)** | Products only | Matches what's actually deployed. Pre-creating identities for the other 7 services would create Azure objects with no benefit. Adding more in Weeks 8–9 is a clean extension — see "Adding more service identities" comment in `modules/identity/main.tf`. |
+| **Federation scope** | Products only | Matches what's actually deployed. Pre-creating identities for the other 7 services would create Azure objects with no benefit. Adding more later is a clean extension — see "Adding more service identities" comment in `modules/identity/main.tf`. |
 | **Identity type** | User-Assigned Managed Identity (UAMI) | Required for federation — system-assigned identities have a lifecycle tied to a host resource and can't be pre-created. UAMIs are independent Azure resources with stable client IDs. |
 | **Federation pattern** | One UAMI per service, one federated credential per UAMI, subject = `system:serviceaccount:<ns>:<sa>` | Standard pattern. Each service's identity is independent — a compromise of one doesn't propagate. |
 | **Code change required in services** | **None** | Application code already uses `DefaultAzureCredential`. The credential source is `AzureCliCredential` locally and `WorkloadIdentityCredential` in AKS — same line of code, different provider in the chain. This is the entire point. |
@@ -52,7 +52,7 @@ The full identity chain from pod to Azure resource is diagrammed in DevelopmentG
 |--------|--------|-----------|
 | **Base image** | `mcr.microsoft.com/dotnet/aspnet:9.0-noble-chiseled` | No shell, no apt, no coreutils. Image size ~115 MB vs ~220 MB for the standard runtime. Attack surface is the .NET runtime + OpenSSL + ca-certificates only. |
 | **Published as** | `acrantkartdev.azurecr.io/antkart-base:9.0` | One organisation-owned base image in ACR. All 8 services FROM this. |
-| **Why an ACR-hosted base, not direct from mcr.microsoft.com** | Supply-chain control, faster AKS pulls (Azure backbone), single hardening surface, target for Week 11 admission policy (Trivy scan + signed-digest gating). |
+| **Why an ACR-hosted base, not direct from mcr.microsoft.com** | Supply-chain control, faster AKS pulls (Azure backbone), single hardening surface, target for a later security-hardening step's admission policy (Trivy scan + signed-digest gating). |
 | **Non-root user** | UID 1654 (chiseled image's default) | Enforced by pod security context `runAsNonRoot: true` in the Helm chart. Kubelet refuses to start pods running as root. |
 | **Globalization** | Invariant mode (`DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true`) | Chiseled images don't ship ICU. AntKart formatting (currency literals like `₹{X:N2}`) works under invariant mode. Per-service override possible if any service later needs locale-aware formatting. |
 | **Debugging trade-off** | No shell in the running container → use `kubectl debug` ephemeral containers | `kubectl exec -- /bin/sh` does not work. Modern Kubernetes pattern is to attach an ephemeral debug container with a full toolchain that shares the pod's PID namespace. Documented in DevelopmentGuide §7.7. |
@@ -118,7 +118,7 @@ One IP per node, pods NAT'd to the node IP.
 
 **Architecturally:**
 - Application code is unchanged. The same `DefaultAzureCredential` runs locally with `az login` and in AKS with Workload Identity — the difference is which credential provider in the chain succeeds.
-- The custom base image becomes the platform team's hardening surface. Week 11 adds Trivy scanning and admission policy on top of it.
+- The custom base image becomes the platform team's hardening surface. A later security-hardening step adds Trivy scanning and admission policy on top of it.
 - The Free SKU tier is a per-environment choice, not a permanent design. Prod overrides to Standard.
 
 **Financially:**

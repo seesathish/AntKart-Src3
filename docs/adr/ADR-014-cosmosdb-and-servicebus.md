@@ -2,19 +2,19 @@
 
 **Status:** Accepted  
 **Date:** 2026-05-29  
-**Week:** 3 — Data and Messaging Infrastructure  
+**Area:** Data and Messaging Infrastructure  
 **Relates to:** ADR-013 (Key Vault, Observability Foundation)
 
 ---
 
 ## Context
 
-Week 3 adds two production-grade managed services to AntKart's Azure infrastructure:
+This step adds two production-grade managed services to AntKart's Azure infrastructure:
 
 1. **Cosmos DB** — a globally distributed NoSQL database to replace the local Docker MongoDB container used during Phase 1 development
 2. **Azure Service Bus** — a fully managed enterprise messaging service to replace the local RabbitMQ Docker container
 
-Both services need to integrate with the Key Vault established in Week 2: connection strings are written as secrets and never hardcoded.
+Both services need to integrate with the Key Vault established earlier in the core infrastructure: connection strings are written as secrets and never hardcoded.
 
 ---
 
@@ -97,7 +97,7 @@ AntKart's event-driven fan-out (`OrderCreated` → Products + Notification) requ
 
 **Why `local_auth_enabled = true`?**
 
-The interim approach (Week 3) uses Shared Access Signature connection strings stored in Key Vault. This is acceptable for development. In Week 5, the plan is to migrate to Managed Identity authentication for AKS pods — at that point `local_auth_enabled` should be set to `false` to disable SAS keys and enforce RBAC-only access.
+The interim approach uses Shared Access Signature connection strings stored in Key Vault. This is acceptable for development. Later, the plan is to migrate to Managed Identity authentication for AKS pods — at that point `local_auth_enabled` should be set to `false` to disable SAS keys and enforce RBAC-only access.
 
 **Why no `prevent_destroy`?**
 
@@ -154,13 +154,13 @@ Rejected — Event Grid is a routing service for Azure resource events (infrastr
 
 ---
 
-## Cost Summary (Dev Environment — Week 3 Addition)
+## Cost Summary (Dev Environment)
 
 | Service | Billing Model | Estimated Cost |
 |---------|--------------|----------------|
 | Cosmos DB (Serverless) | Per RU consumed | ~$0 idle; ~$1-3/month light dev use |
 | Service Bus Standard | $10/month base + per-op | ~$10/month (or $0 if destroyed when idle) |
-| **Week 3 addition** | | **~$0–13/month** |
-| **Total dev infra (Weeks 1-3)** | | **~$15–28/month** |
+| **This addition** | | **~$0–13/month** |
+| **Total dev infra** | | **~$15–28/month** |
 
 Destroy Service Bus between sessions to keep costs near the lower bound.

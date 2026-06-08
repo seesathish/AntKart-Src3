@@ -2,7 +2,7 @@
 
 **Status:** Accepted  
 **Date:** 2026-05-31  
-**Week:** 4 — First Application Code Change  
+**Area:** First Application Code Change  
 **Relates to:** ADR-014 (Cosmos DB and Service Bus infrastructure provisioning)
 
 ---
@@ -11,7 +11,7 @@
 
 Phase 1 of AntKart used RabbitMQ running as a `rabbitmq:3-management` Docker container on the developer's machine. Six services connected to it for all event-driven communication: Order, Products, Payments, Notification, ShoppingCart, and UserIdentity.
 
-For Phase 2 (Azure deployment), we need to replace the local RabbitMQ broker with a managed messaging service. Azure Service Bus was provisioned in Week 3. This ADR documents the Week 4 decisions about *how* to migrate the application code to use it.
+For Phase 2 (Azure deployment), we need to replace the local RabbitMQ broker with a managed messaging service. Azure Service Bus was provisioned as part of the core infrastructure. This ADR documents the decisions about *how* to migrate the application code to use it.
 
 There were four distinct decisions to make:
 1. Which authentication method: connection string or token-based?
@@ -58,7 +58,7 @@ Same line of code in `MassTransitExtensions.cs`. Different credential source cho
 
 - Developer must have run `az login` and have an active session before running any service locally
 - Developer identity must have `Azure Service Bus Data Owner` on the namespace (one-time RBAC grant)
-- In AKS (Week 7), a Managed Identity with the same role must be assigned to the pod
+- In AKS, a Managed Identity with the same role must be assigned to the pod
 - No connection string in any committed configuration (`appsettings.json` or deployment config)
 
 ---
@@ -114,9 +114,9 @@ Subscription: products-reserve-stock (for ReserveStockConsumer with prefix "prod
 
 This is the standard MassTransit pattern. The alternative — mapping MassTransit consumers to hand-crafted Service Bus entities — requires explicit endpoint configuration per consumer and is fragile: names must be kept in sync between Terraform and C# code.
 
-**Clarification on the Week 3 Terraform entities:**
+**Clarification on the pre-provisioned Terraform entities:**
 
-The `order-commands` queue and `integration-events` topic created in Week 3 Terraform are teaching constructs. They illustrate the Queue vs Topic concept for junior developers learning the platform. They are not used by MassTransit's runtime topology. Both coexist in the namespace — there is no conflict.
+The `order-commands` queue and `integration-events` topic created by the messaging Terraform module are teaching constructs. They illustrate the Queue vs Topic concept for junior developers learning the platform. They are not used by MassTransit's runtime topology. Both coexist in the namespace — there is no conflict.
 
 **Requirements for auto-topology:**
 
@@ -134,7 +134,7 @@ The running identity needs the `Manage` permission on the namespace. `Azure Serv
 
 ### Decision
 
-From Week 4 onwards, services are developed and debugged locally while connected to real Azure cloud services. The local Docker Compose stack is retained only for non-cloud infrastructure (PostgreSQL, Redis, Keycloak, Mailhog, Elasticsearch). RabbitMQ is removed from the compose file entirely.
+From this migration onwards, services are developed and debugged locally while connected to real Azure cloud services. The local Docker Compose stack is retained only for non-cloud infrastructure (PostgreSQL, Redis, Keycloak, Mailhog, Elasticsearch). RabbitMQ is removed from the compose file entirely.
 
 ### Rationale
 
@@ -162,7 +162,7 @@ The enterprise model eliminates this class of problem:
 
 - Developer onboarding requires Azure subscription access and RBAC role assignment (documented in DevelopmentGuide Step 4.1)
 - Services cannot run fully offline (no internet → no Service Bus → no messaging)
-- The same developer workflow will be used in AKS debugging via `kubectl port-forward` (Week 7)
+- The same developer workflow will be used in AKS debugging via `kubectl port-forward`
 
 ---
 

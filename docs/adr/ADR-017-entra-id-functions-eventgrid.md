@@ -2,7 +2,7 @@
 
 **Status:** Accepted  
 **Date:** 2026-05-31  
-**Week:** 6 — Azure Functions, Event Grid, and Identity Migration  
+**Area:** Azure Functions, Event Grid, and Identity Migration  
 **Relates to:** ADR-015 (Service Bus token auth), ADR-016 (Workload Identity), ADR-012 (Terraform/Terragrunt)
 
 ---
@@ -134,7 +134,7 @@ The Event Grid → Service Bus routing (rather than Event Grid → HTTP webhook)
 
 ### Why this module depends on the servicebus module
 
-The `user-registered-events` Service Bus queue is created by the `servicebus` module (added in Week 6). The `eventgrid` Terragrunt wiring uses a `dependency` block to get the queue's resource ID (`user_registered_queue_id` output). This ensures correct deployment order and prevents the event subscription from referencing a non-existent queue.
+The `user-registered-events` Service Bus queue is created by the `servicebus` module (added when the messaging module was introduced). The `eventgrid` Terragrunt wiring uses a `dependency` block to get the queue's resource ID (`user_registered_queue_id` output). This ensures correct deployment order and prevents the event subscription from referencing a non-existent queue.
 
 ---
 
