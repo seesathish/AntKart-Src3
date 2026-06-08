@@ -10,6 +10,7 @@ Pick the path that matches your goal:
 
 | You want to… | Start here → then |
 |--------------|-------------------|
+| **Run it on your machine** | [Quick Start (local)](#quick-start-run-it-locally) — clone, build, test, and run a service before exploring the cloud path |
 | **Understand the project** | [Architecture overview](#architecture-overview) (below) → [Development Guide](DevelopmentGuide.md) — the master index of *how* the platform is built |
 | **Learn the cloud-native concepts from scratch** | The concept guides, in reading order: [IaC fundamentals](docs/guides/iac-concepts.md) → [Networking & Kubernetes](docs/guides/networking-concepts.md) → [Identity](docs/guides/identity-concepts.md) → [Messaging](docs/guides/messaging-concepts.md) → [Serverless & Eventing](docs/guides/serverless-eventing-concepts.md) → [Cosmos DB](docs/guides/cosmosdb-concepts.md) |
 | **Build / deploy it yourself** | [infrastructure/README](infrastructure/README.md) → [Infrastructure Guide](docs/guides/infrastructure-guide.md) (step-by-step) → the phase guides in the [Development Guide](DevelopmentGuide.md) |
@@ -18,43 +19,181 @@ The [Development Guide](DevelopmentGuide.md) is the **spine**: each delivery pha
 
 ---
 
+## Quick Start (Run It Locally)
+
+New here? Run the **application baseline** on your machine first — it's the fastest way to see the platform work before exploring the cloud path.
+
+**Prerequisites**
+
+- [.NET 9 SDK](https://dotnet.microsoft.com/download)
+- Docker (for the backing services — databases, message broker, identity, mail trap)
+
+**Clone, build, and test**
+
+```bash
+git clone https://github.com/seesathish/AntKart-Src3.git
+cd AntKart-Src3
+dotnet restore   # run from the repo root so nuget.config is picked up
+dotnet build     # must succeed with 0 errors
+dotnet test      # 618 tests, all green
+```
+
+**Run a service**
+
+```bash
+cd AK.Products/AK.Products.API && dotnet run   # → http://localhost:5077/swagger
+```
+
+Each service binds to its backing infrastructure (databases, broker, identity provider). The full self-hosted local stack — Docker Compose for Keycloak, RabbitMQ, the databases, Mailhog, and ELK — is preserved in the public AntKart reference repository; **this** repository targets cloud deployment, so for the managed-Azure path follow the [Infrastructure Guide](docs/guides/infrastructure-guide.md) instead.
+
+Once a service is running, import the [Postman collection](AntKart.postman_collection.json) and call it through the gateway. For a guided end-to-end walkthrough (Postman, messaging, SAGA, payments), see the [Developer Testing Guide](docs/test/DevTestGuide.md).
+
+---
+
 ## Architecture Overview
 
-### AntKart Cloud Architecture
+### Two Layers: Application Baseline and Cloud-Native Target
 
-> 📌 _Placeholder — the AntKart cloud architecture diagram will be added here._
+AntKart is documented at **two layers**, and both appear throughout the docs — understanding the distinction explains why you'll see both Keycloak *and* Entra ID, RabbitMQ *and* Service Bus:
 
-### DevOps Architecture
+- **Application baseline** — how the eight services are built and run against **self-hosted backing infrastructure**: Keycloak for identity, RabbitMQ for messaging, per-service local databases, and ELK for observability. This is the layer you run from the [Quick Start](#quick-start-run-it-locally) above.
+- **Cloud-native target** — the same services mapped onto **managed Azure equivalents**, authenticating with **managed identities and no stored secrets**. The application code is largely unchanged; what changes is the infrastructure it binds to.
 
-> 📌 _Placeholder — the DevOps (CI/CD) architecture diagram will be added here._
+The cloud-native platform doesn't replace the baseline — it **maps it onto managed services**:
 
-### C4 Architecture Diagrams
+| Application baseline | Cloud-native equivalent |
+|----------------------|-------------------------|
+| Keycloak (identity) | Microsoft Entra ID |
+| RabbitMQ (messaging) | Azure Service Bus |
+| MongoDB (product store) | Azure Cosmos DB (MongoDB API) |
+| Local PostgreSQL / Redis | Managed Azure data services |
+| ELK (Serilog → Elasticsearch → Kibana) | Azure Monitor / Application Insights |
+| Connection-string secrets | Managed identities — **no secrets** |
 
-> 📌 _The C4 diagrams below are to be updated._
+The diagrams below name both forms (`Keycloak / Entra ID`, `RabbitMQ / Service Bus`, `MongoDB / Cosmos DB`) so they hold true for either layer.
 
-#### Level 1 — System Context
+### System Context
 
-AntKart as a single system, with two actors (Customer, Administrator) and five external dependencies: Keycloak (identity), Razorpay (payments), SMTP (email), RabbitMQ (messaging), and ELK (observability).
+Two actors — **Customer** and **Administrator** — interact with the AntKart platform, which depends on external/cloud services for identity, payments, email, messaging, and observability.
 
-![Level 1 — System Context](docs/architecture/c4-level1-system-context.png)
+```mermaid
+flowchart TB
+    customer([Customer])
+    admin([Administrator])
+    subgraph AK["AntKart Platform"]
+      sys["Eight .NET 9 microservices<br/>behind an API gateway"]
+    end
+    idp[["Identity provider<br/>Keycloak / Microsoft Entra ID"]]
+    pay[["Razorpay<br/>payment gateway"]]
+    mail[["Email / SMTP"]]
+    bus[["Message broker<br/>RabbitMQ / Azure Service Bus"]]
+    obs[["Observability<br/>ELK / Azure Monitor"]]
 
-#### Level 2 — Container
+    customer -->|browse, cart, order, pay| AK
+    admin -->|manage catalogue & orders| AK
+    AK -->|authenticate / issue JWT| idp
+    AK -->|charge & verify| pay
+    AK -->|send transactional email| mail
+    AK -->|publish / consume events| bus
+    AK -->|ship logs, metrics, traces| obs
+```
 
-Eight independently deployable microservices behind an Ocelot API Gateway. Each service owns its database — MongoDB (Products), PostgreSQL (Orders, Payments, Notifications), Redis (Cart), SQLite (Discount). Services communicate asynchronously over RabbitMQ via MassTransit, except AK.Discount which is called synchronously over gRPC.
+### Containers & Services
 
-![Level 2 — Container](docs/architecture/c4-level2-container.png)
+Eight independently deployable microservices sit behind an **Ocelot API gateway**. Each service owns its data store; services communicate **asynchronously over the message broker** via MassTransit, except **AK.Discount**, which AK.Order calls **synchronously over gRPC**.
 
-#### Level 3 — Component: AK.Order
+```mermaid
+flowchart TB
+    client(["Customer / Admin"])
+    gw["AK.Gateway<br/>Ocelot API Gateway"]
+    client --> gw
 
-AK.Order is the most architecturally rich service — CQRS via MediatR, SAGA orchestration with MassTransit, EF Core Outbox for guaranteed event delivery, and a domain model with an enforced state machine. Commands flow through a `ValidationBehavior` pipeline; `CancelOrder` and `UpdateOrderStatus` return `Result<T>` for expected failures while `CreateOrder` uses exceptions for unexpected ones.
+    subgraph Services["Microservices"]
+      prod["AK.Products<br/>REST"]
+      cart["AK.ShoppingCart<br/>REST"]
+      ord["AK.Order<br/>REST + SAGA"]
+      pay["AK.Payments<br/>REST"]
+      notif["AK.Notification<br/>event-driven"]
+      ident["AK.UserIdentity<br/>REST"]
+      disc["AK.Discount<br/>gRPC"]
+    end
 
-![Level 3 — Component: AK.Order](docs/architecture/c4-level3-order-components.png)
+    gw --> prod
+    gw --> cart
+    gw --> ord
+    gw --> pay
+    gw --> notif
+    gw --> ident
+    ord -->|gRPC| disc
 
-#### Order Flow — Dynamic View
+    prod --> mongo[("MongoDB / Cosmos DB")]
+    disc --> sqlite[("SQLite")]
+    cart --> redis[("Redis")]
+    ord --> pg1[("PostgreSQL")]
+    pay --> pg2[("PostgreSQL")]
+    notif --> pg3[("PostgreSQL")]
+    ident --> idp[["Keycloak / Entra ID"]]
 
-The end-to-end order journey: Customer → Gateway → Order (creates via Outbox) → RabbitMQ → Products (reserves stock) → SAGA confirms → Payment initiated → Razorpay verifies → Payment succeeded → Order updated to Paid → Notification emails sent at each stage.
+    ord -. publish / consume .-> bus{{"Message broker<br/>RabbitMQ / Service Bus"}}
+    prod -. .-> bus
+    pay -. .-> bus
+    notif -. .-> bus
+```
 
-![Order Flow — Dynamic View](docs/architecture/c4-order-flow-dynamic.png)
+### Order Flow — End-to-End SAGA
+
+The order journey is orchestrated by the **MassTransit SAGA** in AK.Order, with **no direct service-to-service HTTP calls** — every step flows through the message broker, and AK.Notification emails the customer at each stage.
+
+```mermaid
+sequenceDiagram
+    actor C as Customer
+    participant GW as Gateway
+    participant O as AK.Order
+    participant B as Message Broker
+    participant P as AK.Products
+    participant PAY as AK.Payments
+    participant RZ as Razorpay
+    participant N as AK.Notification
+
+    C->>GW: POST /api/orders
+    GW->>O: create order
+    O->>O: persist order + outbox (one transaction)
+    O-->>C: 201 Created (Pending)
+    O->>B: OrderCreated
+    B->>P: reserve stock
+    alt stock available
+      P->>B: StockReserved
+      B->>O: SAGA → Confirmed
+      O->>B: PaymentInitiated
+      B->>PAY: create payment
+      PAY->>RZ: charge & verify signature
+      RZ-->>PAY: success
+      PAY->>B: PaymentSucceeded
+      B->>O: SAGA → Paid
+    else stock unavailable
+      P->>B: StockReservationFailed
+      B->>O: SAGA → Cancelled
+    end
+    B->>N: integration events at each stage
+    N-->>C: transactional emails
+```
+
+### Component View — AK.Order
+
+AK.Order is the most architecturally rich service: **CQRS via MediatR**, **SAGA orchestration**, an **EF Core Outbox** for guaranteed event delivery, and a domain model with an **enforced state machine**. Commands flow through a `ValidationBehavior` pipeline; `CancelOrder` and `UpdateOrderStatus` return `Result<T>` for expected failures, while `CreateOrder` uses exceptions for unexpected ones.
+
+```mermaid
+flowchart LR
+    api["Minimal API<br/>endpoints"] --> med["MediatR<br/>send command / query"]
+    med --> vb["ValidationBehavior<br/>FluentValidation"]
+    vb --> ch["Command / Query<br/>handlers"]
+    ch --> dom["Domain model<br/>Order aggregate + state machine"]
+    ch --> repo["Repository<br/>EF Core"]
+    repo --> pg[("PostgreSQL")]
+    ch --> ob["EF Core Outbox"]
+    ob --> saga["OrderSaga<br/>MassTransit"]
+    saga --> bus{{"Message broker"}}
+```
 
 ### Architecture Highlights
 
