@@ -141,4 +141,4 @@ This primer supports the **Networking** step of the [Infrastructure Guide](infra
 
 ---
 
-**Navigation:** [← Development Guide](../../DevelopmentGuide.md) · **Applied in:** [Infrastructure Guide](infrastructure-guide.md)
+**Navigation:** [← Development Guide](../../DevelopmentGuide.md) · **Applied in:** [Infrastructure Guide](infrastructure-guide.md) · **Related:** [Identity](identity-concepts.md)

@@ -129,4 +129,4 @@ This primer supports the **Service Bus** step of the [Infrastructure Guide](infr
 
 ---
 
-**Navigation:** [← Development Guide](../../DevelopmentGuide.md) · **Applied in:** [Infrastructure Guide](infrastructure-guide.md)
+**Navigation:** [← Development Guide](../../DevelopmentGuide.md) · **Applied in:** [Infrastructure Guide](infrastructure-guide.md) · **Related:** [Serverless & Eventing](serverless-eventing-concepts.md)

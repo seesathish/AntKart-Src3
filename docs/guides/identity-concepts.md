@@ -143,4 +143,4 @@ This primer supports the **Terraform identity**, **Entra ID app registration**, 
 
 ---
 
-**Navigation:** [← Development Guide](../../DevelopmentGuide.md) · **Applied in:** [Infrastructure Guide](infrastructure-guide.md)
+**Navigation:** [← Development Guide](../../DevelopmentGuide.md) · **Applied in:** [Infrastructure Guide](infrastructure-guide.md) · **Related:** [Networking & Kubernetes](networking-concepts.md)

@@ -131,4 +131,4 @@ This primer supports the **Event Grid** and **Function App** steps of the [Infra
 
 ---
 
-**Navigation:** [← Development Guide](../../DevelopmentGuide.md) · **Applied in:** [Infrastructure Guide](infrastructure-guide.md)
+**Navigation:** [← Development Guide](../../DevelopmentGuide.md) · **Applied in:** [Infrastructure Guide](infrastructure-guide.md) · **Related:** [Messaging](messaging-concepts.md)
