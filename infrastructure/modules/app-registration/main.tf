@@ -44,6 +44,13 @@ resource "azuread_application" "this" {
 
   # Expose the API with a delegated scope, so callers can request tokens for it.
   api {
+    # requested_access_token_version = 2 issues v2 access tokens — the modern
+    # Microsoft identity platform default. v2 emits cleaner claims (including a
+    # flat `roles` claim), permits the friendly api://<display-name> identifier
+    # URI (the tenant's identifier-URI policy rejects it under v1), and is the
+    # version current application authentication libraries expect.
+    requested_access_token_version = 2
+
     oauth2_permission_scope {
       id                         = "3d0a3f4c-5e6f-6a7b-0c1d-2e3f4a5b6c7d"
       type                       = "User"
