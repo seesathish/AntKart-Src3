@@ -37,5 +37,5 @@ inputs = {
 
   # REPLACE with the real contact address before applying — this is who receives
   # the cost alerts.
-  contact_emails = ["finops@example.com"]
+  contact_emails = ["sathishchandrakumar@gmail.com"]
 }
