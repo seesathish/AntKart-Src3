@@ -1011,16 +1011,73 @@ A **correct result**:
 > Background reading: [Identity Concepts](identity-concepts.md) — app registrations (identity + contract), tokens and claims (issuer, audience, roles), and how APIs validate them.
 
 #### Understand
-_To be completed as this component is built._
+
+An **app registration** registers an application in **Microsoft Entra ID** (concepts in the [identity guide](identity-concepts.md)). Registering gives the app two things:
+
+- **An identity** — a **client / application ID** the app authenticates as.
+- **A contract** — the **app roles** it defines (e.g. `admin`, `user`) and the **audience** (an identifier URI) that APIs validate incoming tokens against.
+
+**App roles → a flat `roles` claim.** The roles defined here surface in an issued token as values in a **flat `roles` claim** (e.g. `"roles": ["admin"]`), which the application reads to authorize. (In one line: some other identity providers nest role claims under a different path — so consumers must read the **correct claim path for the issuer**.)
+
+**Two providers.** Every resource module so far used the **`azurerm`** provider (Azure *resources*). This step uses the **`azuread`** provider, which talks to **Microsoft Graph** — the *directory* — to create directory objects. They are different providers with different permissions (see Execute).
 
 #### Build
-_To be completed as this component is built._
+
+This step adds a reusable **app-registration module** and its **dev live unit**:
+
+- **`infrastructure/modules/app-registration/`**:
+  - **`versions.tf`** — a `terraform` block declaring the required **`azuread`** provider (`hashicorp/azuread`), plus the `provider "azuread" {}` configuration (it authenticates from the same context as `azurerm`).
+  - **`variables.tf`** — `display_name`, `identifier_uri` (optional — derived as `api://<display_name>` if null), `app_roles` (a default list of **admin** and **user** objects with **fixed GUID ids** so they don't drift, and `allowed_member_types = ["User", "Application"]`), and `tags`.
+  - **`main.tf`** — an `azuread_application` with the **app roles**, the **identifier URI** (the audience), and an **exposed API** (`access_as_user` OAuth2 scope); and an `azuread_service_principal` referencing it so the app exists as a **usable principal** in the tenant. A comment explains that **no client secret** is created — an API that *validates* tokens doesn't need one (callers that *request* tokens manage their own credentials), keeping the secret-less posture.
+  - **`outputs.tf`** — `client_id`, `object_id`, the service principal's `object_id`, and the defined `app_role_values`. No secrets.
+- **`infrastructure/environments/dev/app-registration/terragrunt.hcl`**:
+  - `include "root"` (state still uses the azurerm backend).
+  - **no `resource_group` dependency** — an app registration is a **directory object** (it lives in the tenant, not in a resource group), so there's no name/location to consume. A comment notes this difference.
+  - `terraform { source = "../../../modules/app-registration" }`.
+  - `inputs`: `display_name = "antkart-api-dev"` (the admin/user app roles come from the module default).
 
 #### Execute
-_To be completed as this component is built._
+
+> **Provider-permission caveat — read before applying.** This unit uses the **`azuread`** provider, which calls **Microsoft Graph** (the directory), **not** the Azure resource manager. The automation service principal currently holds **subscription** roles (Contributor + RBAC Administrator) but may **not** have **directory** permission to create app registrations. If `terragrunt apply` fails with an **insufficient-privileges / Graph** error, fix it by one of:
+> - grant the automation SP the **Application Administrator** Entra role (or the Graph **`Application.ReadWrite.All`** application permission), **or**
+> - run **this one unit** as the **signed-in admin user** (who has directory rights).
+>
+> Don't assume it will just work — decide and document which path you took.
+
+```powershell
+cd infrastructure/environments/dev/app-registration
+
+# 1. Init — downloads the azuread provider and wires the backend
+terragrunt init
+
+# 2. Plan — review before applying
+terragrunt plan
+
+# 3. Apply — create the app registration + service principal
+terragrunt apply
+```
+
+What each does:
+- **`terragrunt init`** — downloads the **`azuread`** provider and initializes the backend.
+- **`terragrunt plan`** — a correct plan reports the **application + service principal** (with the **admin** and **user** app roles and the exposed API scope) being **added**, **0 to destroy**.
+- **`terragrunt apply`** — creates the directory objects (subject to the permission caveat above).
 
 #### Verify
-_To be completed as this component is built._
+
+```powershell
+# Confirm the registration and its app roles (use the client_id from the outputs)
+az ad app show --id "<client-id>" `
+  --query "{displayName:displayName, appId:appId, identifierUris:identifierUris, roles:appRoles[].value}" -o json
+
+# Or find it by name
+az ad app list --display-name "antkart-api-dev" --query "[].{displayName:displayName, appId:appId}" -o table
+```
+
+A **correct result**:
+- `az ad app show` reports `displayName = antkart-api-dev`, an `appId` (the client id), the `identifierUris` (`api://antkart-api-dev`), and `roles` containing **`admin`** and **`user`**.
+- `az ad app list` finds the registration by name.
+
+> The output **`client_id`** is a **real value** (not a placeholder) consumed by the application's auth configuration in the data/identity migration phase — the audience/authority the API validates tokens against.
 
 ### 13. Managed Identities & Workload Identity Foundation
 
