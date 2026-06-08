@@ -93,17 +93,20 @@ generate "provider" {
 }
 
 # generate "versions": Terragrunt writes a shared required_providers constraint
-# into every unit, so they all resolve the SAME provider version. Pinning matters
+# into every unit, so they all resolve the SAME provider versions. Pinning matters
 # for REPRODUCIBLE, DRIFT-FREE provisioning: without a shared constraint,
 # different units (or the same unit on different days) can pull different provider
 # versions, so a plan that was clean yesterday can change for no code reason.
 #
-# Only azurerm is pinned here because every unit uses it. The azuread provider is
-# used by a single unit (the app registration), so its constraint lives in that
-# unit's own versions.tf rather than being required everywhere it isn't used.
+# BOTH providers are declared here so there is a SINGLE SOURCE OF TRUTH for
+# provider versions. azuread is only used by the app-registration unit, but
+# declaring it globally avoids a second, hand-written versions.tf in that unit
+# colliding with this generated one (Terragrunt will not overwrite a
+# non-generated file). Units that don't use azuread simply don't reference it —
+# declaring a provider it never uses is harmless.
 #
-# After changing this constraint, run `terragrunt init -upgrade` in each unit to
-# align its .terraform.lock.hcl, then re-commit the updated lock files.
+# After changing these constraints, run `terragrunt init -upgrade` in each unit
+# to align its .terraform.lock.hcl, then re-commit the updated lock files.
 generate "versions" {
   path      = "versions.tf"
   if_exists = "overwrite_terragrunt"
@@ -113,6 +116,10 @@ generate "versions" {
         azurerm = {
           source  = "hashicorp/azurerm"
           version = "~> 4.76"
+        }
+        azuread = {
+          source  = "hashicorp/azuread"
+          version = "~> 3.0"
         }
       }
     }
