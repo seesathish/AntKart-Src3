@@ -80,7 +80,6 @@ dotnet test AK.Products/AK.Products.Tests/AK.Products.Tests.csproj
 dotnet test AK.Discount/AK.Discount.Tests/AK.Discount.Tests.csproj
 dotnet test AK.ShoppingCart/AK.ShoppingCart.Tests/AK.ShoppingCart.Tests.csproj
 dotnet test AK.Order/AK.Order.Tests/AK.Order.Tests.csproj
-dotnet test AK.UserIdentity/AK.UserIdentity.Tests/AK.UserIdentity.Tests.csproj
 dotnet test AK.Payments/AK.Payments.Tests/AK.Payments.Tests.csproj
 dotnet test AK.Notification/AK.Notification.Tests/AK.Notification.Tests.csproj
 dotnet test AK.IntegrationTests/AK.IntegrationTests.csproj
@@ -98,8 +97,8 @@ dotnet test AntKart.sln --logger "console;verbosity=minimal" 2>&1 \
 Expected output example:
 ```
 Test Run Successful.
-Total tests: 618
-     Passed: 618
+Total tests: 598
+     Passed: 598
      Failed: 0
 ```
 
@@ -112,7 +111,6 @@ for proj in \
   AK.Discount/AK.Discount.Tests/AK.Discount.Tests.csproj \
   AK.ShoppingCart/AK.ShoppingCart.Tests/AK.ShoppingCart.Tests.csproj \
   AK.Order/AK.Order.Tests/AK.Order.Tests.csproj \
-  AK.UserIdentity/AK.UserIdentity.Tests/AK.UserIdentity.Tests.csproj \
   AK.Payments/AK.Payments.Tests/AK.Payments.Tests.csproj \
   AK.Notification/AK.Notification.Tests/AK.Notification.Tests.csproj \
   AK.IntegrationTests/AK.IntegrationTests.csproj; do

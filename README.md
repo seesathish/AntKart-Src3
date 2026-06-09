@@ -12,6 +12,8 @@ The codebase is accompanied by architecture decision records, concept primers, a
 
 The architecture is modelled with the [C4 model](https://c4model.com) and rendered from a single Structurizr DSL workspace. The images below are generated artifacts: [`docs/architecture/workspace.dsl`](docs/architecture/workspace.dsl) is the single source of truth, and [`docs/architecture/C4Architecture.md`](docs/architecture/C4Architecture.md) is the detailed reference.
 
+> **Note:** The rendered diagrams reflect the **pre-migration topology** (including the now-retired application identity service and the former identity provider) and are **(to be updated post-migration)**, once the migration round is complete. The service catalogue and structure below reflect the current state.
+
 ### Level 1 — System Context
 
 ![C4 Level 1 — System Context](docs/architecture/c4-level1-system-context.png)
@@ -22,7 +24,7 @@ AntKart as a single system with two actors — Customer and Administrator — an
 
 ![C4 Level 2 — Container](docs/architecture/c4-level2-container.png)
 
-The eight microservices behind the Ocelot API gateway, each owning its own data store. Inter-service communication is asynchronous over the message broker via MassTransit; AK.Discount is the single synchronous gRPC dependency, invoked by AK.Order.
+The microservices behind the Ocelot API gateway, each owning its own data store. Inter-service communication is asynchronous over the message broker via MassTransit; AK.Discount is the single synchronous gRPC dependency, invoked by AK.Order.
 
 ### Level 3 — Component (AK.Order)
 
@@ -134,7 +136,6 @@ AntKart/
 ├── AK.Discount/          gRPC service — discount coupons (SQLite)
 ├── AK.ShoppingCart/      REST Minimal API — shopping cart (Redis)
 ├── AK.Order/             REST Minimal API — order management (PostgreSQL + SAGA)
-├── AK.UserIdentity/      REST Minimal API — identity proxy (Microsoft Entra ID — to be updated)
 ├── AK.Gateway/           API Gateway — Ocelot single entry point
 ├── AK.Payments/          REST Minimal API — payment processing (PostgreSQL + Razorpay)
 ├── AK.Notification/      REST Minimal API — transactional notifications (PostgreSQL + SMTP)
@@ -162,12 +163,13 @@ AntKart/
 | [AK.Discount](AK.Discount/AK.Discount.Grpc) | gRPC | SQLite | [Discount Design](AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md) |
 | [AK.ShoppingCart](AK.ShoppingCart/AK.ShoppingCart.API) | REST Minimal API | Redis | [ShoppingCart Design](AK.ShoppingCart/SHOPPING_CART_TECHNICAL_DESIGN.md) |
 | [AK.Order](AK.Order/AK.Order.API) | REST Minimal API | PostgreSQL | [Order Design](AK.Order/ORDER_TECHNICAL_DESIGN.md) |
-| [AK.UserIdentity](AK.UserIdentity/AK.UserIdentity.API) | REST Minimal API | Microsoft Entra ID (to be updated) | [Identity Design](AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md) |
 | [AK.Payments](AK.Payments/AK.Payments.API) | REST Minimal API | PostgreSQL + Razorpay | [Payments Design](AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md) |
 | [AK.Notification](AK.Notification/AK.Notification.API) | REST Minimal API | PostgreSQL + SMTP | [Notification Design](AK.Notification/NOTIFICATION_TECHNICAL_DESIGN.md) |
 | [AK.Gateway](AK.Gateway/AK.Gateway.API) | Ocelot API Gateway | — | [Gateway Design](AK.Gateway/API_GATEWAY.md) |
 
 Cloud ingress and API Management endpoints for each service are **(to be updated)** as the deployment topology is finalized.
+
+Identity is **Entra-native**: Microsoft Entra ID issues tokens and each service validates them directly, so there is no application identity service in the catalogue (see [ADR-021](docs/adr/ADR-021-retire-identity-service-for-entra.md)).
 
 ---
 
@@ -181,12 +183,11 @@ Cloud ingress and API Management endpoints for each service are **(to be updated
 | AK.Order | Authenticated (`/me` = own orders) | Authenticated; status update = Admin only |
 | AK.Payments | Authenticated (`/me` = own payments) | Authenticated |
 | AK.Notification | Authenticated (`/` = own notifications; `/admin` = Admin only) | Event-driven only — no write endpoints |
-| AK.UserIdentity | `/login`, `/register`, `/refresh` anonymous | `/me` authenticated; `/admin/*` admin only |
 | AK.Gateway | Proxied from downstream | JWT validated at gateway and downstream |
 
 **Roles:** `user` (standard), `admin` (full access).
 
-**Identity provider:** Microsoft Entra ID. Bearer tokens are validated at the gateway and re-validated by each service against the Entra OIDC metadata; issuer, audience, and token-acquisition specifics are **(to be updated)** pending completion of the identity migration.
+**Identity provider:** Microsoft Entra ID — **identity is Entra-native, with no application identity service**. Entra issues access tokens directly to clients via standard OAuth/OIDC flows; each service validates them (issuer, audience, lifetime, signature) and authorizes from the flat `roles` claim. User and app-role administration is performed in Entra / Microsoft Graph. Cloud endpoint and token-acquisition specifics are **(to be updated)** as the deployment topology is finalized.
 
 ---
 

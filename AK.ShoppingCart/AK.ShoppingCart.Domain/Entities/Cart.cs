@@ -10,7 +10,7 @@ public sealed class Cart
     private readonly List<CartItem> _items = [];
     private readonly List<object> _domainEvents = [];
 
-    // UserId is the Keycloak UUID — derived from the JWT 'sub' claim at the endpoint layer.
+    // UserId is the caller's stable id — derived from the JWT 'sub' claim at the endpoint layer.
     public string UserId { get; private set; } = string.Empty;
     public IReadOnlyList<CartItem> Items => _items.AsReadOnly();
     public DateTime CreatedAt { get; private set; }

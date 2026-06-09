@@ -116,26 +116,6 @@
       }
     },
     {
-      "UpstreamPathTemplate": "/gateway/identity/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
-      "DownstreamPathTemplate": "/api/{everything}",
-      "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [
-        { "Host": "ak-useridentity-api", "Port": 8080 }
-      ],
-      "RateLimitOptions": {
-        "EnableRateLimiting": true,
-        "Period": "1s",
-        "PeriodTimespan": 1,
-        "Limit": 30
-      },
-      "QoSOptions": {
-        "ExceptionsAllowedBeforeBreaking": 5,
-        "DurationOfBreak": 30000,
-        "TimeoutValue": 10000
-      }
-    },
-    {
       "UpstreamPathTemplate": "/gateway/health/products",
       "UpstreamHttpMethod": [ "GET" ],
       "DownstreamPathTemplate": "/health",
@@ -155,13 +135,6 @@
       "DownstreamPathTemplate": "/health",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [ { "Host": "ak-order-api", "Port": 8080 } ]
-    },
-    {
-      "UpstreamPathTemplate": "/gateway/health/identity",
-      "UpstreamHttpMethod": [ "GET" ],
-      "DownstreamPathTemplate": "/health",
-      "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [ { "Host": "ak-useridentity-api", "Port": 8080 } ]
     },
     {
       "UpstreamPathTemplate": "/gateway/payments/{everything}",

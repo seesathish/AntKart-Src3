@@ -30,3 +30,4 @@ An Architecture Decision Record (ADR) captures a single significant architectura
 - [ADR-018 — Managed Kubernetes, Workload Identity, and Hardened Base Image](ADR-018-aks-workload-identity-base-image.md) — A managed Kubernetes cluster with workload identity and a custom hardened base image.
 - [ADR-019 — Serverless Notification with Functions and Event Routing](ADR-019-serverless-notification-functions-eventgrid.md) — Notification as consumption-plan functions, with a clear messaging-versus-eventing transport boundary.
 - [ADR-020 — API Management as the Managed Edge Gateway](ADR-020-api-management-managed-edge-gateway.md) — A managed API gateway as the external edge in front of internal cluster routing.
+- [ADR-021 — Retire the Dedicated Identity Service in Favour of Microsoft Entra ID](ADR-021-retire-identity-service-for-entra.md) — Delegate authentication to Entra and remove the application-hosted identity service; user and role administration move to Entra/Graph.

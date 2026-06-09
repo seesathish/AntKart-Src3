@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "antkart-microservices-collection",
     "name": "AntKart Microservices",
-    "description": "Unified Postman collection for all AntKart microservices.\n\n**Services (Local Dev / Docker Compose):**\n- AK.Products   REST  — localhost:5077 / localhost:8080\n- AK.Discount   gRPC  — localhost:5001 / localhost:8081\n- AK.ShoppingCart REST — localhost:5079 / localhost:8082\n- AK.Order      REST  — localhost:5080 / localhost:8083\n- AK.UserIdentity REST — localhost:5085 / localhost:8084\n- AK.Payments   REST  — localhost:5086 / localhost:8085\n- AK.Notification REST — localhost:5087 / localhost:8086\n- AK.Gateway    REST  — localhost:8000 / localhost:9090\n- Keycloak Admin      — localhost:8090 (Docker only)\n- Mailhog UI          — localhost:8025 (Docker only)\n- RabbitMQ UI         — localhost:15672 (Docker only, guest/guest)\n\n**Import environments:**\n- `AntKart.Local.postman_environment.json` — direct service ports\n- `AntKart.Docker.postman_environment.json` — Docker Compose mapped ports\n\n**Quick start:**\n1. Import this collection + your chosen environment file\n2. Run `POST Login (User)` — {{accessToken}} is saved automatically\n3. All protected requests use `Bearer {{accessToken}}`\n\n**Security:** userId is never sent in URL paths or request bodies — always derived from the JWT by each service.",
+    "description": "Unified Postman collection for all AntKart microservices.\n\n**Services (Local Dev / Docker Compose):**\n- AK.Products   REST  — localhost:5077 / localhost:8080\n- AK.Discount   gRPC  — localhost:5001 / localhost:8081\n- AK.ShoppingCart REST — localhost:5079 / localhost:8082\n- AK.Order      REST  — localhost:5080 / localhost:8083\n- AK.Payments   REST  — localhost:5086 / localhost:8085\n- AK.Notification REST — localhost:5087 / localhost:8086\n- AK.Gateway    REST  — localhost:8000 / localhost:9090\n- Mailhog UI          — localhost:8025 (Docker only)\n- RabbitMQ UI         — localhost:15672 (Docker only, guest/guest)\n\n**Import environments:**\n- `AntKart.Local.postman_environment.json` — direct service ports\n- `AntKart.Docker.postman_environment.json` — Docker Compose mapped ports\n\n**Quick start:**\n1. Import this collection + your chosen environment file\n2. Run `POST Login (User)` — {{accessToken}} is saved automatically\n3. All protected requests use `Bearer {{accessToken}}`\n\n**Security:** userId is never sent in URL paths or request bodies — always derived from the JWT by each service.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -10,11 +10,9 @@
     { "key": "discountGrpc",     "value": "localhost:5001",        "type": "string" },
     { "key": "cartUrl",          "value": "http://localhost:5079", "type": "string" },
     { "key": "orderUrl",         "value": "http://localhost:5080", "type": "string" },
-    { "key": "identityUrl",      "value": "http://localhost:5085", "type": "string" },
     { "key": "paymentsUrl",      "value": "http://localhost:5086", "type": "string" },
     { "key": "notificationUrl",  "value": "http://localhost:5087", "type": "string" },
     { "key": "gatewayUrl",       "value": "http://localhost:8000", "type": "string" },
-    { "key": "keycloakUrl",      "value": "http://localhost:8090", "type": "string" },
     { "key": "accessToken",      "value": "", "type": "string",   "description": "JWT access token — set automatically by the Login request test script" },
     { "key": "productId",        "value": "replace-with-actual-id", "type": "string" },
     { "key": "discountId",       "value": "1",  "type": "string" },
@@ -385,120 +383,6 @@
           "request": {
             "method": "GET", "header": [],
             "url": { "raw": "{{orderUrl}}/health", "host": ["{{orderUrl}}"], "path": ["health"] }
-          }
-        }
-      ]
-    },
-    {
-      "name": "AK.UserIdentity API",
-      "description": "User identity microservice — Keycloak-backed auth proxy.\nSwagger UI: {{identityUrl}}/swagger\n\nPre-seeded users:\n- admin / admin123 (roles: admin, user)\n- user1 / user123 (roles: user)\n\nThe Login requests auto-save the access token to {{accessToken}}.",
-      "item": [
-        {
-          "name": "Auth",
-          "item": [
-            {
-              "name": "POST Login (User)",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "if (pm.response.code === 200) {",
-                      "    var json = pm.response.json();",
-                      "    pm.collectionVariables.set('accessToken', json.accessToken);",
-                      "    console.log('Access token saved to {{accessToken}}');",
-                      "}"
-                    ],
-                    "type": "text/javascript"
-                  }
-                }
-              ],
-              "request": {
-                "method": "POST",
-                "header": [{"key":"Content-Type","value":"application/json"}],
-                "body": { "mode": "raw", "raw": "{\n  \"username\": \"user1\",\n  \"password\": \"user123\"\n}" },
-                "url": { "raw": "{{identityUrl}}/api/auth/login", "host": ["{{identityUrl}}"], "path": ["api","auth","login"] }
-              }
-            },
-            {
-              "name": "POST Login (Admin)",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "if (pm.response.code === 200) {",
-                      "    var json = pm.response.json();",
-                      "    pm.collectionVariables.set('accessToken', json.accessToken);",
-                      "    console.log('Admin access token saved to {{accessToken}}');",
-                      "}"
-                    ],
-                    "type": "text/javascript"
-                  }
-                }
-              ],
-              "request": {
-                "method": "POST",
-                "header": [{"key":"Content-Type","value":"application/json"}],
-                "body": { "mode": "raw", "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}" },
-                "url": { "raw": "{{identityUrl}}/api/auth/login", "host": ["{{identityUrl}}"], "path": ["api","auth","login"] }
-              }
-            },
-            {
-              "name": "POST Register",
-              "request": {
-                "method": "POST",
-                "header": [{"key":"Content-Type","value":"application/json"}],
-                "body": { "mode": "raw", "raw": "{\n  \"username\": \"newuser\",\n  \"email\": \"newuser@example.com\",\n  \"password\": \"SecurePass1!\",\n  \"firstName\": \"New\",\n  \"lastName\": \"User\"\n}" },
-                "url": { "raw": "{{identityUrl}}/api/auth/register", "host": ["{{identityUrl}}"], "path": ["api","auth","register"] }
-              }
-            },
-            {
-              "name": "POST Refresh Token",
-              "request": {
-                "method": "POST",
-                "header": [{"key":"Content-Type","value":"application/json"}],
-                "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"paste-refresh-token-here\"\n}" },
-                "url": { "raw": "{{identityUrl}}/api/auth/refresh", "host": ["{{identityUrl}}"], "path": ["api","auth","refresh"] }
-              }
-            },
-            {
-              "name": "GET Me (current user)",
-              "request": {
-                "method": "GET",
-                "header": [{"key":"Authorization","value":"Bearer {{accessToken}}"}],
-                "url": { "raw": "{{identityUrl}}/api/auth/me", "host": ["{{identityUrl}}"], "path": ["api","auth","me"] }
-              }
-            }
-          ]
-        },
-        {
-          "name": "Admin",
-          "item": [
-            {
-              "name": "GET All Users (admin only)",
-              "request": {
-                "method": "GET",
-                "header": [{"key":"Authorization","value":"Bearer {{accessToken}}"}],
-                "url": { "raw": "{{identityUrl}}/api/admin/users", "host": ["{{identityUrl}}"], "path": ["api","admin","users"] }
-              }
-            },
-            {
-              "name": "POST Assign Role (admin only)",
-              "request": {
-                "method": "POST",
-                "header": [{"key":"Content-Type","value":"application/json"},{"key":"Authorization","value":"Bearer {{accessToken}}"}],
-                "body": { "mode": "raw", "raw": "{\n  \"role\": \"admin\"\n}" },
-                "url": { "raw": "{{identityUrl}}/api/admin/users/replace-with-user-id/roles", "host": ["{{identityUrl}}"], "path": ["api","admin","users","replace-with-user-id","roles"] }
-              }
-            }
-          ]
-        },
-        {
-          "name": "GET Identity Health Check",
-          "request": {
-            "method": "GET", "header": [],
-            "url": { "raw": "{{identityUrl}}/health", "host": ["{{identityUrl}}"], "path": ["health"] }
           }
         }
       ]

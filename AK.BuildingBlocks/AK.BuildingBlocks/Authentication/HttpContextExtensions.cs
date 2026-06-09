@@ -11,9 +11,9 @@ namespace AK.BuildingBlocks.Authentication;
 // could access or modify another user's data simply by changing a userId in the URL.
 public static class HttpContextExtensions
 {
-    // Returns the caller's stable user UUID from the 'sub' (subject) claim.
-    // Keycloak JWT: 'sub' is the UUID that never changes even if the username changes.
-    // Falls back to 'preferred_username' for non-Keycloak tokens (e.g. test environments).
+    // Returns the caller's stable user id from the 'sub' (subject) claim.
+    // In an Entra-issued JWT, 'sub' is a stable identifier for the caller within this API.
+    // Falls back to 'preferred_username' for tokens without 'sub' (e.g. test environments).
     // Throws UnauthorizedAccessException (→ HTTP 403) if no identity claim is present,
     // which means the JWT is malformed or the user is not authenticated.
     public static string GetUserId(this HttpContext ctx) =>
@@ -28,9 +28,9 @@ public static class HttpContextExtensions
         ?? ctx.User.FindFirst(ClaimTypes.Email)?.Value
         ?? string.Empty;
 
-    // Returns a human-readable display name, trying several Keycloak claims in order.
+    // Returns a human-readable display name, trying several standard JWT claims in order.
     // Used when denormalising customer name into Order and Payment records so they don't
-    // need to call the UserIdentity service to look up a name later.
+    // need to look the name up again later.
     public static string GetUserDisplayName(this HttpContext ctx) =>
         ctx.User.FindFirst("name")?.Value
         ?? $"{ctx.User.FindFirst("given_name")?.Value} {ctx.User.FindFirst("family_name")?.Value}".Trim()

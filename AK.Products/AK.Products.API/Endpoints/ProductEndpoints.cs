@@ -15,7 +15,7 @@ namespace AK.Products.API.Endpoints;
 
 // Product catalogue endpoints. All read endpoints are public (AllowAnonymous) so the storefront
 // doesn't need authentication. Write endpoints (create, update, delete, bulk ops) require the
-// "admin" Keycloak role. Categories are data-driven strings — no hardcoded enum — so adding
+// "admin" app role. Categories are data-driven strings — no hardcoded enum — so adding
 // a new category (e.g. "Sports") only requires inserting products with that category value.
 public static class ProductEndpoints
 {

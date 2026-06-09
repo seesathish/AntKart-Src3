@@ -7,8 +7,8 @@ using Microsoft.IdentityModel.Tokens;
 namespace AK.BuildingBlocks.Authentication;
 
 // Shared JWT authentication used by every service (Products, Cart, Order, Payments,
-// Notification, Gateway, UserIdentity). Calling AddEntraAuthentication() from a service's
-// Program.cs wires up token validation against Microsoft Entra ID once — no per-service copy.
+// Notification, Gateway). Calling AddEntraAuthentication() from a service's Program.cs
+// wires up token validation against Microsoft Entra ID once — no per-service copy.
 //
 // AUTHENTICATION (is this a genuine, current token from the right issuer for this API?) is
 // established by the four checks below. AUTHORIZATION (what may the caller do?) is then driven

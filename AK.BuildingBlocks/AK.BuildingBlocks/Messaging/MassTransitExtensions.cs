@@ -23,7 +23,7 @@ public static class MassTransitExtensions
     // "notification-payment-failed". Both queues bind to the same exchange so each
     // service receives every message independently (fan-out, not competing consumers).
     //
-    // Services that only publish events (e.g. AK.UserIdentity) pass an empty callback: _ => { }
+    // Services that only publish events (no consumers of their own) pass an empty callback: _ => { }
     public static IServiceCollection AddRabbitMqMassTransit(
         this IServiceCollection services,
         IConfiguration configuration,

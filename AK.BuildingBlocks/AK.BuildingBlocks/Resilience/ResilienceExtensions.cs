@@ -10,7 +10,7 @@ namespace AK.BuildingBlocks.Resilience;
 public static class ResilienceExtensions
 {
     // Attaches a Retry → Circuit Breaker → Timeout pipeline to an HttpClient.
-    // Used for: Keycloak HTTP calls, Razorpay REST calls, Discount gRPC client.
+    // Used for: Razorpay REST calls, Discount gRPC client, and other outbound HTTP dependencies.
     //
     // How the pipeline works (layers execute in the order listed):
     //   1. Retry:          on transient failure, wait 300ms × 2^n + jitter and try again (up to 3 times)

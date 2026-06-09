@@ -18,7 +18,6 @@ AntKart/
 ├── AK.Discount/          gRPC service — discount coupons (SQLite)
 ├── AK.ShoppingCart/      REST Minimal API — shopping cart (Redis)
 ├── AK.Order/             REST Minimal API — order management (PostgreSQL + SAGA)
-├── AK.UserIdentity/      REST Minimal API — Keycloak identity proxy
 ├── AK.Gateway/           API Gateway — Ocelot single entry point
 ├── AK.Payments/          REST Minimal API — payment processing (PostgreSQL + Razorpay)
 ├── AK.Notification/      REST Minimal API — transactional notifications (PostgreSQL + Mailhog/SMTP)
@@ -107,16 +106,8 @@ AK.<Service>/
 - **Swagger:** `http://localhost:5080/swagger` (Development only)
 - **Design doc:** [AK.Order/ORDER_TECHNICAL_DESIGN.md](AK.Order/ORDER_TECHNICAL_DESIGN.md)
 
-### ✅ AK.UserIdentity  (REST Minimal API — Keycloak Proxy)
-- **Transport:** HTTP REST, port 5085 (dev) / 8084 (Docker)
-- **Identity Provider:** Keycloak 24.0 — realm `antkart`, client `antkart-client` (confidential, service accounts enabled)
-- **Architecture:** Single API project — thin proxy, no domain layer needed
-- **Roles:** `user` (standard), `admin` (full access)
-- **Endpoints:** POST /login, POST /register, POST /refresh, GET /me, GET /admin/users, POST /admin/users/{id}/roles
-- **Auth:** JWT Bearer validated against Microsoft Entra ID OIDC metadata (login/registration still proxy Keycloak — to be reworked in the identity-service step)
-- **Tests:** 20 passing (KeycloakService, KeycloakAdminService, ExceptionHandlerMiddleware — all mocked HTTP; includes RegisterAsync publish + conflict tests, GetAdminTokenAsync, AssignRole step-2 failure, GetUsers missing optional fields)
-- **Swagger:** `http://localhost:5085/swagger` (Development only)
-- **Design doc:** [AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md](AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md)
+### ⛔ AK.UserIdentity — retired (ADR-021)
+The dedicated identity microservice was removed in the Entra migration. Microsoft Entra ID issues access tokens directly to clients via standard OAuth/OIDC flows; each service validates them via `AddEntraAuthentication` (BuildingBlocks). User and app-role administration is an operational concern handled in Entra / Microsoft Graph — not an application service. See [ADR-021](docs/adr/ADR-021-retire-identity-service-for-entra.md).
 
 ### ✅ AK.Gateway  (API Gateway)
 - **Transport:** HTTP, port 8000 (Docker) / 8000 (dev)
@@ -133,7 +124,6 @@ AK.<Service>/
 - `Middleware/CorrelationIdMiddleware` — `X-Correlation-Id` header
 - `Authentication/AuthenticationExtensions` — `AddEntraAuthentication()` + `UseEntraAuth()` shared JWT auth wiring; validates the token against Microsoft Entra ID (issuer = tenant v2 issuer, audience = the API app registration `api://antkart-api-dev`, lifetime, signature via Entra OIDC keys) and reads authorization from the **flat `roles` claim** (`RoleClaimType = "roles"`, `MapInboundClaims = false`)
 - `Authentication/EntraSettings` — typed, non-secret config record (`Instance`, `TenantId`, `Audience`) bound from the `Entra` section; derives authority/issuer as `{Instance}/{TenantId}/v2.0`
-- `Authentication/KeycloakSettings` — typed config record still consumed by AK.UserIdentity's Keycloak login/admin proxy services (to be reworked in the identity-service step)
 - `Authentication/HttpContextExtensions` — `GetUserId()` extracts `sub` from JWT; `GetUserEmail()` reads `email`/`ClaimTypes.Email`; `GetUserDisplayName()` reads `name`/`given_name`+`family_name`/`preferred_username`
 - `DDD/IDomainEvent` — shared marker interface implemented by all domain event records (Products, Order, Payments)
 - `DDD/IAggregateRoot` — shared marker interface identifying aggregate root entities
@@ -141,9 +131,9 @@ AK.<Service>/
 - `DDD/StringEntity` — same as Entity but with `string Id = Guid.NewGuid().ToString("N")` for MongoDB entities (Products); replaces per-service `BaseEntity`/`Entity` duplicates
 - `DDD/ValueObject` — abstract base for value objects; subclass and implement `GetEqualityComponents()` — `Equals()`, `GetHashCode()`, `==`, `!=` are derived automatically via `SequenceEqual`; used by `ShippingAddress` in AK.Order (deliberately contrasts with `Money` in AK.Products which uses a C# `record` — both approaches valid)
 - `Messaging/IIntegrationEvent` — base interface for all integration events
-- `Messaging/IntegrationEvents/` — `OrderCreatedIntegrationEvent` (enriched: CustomerEmail, CustomerName, OrderNumber), `OrderConfirmedIntegrationEvent` (enriched), `OrderCancelledIntegrationEvent` (enriched + UserId), `PaymentSucceededIntegrationEvent` (enriched), `PaymentFailedIntegrationEvent` (enriched), `UserRegisteredIntegrationEvent` (published by AK.UserIdentity on registration), `StockReservedIntegrationEvent`, `StockReservationFailedIntegrationEvent`, `PaymentInitiatedIntegrationEvent` (consumed by `PaymentInitiatedAuditConsumer` in integration tests)
-- `Behaviors/ValidationBehavior<TRequest, TResponse>` — shared MediatR pipeline behavior; all services (except UserIdentity) wire this from BuildingBlocks; replaces 6 deleted per-service copies
-- `Middleware/ExceptionHandlerMiddleware` — shared exception→HTTP mapper used by ShoppingCart, Order, Payments, Notification, Products; UserIdentity keeps its own (maps `UnauthorizedAccessException` → 401, not 403)
+- `Messaging/IntegrationEvents/` — `OrderCreatedIntegrationEvent` (enriched: CustomerEmail, CustomerName, OrderNumber), `OrderConfirmedIntegrationEvent` (enriched), `OrderCancelledIntegrationEvent` (enriched + UserId), `PaymentSucceededIntegrationEvent` (enriched), `PaymentFailedIntegrationEvent` (enriched), `UserRegisteredIntegrationEvent` (consumed by AK.Notification's welcome-email seam; in the Entra-native model its publisher is external — see ADR-021), `StockReservedIntegrationEvent`, `StockReservationFailedIntegrationEvent`, `PaymentInitiatedIntegrationEvent` (consumed by `PaymentInitiatedAuditConsumer` in integration tests)
+- `Behaviors/ValidationBehavior<TRequest, TResponse>` — shared MediatR pipeline behavior; every service wires this from BuildingBlocks; replaces per-service copies
+- `Middleware/ExceptionHandlerMiddleware` — shared exception→HTTP mapper used by ShoppingCart, Order, Payments, Notification, Products
 - `Messaging/MassTransitExtensions` — `AddRabbitMqMassTransit(config, servicePrefix, configure)` helper; each service passes a unique prefix ("order", "notification", "payments", "cart", "products", "identity") so consumers get uniquely-named RabbitMQ queues — e.g. `notification-payment-failed` and `order-payment-failed` are separate queues both bound to the same exchange (fan-out, not competing consumers)
 - `Resilience/ResilienceExtensions` — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, `AddNpgsqlResilience()` (Npgsql uses exponential backoff + jitter to prevent thundering herd on DB reconnect)
 - `Swagger/SwaggerExtensions` — `UseSwaggerInDevelopment(title)` gates `UseSwagger()` + `UseSwaggerUI()` to Development only; `AddSwaggerGen()` registration stays in each service
@@ -192,7 +182,7 @@ AK.<Service>/
 ### User Identity — Never Trust the Client
 - **Never** accept `userId` as a URL path parameter or request body field for user-scoped operations
 - **Always** derive the authenticated user's ID from the JWT via `http.GetUserId()` (BuildingBlocks `HttpContextExtensions`)
-- `GetUserId()` reads the `sub` claim (Keycloak UUID); falls back to `preferred_username`; throws `UnauthorizedAccessException` if neither is present
+- `GetUserId()` reads the `sub` claim (the caller's stable id in the Entra token); falls back to `preferred_username`; throws `UnauthorizedAccessException` if neither is present
 - `UnauthorizedAccessException` maps to HTTP 403 in all `ExceptionHandlerMiddleware` implementations
 
 ### Route Patterns for User-Scoped Data
@@ -409,7 +399,7 @@ When asked to build a new service `AK.<Name>`, follow this order:
 - Build context is always the **repo root** (`.`)
 - Dockerfiles live inside the API/Grpc project folder
 - **Non-root containers:** All Dockerfiles include `USER $APP_UID` before `ENTRYPOINT` — uses .NET 9 base image UID 1654
-- **Container/image naming:** use the `antkart-` prefix (e.g. `antkart-mongodb`, `antkart-keycloak`) — never `antcart-` or `ak-`
+- **Container/image naming:** use the `antkart-` prefix (e.g. `antkart-mongodb`, `antkart-rabbitmq`) — never `antcart-` or `ak-`
 - **Seeding:** Startup auto-seeding is opt-in and resilient — gated behind the `Seeding:RunOnStartup` flag (default `false`) and wrapped in try/catch so a seed failure logs a warning and never crashes startup. Routine data seeding is a deliberate, separate operation (dedicated loader), not a boot-time side effect.
 
 > **No local docker-compose stack.** This repository targets cloud deployment — run services locally against live cloud services or via cloud port-forwarding. The docker-compose-based Phase-1 local orchestration (compose files, `.dockerignore`, healthchecks, `depends_on` wiring, named volumes) is preserved in the public AntKart reference repository.

@@ -182,4 +182,38 @@ You can inspect a token's claims by decoding it (for example at a JWT decoder) a
 
 ---
 
-*Subsequent steps — managed data store, the identity-service rework, messaging, and serverless eventing migrations — are added to this guide as they are delivered.*
+## Step 2b — Retire the Dedicated Identity Service
+
+With token validation delegated to Entra (Step 2a), the application no longer needs a service of its own to handle identity. This step removes it. The decision is recorded in [ADR-021](../adr/ADR-021-retire-identity-service-for-entra.md).
+
+### Understand
+
+The application baseline shipped a dedicated identity microservice — a thin proxy over a self-hosted identity provider for login, registration, token refresh, `/me`, and basic user/role administration. Under Microsoft Entra ID, every responsibility it held now lives elsewhere:
+
+- **Token issuance** — Entra issues access tokens directly to clients through standard OAuth 2.0 / OpenID Connect flows. The application issues nothing.
+- **Token validation** — already cross-cutting after Step 2a: each service validates Entra tokens through the shared building-blocks authentication.
+- **User lifecycle and app-role assignment** — operational concerns managed in **Entra (portal or Microsoft Graph)**, exercised during test enablement — not application endpoints.
+
+With issuance handled by Entra, validation handled in every service, and administration handled operationally, a dedicated identity service has no remaining purpose. Removing it is a **deliberate simplification** of the architecture — one fewer service to build, deploy, secure, and operate.
+
+### Build
+
+What is removed, and why:
+
+- **The identity service projects (API and tests)** and their solution entries — the service is obsolete.
+- **The gateway route** that forwarded to it — there is nothing downstream to route to.
+- **The provider-specific settings type** that only the identity service consumed, and any code left dead solely by its removal.
+- **References across the solution** to the identity service and the former provider, so the codebase reflects the Entra-native model. (Rendered C4 architecture diagrams are intentionally **not** regenerated here — they are updated after the migration round and still show the pre-migration topology.)
+
+The notification "welcome" consumer is **retained** as a forward-compatible seam: in the Entra-native model its trigger is sourced externally (an Entra/Graph signal on user provisioning) rather than from an application identity service.
+
+### Execute / Verify
+
+- The solution **builds cleanly** without the identity service (`dotnet build` → 0 warnings).
+- The **gateway starts** without its route to the identity service.
+- The **remaining test suite passes**; the total decreases by the retired service's tests.
+- No references to the former identity provider remain in the codebase.
+
+---
+
+*Subsequent steps — managed data store, messaging, and serverless eventing migrations — are added to this guide as they are delivered.*

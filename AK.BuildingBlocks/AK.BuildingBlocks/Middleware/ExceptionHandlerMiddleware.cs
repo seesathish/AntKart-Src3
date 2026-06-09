@@ -14,9 +14,6 @@ namespace AK.BuildingBlocks.Middleware;
 //   KeyNotFoundException                    → 404 Not Found
 //   InvalidOperationException               → 409 Conflict    (business rule violation)
 //   Exception (catch-all)                   → 500 Internal Server Error
-//
-// Note: AK.UserIdentity keeps its own middleware because it maps UnauthorizedAccessException
-// to 401 (not 403) and does not use FluentValidation.
 public sealed class ExceptionHandlerMiddleware(RequestDelegate next, ILogger<ExceptionHandlerMiddleware> logger)
 {
     public async Task InvokeAsync(HttpContext context)

@@ -4,6 +4,8 @@ The [C4 model](https://c4model.com/) describes software architecture at four lev
 
 > **Source of truth:** These diagrams are generated from [`docs/architecture/workspace.dsl`](workspace.dsl) using [Structurizr](https://structurizr.com), the reference C4 tooling by Simon Brown. Edit the DSL, re-export, and all diagrams stay consistent.
 
+> **(To be updated post-migration.)** The rendered diagrams reflect the **pre-migration topology** — including the now-retired application identity service and the former identity provider. They are regenerated from the DSL after the migration round; the [README](../../README.md) and [ADRs](../adr/README.md) describe the current Entra-native state.
+
 | Level | Diagram | Question |
 |-------|---------|----------|
 | 1 | System Context | Who uses AntKart and what external systems does it depend on? |
@@ -61,7 +63,6 @@ Each service has a dedicated technical design document with internal architectur
 | AK.ShoppingCart | [SHOPPING_CART_TECHNICAL_DESIGN.md](../../AK.ShoppingCart/SHOPPING_CART_TECHNICAL_DESIGN.md) |
 | AK.Notification | [NOTIFICATION_TECHNICAL_DESIGN.md](../../AK.Notification/NOTIFICATION_TECHNICAL_DESIGN.md) |
 | AK.Discount | [DISCOUNT_TECHNICAL_DESIGN.md](../../AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md) |
-| AK.UserIdentity | [IDENTITY_TECHNICAL_DESIGN.md](../../AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md) |
 | AK.Gateway | [API_GATEWAY.md](../../AK.Gateway/API_GATEWAY.md) |
 
 Architecture Decision Records: [docs/adr/](../adr/)
