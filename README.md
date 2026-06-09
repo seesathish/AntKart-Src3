@@ -208,22 +208,4 @@ dotnet test      # 618 tests
 
 ## Testing
 
-The test suite is layer-agnostic: it exercises domain logic, validators, handlers, and the SAGA and event bus independently of where the services are deployed.
-
-```bash
-dotnet test
-```
-
-| Project | Tests |
-|---------|-------|
-| AK.Products.Tests | 202 |
-| AK.Discount.Tests | 53 |
-| AK.ShoppingCart.Tests | 88 |
-| AK.Order.Tests | 113 |
-| AK.UserIdentity.Tests | 20 |
-| AK.IntegrationTests | 35 |
-| AK.Payments.Tests | 70 |
-| AK.Notification.Tests | 37 |
-| **Total** | **618** |
-
-For end-to-end and API verification, import the [Postman collection](AntKart.postman_collection.json) and follow the [Developer Testing Guide](docs/test/DevTestGuide.md); cloud service endpoints are **(to be updated)**.
+The platform is verified across unit, integration, end-to-end, security, and load/performance testing, backed by a comprehensive automated suite. The full strategy, the per-project breakdown, and links to each test type are consolidated in the [Testing index](docs/test/README.md).
