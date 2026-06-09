@@ -58,13 +58,25 @@ This keeps the definition in **one place** (DRY) and makes environments **struct
 Every change follows the same safe loop:
 
 ```mermaid
-flowchart LR
-    WRITE([Write / change .tf]) --> INIT[terragrunt init<br/>wire backend + download providers]
-    INIT --> PLAN[terragrunt plan<br/>compare config vs state vs cloud]
-    PLAN --> REVIEW{Looks right?}
-    REVIEW -->|no| WRITE
-    REVIEW -->|yes| APPLY[terragrunt apply<br/>make reality match, after confirmation]
-    APPLY --> DONE([State updated])
+flowchart TB
+    WRITE([Write / change .tf]) -->|edit config| INIT[terragrunt init<br/>backend + providers]
+    INIT -->|prepare| PLAN[terragrunt plan<br/>config vs state vs cloud]
+    PLAN -->|review diff| REVIEW{Looks right?}
+    REVIEW -->|no · revise| WRITE
+    REVIEW -->|yes · confirm| APPLY[terragrunt apply<br/>make reality match]
+    APPLY -->|update| DONE([State updated])
+
+    classDef actor   fill:#08427B,stroke:#052c54,color:#ffffff;
+    classDef primary fill:#1168BD,stroke:#0b4a87,color:#ffffff;
+    classDef service fill:#438DD5,stroke:#2d6ca3,color:#ffffff;
+    classDef data    fill:#85BBF0,stroke:#5a9bd4,color:#0b2545;
+    classDef external fill:#8B8B8B,stroke:#5f5f5f,color:#ffffff;
+    classDef focus   fill:#E8A33D,stroke:#a96f16,color:#1a1a1a;
+
+    class WRITE,DONE actor
+    class INIT,APPLY service
+    class REVIEW primary
+    class PLAN focus
 ```
 
 - **`init`** — wires up the backend and downloads the providers a unit needs. Run on first use or after backend/module changes.

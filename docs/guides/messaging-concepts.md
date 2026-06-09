@@ -25,13 +25,28 @@ A direct HTTP call has none of these: if the callee is down or slow, the caller 
 A **queue** delivers each message to **exactly one** consumer. If several consumer instances read from the same queue, they **compete** — each message goes to whichever instance grabs it first, so the work is shared and never done twice.
 
 ```mermaid
-flowchart LR
-    P1([Producer A]) --> Q[[order-commands queue]]
-    P2([Producer B]) --> Q
-    Q --> C1[Consumer instance 1]
-    Q --> C2[Consumer instance 2]
-    Q --> C3[Consumer instance 3]
-    note["Each message is processed by exactly ONE instance"]
+flowchart TB
+    P1([Producer A]) -->|sends command| Q{{order-commands queue}}
+    P2([Producer B]) -->|sends command| Q
+    subgraph Consumers["Competing consumers · one message → one instance"]
+      C1[Consumer instance 1]
+      C2[Consumer instance 2]
+      C3[Consumer instance 3]
+    end
+    Q -->|delivered to one| C1
+    Q -->|delivered to one| C2
+    Q -->|delivered to one| C3
+
+    classDef actor   fill:#08427B,stroke:#052c54,color:#ffffff;
+    classDef primary fill:#1168BD,stroke:#0b4a87,color:#ffffff;
+    classDef service fill:#438DD5,stroke:#2d6ca3,color:#ffffff;
+    classDef data    fill:#85BBF0,stroke:#5a9bd4,color:#0b2545;
+    classDef external fill:#8B8B8B,stroke:#5f5f5f,color:#ffffff;
+    classDef focus   fill:#E8A33D,stroke:#a96f16,color:#1a1a1a;
+
+    class P1,P2 actor
+    class C1,C2,C3 service
+    class Q focus
 ```
 
 This is the right shape for **commands** — "do this specific thing" — because a command has **exactly one owner**: placing an order, charging a payment, reserving stock. You do not want two instances both charging the same payment, and competing consumers guarantee they won't. Scaling out simply adds more instances that share the load.
@@ -43,12 +58,31 @@ This is the right shape for **commands** — "do this specific thing" — becaus
 A **topic** looks like a queue to the publisher, but underneath it **fans out**: every **subscription** attached to the topic receives **its own independent copy** of each published message. Consumers read from their subscription, not from the topic directly.
 
 ```mermaid
-flowchart LR
-    PUB([Publisher]) --> T{{integration-events topic}}
-    T --> S1[products subscription] --> H1[Products consumer]
-    T --> S2[notification subscription] --> H2[Notification consumer]
-    T --> S3[future subscription] --> H3[New consumer]
-    note["Every subscription gets its OWN copy of each message"]
+flowchart TB
+    PUB([Publisher]) -->|publishes event| T{{integration-events topic}}
+    subgraph Subs["Subscriptions · each gets its own copy"]
+      S1[products subscription]
+      S2[notification subscription]
+      S3[future subscription]
+    end
+    T -->|fans out| S1
+    T -->|fans out| S2
+    T -->|fans out| S3
+    S1 -->|delivers to| H1[Products consumer]
+    S2 -->|delivers to| H2[Notification consumer]
+    S3 -->|delivers to| H3[New consumer]
+
+    classDef actor   fill:#08427B,stroke:#052c54,color:#ffffff;
+    classDef primary fill:#1168BD,stroke:#0b4a87,color:#ffffff;
+    classDef service fill:#438DD5,stroke:#2d6ca3,color:#ffffff;
+    classDef data    fill:#85BBF0,stroke:#5a9bd4,color:#0b2545;
+    classDef external fill:#8B8B8B,stroke:#5f5f5f,color:#ffffff;
+    classDef focus   fill:#E8A33D,stroke:#a96f16,color:#1a1a1a;
+
+    class PUB actor
+    class S1,S2,S3 primary
+    class H1,H2,H3 service
+    class T focus
 ```
 
 This is the right shape for **integration events** — "this happened" — because an event has **many independent listeners**. When an order is placed, Products wants to reserve stock *and* Notification wants to email the customer; each reads its own copy and neither affects the other. Adding a new listener is just **adding a subscription** — publishers don't change.
@@ -74,13 +108,25 @@ The defence is **idempotency**: design each consumer so that **processing the sa
 What if a message **can't** be processed — a poison message that fails every time, or one that expires before anyone handles it? Service Bus does not drop it. Every queue and subscription has a built-in **dead-letter sub-queue (DLQ)**. After a message exceeds its **max delivery attempts** (or its time-to-live), it is moved to the DLQ.
 
 ```mermaid
-flowchart LR
-    M([Message]) --> Q[[Queue / Subscription]]
+flowchart TB
+    M([Message]) -->|enqueued| Q{{Queue / Subscription}}
     Q -->|deliver| C{Processed OK?}
-    C -->|yes| DONE([Acknowledged ✓])
-    C -->|no, retry| Q
-    Q -->|exceeds max attempts / expires| DLQ[[Dead-letter sub-queue]]
-    DLQ --> INSPECT([Inspect → fix cause → resubmit])
+    C -->|yes| DONE([Acknowledged])
+    C -->|no · retry| Q
+    Q -->|exceeds max attempts / expires| DLQ{{Dead-letter sub-queue}}
+    DLQ -->|inspect + fix| INSPECT([Fix cause · resubmit])
+
+    classDef actor   fill:#08427B,stroke:#052c54,color:#ffffff;
+    classDef primary fill:#1168BD,stroke:#0b4a87,color:#ffffff;
+    classDef service fill:#438DD5,stroke:#2d6ca3,color:#ffffff;
+    classDef data    fill:#85BBF0,stroke:#5a9bd4,color:#0b2545;
+    classDef external fill:#8B8B8B,stroke:#5f5f5f,color:#ffffff;
+    classDef focus   fill:#E8A33D,stroke:#a96f16,color:#1a1a1a;
+
+    class M actor
+    class Q,DONE,INSPECT service
+    class C primary
+    class DLQ focus
 ```
 
 Dead-lettered messages can be **inspected** (what was the payload? why did it fail?), the **root cause fixed**, and the messages **resubmitted** — so a bad message is a problem you can see and recover from, never a silent data loss.

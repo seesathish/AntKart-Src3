@@ -25,13 +25,24 @@ Account            the top-level Cosmos resource (an endpoint + billing/capacity
 - **Documents** — the actual JSON records you read and write.
 
 ```mermaid
-flowchart TD
-    A[Account — endpoint + capacity/billing scope]
-    A --> D[Database — groups containers]
-    D --> C[Container / collection — unit of scale and partitioning]
-    C --> Doc1[(Document — JSON)]
-    C --> Doc2[(Document — JSON)]
-    C --> Doc3[(Document — JSON)]
+flowchart TB
+    A[Account<br/>endpoint + capacity/billing] -->|groups| D[Database<br/>namespace of containers]
+    D -->|contains| C[Container / collection<br/>unit of scale + partitioning]
+    C -->|stores| Doc1[(Document · JSON)]
+    C -->|stores| Doc2[(Document · JSON)]
+    C -->|stores| Doc3[(Document · JSON)]
+
+    classDef actor   fill:#08427B,stroke:#052c54,color:#ffffff;
+    classDef primary fill:#1168BD,stroke:#0b4a87,color:#ffffff;
+    classDef service fill:#438DD5,stroke:#2d6ca3,color:#ffffff;
+    classDef data    fill:#85BBF0,stroke:#5a9bd4,color:#0b2545;
+    classDef external fill:#8B8B8B,stroke:#5f5f5f,color:#ffffff;
+    classDef focus   fill:#E8A33D,stroke:#a96f16,color:#1a1a1a;
+
+    class A primary
+    class D service
+    class C focus
+    class Doc1,Doc2,Doc3 data
 ```
 
 ---
@@ -97,12 +108,24 @@ When requests arrive faster than the available throughput can serve, Cosmos does
 This is by design: the client is **expected to retry with backoff**. A short, transient burst that exceeds capacity results in a few 429s and automatic retries, not a failure — provided the client honours the retry-after hint.
 
 ```mermaid
-flowchart LR
-    REQ([Client request]) --> CAP{"Within available RU/s?"}
-    CAP -->|yes| OK([Served — RUs charged])
-    CAP -->|"no, over capacity"| T["429 Too Many Requests<br/>+ retry-after hint"]
-    T --> WAIT[Wait retry-after, then retry with backoff]
-    WAIT --> REQ
+flowchart TB
+    REQ([Client request]) -->|send| CAP{Within available RU/s?}
+    CAP -->|yes| OK([Served · RUs charged])
+    CAP -->|no · over capacity| T[429 Too Many Requests<br/>+ retry-after hint]
+    T -->|back off| WAIT[Wait retry-after<br/>then retry]
+    WAIT -->|retry| REQ
+
+    classDef actor   fill:#08427B,stroke:#052c54,color:#ffffff;
+    classDef primary fill:#1168BD,stroke:#0b4a87,color:#ffffff;
+    classDef service fill:#438DD5,stroke:#2d6ca3,color:#ffffff;
+    classDef data    fill:#85BBF0,stroke:#5a9bd4,color:#0b2545;
+    classDef external fill:#8B8B8B,stroke:#5f5f5f,color:#ffffff;
+    classDef focus   fill:#E8A33D,stroke:#a96f16,color:#1a1a1a;
+
+    class REQ,OK actor
+    class CAP primary
+    class WAIT service
+    class T focus
 ```
 
 > The platform's **resilience policies** handle exactly this: retry-with-backoff (and circuit breaking) around outbound calls means transient `429`s are retried transparently rather than surfacing as user-facing errors. See the [Fault Tolerance with Polly ADR](../adr/ADR-003-fault-tolerance-with-polly.md).
@@ -116,14 +139,24 @@ Cosmos scales a container by spreading its documents across **physical partition
 > **Analogy — post-office PIN-code sorting.** A sorting office routes every letter by its **PIN/ZIP code** so the work spreads evenly across many bins and any address can be found quickly. The **partition key is that code**: Cosmos uses it to decide which partition (bin) each document goes to, and to find documents fast later.
 
 ```mermaid
-flowchart TD
-    d1[doc · pk = SKU-A] --> H{{Partition key<br/>determines placement}}
-    d2[doc · pk = SKU-B] --> H
-    d3[doc · pk = SKU-C] --> H
-    d4[doc · pk = SKU-D] --> H
-    H --> P1[(Physical partition 1)]
-    H --> P2[(Physical partition 2)]
-    H --> P3[(Physical partition 3)]
+flowchart TB
+    d1[(doc · pk = SKU-A)] -->|route by key| H{Partition key<br/>determines placement}
+    d2[(doc · pk = SKU-B)] -->|route by key| H
+    d3[(doc · pk = SKU-C)] -->|route by key| H
+    d4[(doc · pk = SKU-D)] -->|route by key| H
+    H -->|places| P1[(Physical partition 1)]
+    H -->|places| P2[(Physical partition 2)]
+    H -->|places| P3[(Physical partition 3)]
+
+    classDef actor   fill:#08427B,stroke:#052c54,color:#ffffff;
+    classDef primary fill:#1168BD,stroke:#0b4a87,color:#ffffff;
+    classDef service fill:#438DD5,stroke:#2d6ca3,color:#ffffff;
+    classDef data    fill:#85BBF0,stroke:#5a9bd4,color:#0b2545;
+    classDef external fill:#8B8B8B,stroke:#5f5f5f,color:#ffffff;
+    classDef focus   fill:#E8A33D,stroke:#a96f16,color:#1a1a1a;
+
+    class d1,d2,d3,d4,P1,P2,P3 data
+    class H focus
 ```
 
 A **good partition key**:
@@ -133,15 +166,31 @@ A **good partition key**:
 - **Aligns with the dominant query patterns** — a query that **includes the partition key** routes to **one partition** (cheap, fast). A query **without** it must **fan out across all partitions** and merge the results, costing **far more RUs**.
 
 ```mermaid
-flowchart LR
-    Q1([Query WITH partition key]) --> P1[(One partition)]
-    P1 --> R1([Fast · few RUs])
-    Q2([Query WITHOUT partition key]) --> PA[(Partition 1)]
-    Q2 --> PB[(Partition 2)]
-    Q2 --> PC[(Partition 3)]
-    PA --> R2([Merge results · far more RUs])
-    PB --> R2
-    PC --> R2
+flowchart TB
+    subgraph WithKey["Query WITH partition key"]
+      Q1([Query · includes pk]) -->|routes to one| P1[(One partition)]
+      P1 -->|returns| R1([Fast · few RUs])
+    end
+    subgraph WithoutKey["Query WITHOUT partition key"]
+      Q2([Query · no pk]) -->|fans out| PA[(Partition 1)]
+      Q2 -->|fans out| PB[(Partition 2)]
+      Q2 -->|fans out| PC[(Partition 3)]
+      PA -->|merge| R2([Far more RUs])
+      PB -->|merge| R2
+      PC -->|merge| R2
+    end
+
+    classDef actor   fill:#08427B,stroke:#052c54,color:#ffffff;
+    classDef primary fill:#1168BD,stroke:#0b4a87,color:#ffffff;
+    classDef service fill:#438DD5,stroke:#2d6ca3,color:#ffffff;
+    classDef data    fill:#85BBF0,stroke:#5a9bd4,color:#0b2545;
+    classDef external fill:#8B8B8B,stroke:#5f5f5f,color:#ffffff;
+    classDef focus   fill:#E8A33D,stroke:#a96f16,color:#1a1a1a;
+
+    class Q1,Q2 actor
+    class P1,PA,PB,PC data
+    class R2 service
+    class R1 focus
 ```
 
 **The trade-off mindset:** the ideal key both distributes data evenly *and* matches how the data is most often queried — sometimes those pull in different directions, and the choice is a judgement call. The **concrete partition-key choice for each container is made during the data-migration work**, where the real query patterns are known.

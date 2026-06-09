@@ -19,11 +19,23 @@ Two distinct questions, often confused:
 - **Authorization** — *what may you do?* Granted by **RBAC (role-based access control)**: a **role** (a set of permissions) is assigned to an **identity** at a **scope** (a subscription, resource group, or single resource). Authenticating proves who you are; it grants nothing until a role assignment says what you may do.
 
 ```mermaid
-flowchart LR
-    ID([Identity: user / service]) -->|authenticate: who are you| TOK[Proven identity]
-    TOK -->|authorize: what may you do| RA[Role assignment]
-    RA -->|Role e.g. Key Vault Secrets User| SCOPE[At a scope: subscription / RG / resource]
-    SCOPE --> ALLOW([Allowed actions])
+flowchart TB
+    ID([Identity · user / service]) -->|authenticate · who are you| TOK[Proven identity]
+    TOK -->|authorize · what may you do| RA[Role assignment]
+    RA -->|grants role · e.g. Key Vault Secrets User| SCOPE[At a scope<br/>subscription / RG / resource]
+    SCOPE -->|enables| ALLOW([Allowed actions])
+
+    classDef actor   fill:#08427B,stroke:#052c54,color:#ffffff;
+    classDef primary fill:#1168BD,stroke:#0b4a87,color:#ffffff;
+    classDef service fill:#438DD5,stroke:#2d6ca3,color:#ffffff;
+    classDef data    fill:#85BBF0,stroke:#5a9bd4,color:#0b2545;
+    classDef external fill:#8B8B8B,stroke:#5f5f5f,color:#ffffff;
+    classDef focus   fill:#E8A33D,stroke:#a96f16,color:#1a1a1a;
+
+    class ID,ALLOW actor
+    class TOK primary
+    class SCOPE service
+    class RA focus
 ```
 
 ---
@@ -63,11 +75,25 @@ Not every identity is a person. Three kinds matter:
 
 ```mermaid
 flowchart TB
-    subgraph Robots
-      SP[Service principal\nyou hold + rotate a secret]
-      MI[Managed identity\nno secret to handle]
+    ROOT([Directory identity])
+    ROOT -->|human · interactive| USER[User account]
+    subgraph Robots["Robot identities · automation"]
+      SP[Service principal<br/>you hold + rotate a secret]
+      MI[Managed identity<br/>no secret to handle]
     end
-    USER[User\nhuman, interactive sign-in]
+    ROOT -->|automation · you manage secret| SP
+    ROOT -->|automation · Azure-managed| MI
+
+    classDef actor   fill:#08427B,stroke:#052c54,color:#ffffff;
+    classDef primary fill:#1168BD,stroke:#0b4a87,color:#ffffff;
+    classDef service fill:#438DD5,stroke:#2d6ca3,color:#ffffff;
+    classDef data    fill:#85BBF0,stroke:#5a9bd4,color:#0b2545;
+    classDef external fill:#8B8B8B,stroke:#5f5f5f,color:#ffffff;
+    classDef focus   fill:#E8A33D,stroke:#a96f16,color:#1a1a1a;
+
+    class ROOT,USER actor
+    class SP service
+    class MI focus
 ```
 
 **Service principal vs managed identity:**
@@ -88,13 +114,32 @@ The rule of thumb: **if the code runs on an Azure resource, prefer a managed ide
 Managed identities are wonderful, but historically a workload **inside Kubernetes** couldn't simply *be* a managed identity. **Workload identity federation** closes that gap: it lets a Kubernetes pod **exchange the token its own cluster already gives it** for an Azure token tied to a managed identity — **with no secret stored anywhere**.
 
 ```mermaid
-flowchart LR
-    POD([Pod running the service]) -->|uses| SA[Kubernetes service account]
-    SA -->|projects a signed| KTOK[Cluster JWT token]
-    KTOK -->|presented to Entra| FC[Federated credential\ntrusts this cluster + service account]
-    FC -->|maps to| MI[Managed identity]
-    MI -->|Entra issues| ATOK[Azure access token]
-    ATOK --> RES[(Azure resource: Key Vault / Service Bus / Cosmos)]
+flowchart TB
+    subgraph Cluster["Kubernetes cluster"]
+      POD([Pod running the service]) -->|runs as| SA[Service account]
+      SA -->|projects signed| KTOK[Cluster JWT token]
+    end
+    subgraph Entra["Microsoft Entra"]
+      FC[Federated credential<br/>trusts cluster + service account]
+      MI[Managed identity]
+      FC -->|maps to| MI
+      MI -->|issues| ATOK[Azure access token]
+    end
+    KTOK -->|presented to Entra| FC
+    ATOK -->|authorizes call| RES[(Azure resource<br/>Key Vault / Service Bus / Cosmos)]
+
+    classDef actor   fill:#08427B,stroke:#052c54,color:#ffffff;
+    classDef primary fill:#1168BD,stroke:#0b4a87,color:#ffffff;
+    classDef service fill:#438DD5,stroke:#2d6ca3,color:#ffffff;
+    classDef data    fill:#85BBF0,stroke:#5a9bd4,color:#0b2545;
+    classDef external fill:#8B8B8B,stroke:#5f5f5f,color:#ffffff;
+    classDef focus   fill:#E8A33D,stroke:#a96f16,color:#1a1a1a;
+
+    class POD actor
+    class SA,KTOK,ATOK service
+    class MI primary
+    class RES data
+    class FC focus
 ```
 
 Step by step, what is exchanged at each hop:
@@ -118,12 +163,24 @@ Writing different auth code for "local dev" vs "in the cloud" is error-prone. **
 - **In the cloud**, it resolves to the **workload / managed identity** of the resource the code runs on.
 
 ```mermaid
-flowchart LR
-    CODE["DefaultAzureCredential()"] --> CHAIN{Which environment?}
+flowchart TB
+    CODE["DefaultAzureCredential()"] -->|requests token| CHAIN{Which environment?}
     CHAIN -->|local dev| CLI[Azure CLI login]
     CHAIN -->|in Azure| WMI[Workload / managed identity]
-    CLI --> AZ[(Azure resource)]
-    WMI --> AZ
+    CLI -->|token| AZ[(Azure resource)]
+    WMI -->|token| AZ
+
+    classDef actor   fill:#08427B,stroke:#052c54,color:#ffffff;
+    classDef primary fill:#1168BD,stroke:#0b4a87,color:#ffffff;
+    classDef service fill:#438DD5,stroke:#2d6ca3,color:#ffffff;
+    classDef data    fill:#85BBF0,stroke:#5a9bd4,color:#0b2545;
+    classDef external fill:#8B8B8B,stroke:#5f5f5f,color:#ffffff;
+    classDef focus   fill:#E8A33D,stroke:#a96f16,color:#1a1a1a;
+
+    class CHAIN primary
+    class CLI,WMI service
+    class AZ data
+    class CODE focus
 ```
 
 **Same code, no secrets, the environment decides.** The application never embeds a credential; it asks `DefaultAzureCredential` for a token and the platform supplies one appropriate to where it is running.

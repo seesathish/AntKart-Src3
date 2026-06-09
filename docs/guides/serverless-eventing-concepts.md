@@ -42,10 +42,21 @@ Functions are hosted on **instances** the platform creates and destroys for you.
 
 ```mermaid
 flowchart LR
-    IDLE([No instances / scaled to zero]) -->|first event arrives| COLD[Cold start: spin up instance, load runtime + code]
-    COLD --> WARM[Warm instance handles the invocation]
+    IDLE([Scaled to zero<br/>no instances]) -->|first event| COLD[Cold start<br/>spin up + load runtime]
+    COLD -->|ready| WARM[Warm instance<br/>handles invocations]
     WARM -->|more events| WARM
     WARM -->|quiet period| IDLE
+
+    classDef actor   fill:#08427B,stroke:#052c54,color:#ffffff;
+    classDef primary fill:#1168BD,stroke:#0b4a87,color:#ffffff;
+    classDef service fill:#438DD5,stroke:#2d6ca3,color:#ffffff;
+    classDef data    fill:#85BBF0,stroke:#5a9bd4,color:#0b2545;
+    classDef external fill:#8B8B8B,stroke:#5f5f5f,color:#ffffff;
+    classDef focus   fill:#E8A33D,stroke:#a96f16,color:#1a1a1a;
+
+    class IDLE external
+    class WARM service
+    class COLD focus
 ```
 
 - **Cold start** — when no instance is running (the function has been idle), the first event must **spin up an instance and load the runtime and your code** before it can run. That first call pays an added **cold-start delay**.
@@ -78,12 +89,24 @@ The **Consumption plan** is the pay-per-execution, scale-to-zero hosting model. 
 **Event Grid** is a **push-based, near-real-time event router**. Publishers send events to a **topic**; **subscriptions** on that topic route matching events to **handlers** (a Function, a webhook, a queue). Unlike a broker you pull from, Event Grid **pushes** events to handlers as they happen.
 
 ```mermaid
-flowchart LR
-    SRC([Event source / publisher]) --> EGT{{Event Grid topic}}
+flowchart TB
+    SRC([Event source / publisher]) -->|publishes| EGT{{Event Grid topic}}
     EGT -->|filtered routing| SUB[Subscription]
-    SUB -->|push| H[Handler: Function / webhook / queue]
-    H -->|delivery fails| RETRY[Retry with backoff up to 24h]
+    SUB -->|push| H[Handler<br/>Function / webhook / queue]
+    H -->|delivery fails| RETRY[Retry with backoff<br/>up to 24h]
     RETRY -->|still failing| DL[(Dead-letter to storage)]
+
+    classDef actor   fill:#08427B,stroke:#052c54,color:#ffffff;
+    classDef primary fill:#1168BD,stroke:#0b4a87,color:#ffffff;
+    classDef service fill:#438DD5,stroke:#2d6ca3,color:#ffffff;
+    classDef data    fill:#85BBF0,stroke:#5a9bd4,color:#0b2545;
+    classDef external fill:#8B8B8B,stroke:#5f5f5f,color:#ffffff;
+    classDef focus   fill:#E8A33D,stroke:#a96f16,color:#1a1a1a;
+
+    class SRC actor
+    class SUB,H,RETRY service
+    class DL data
+    class EGT focus
 ```
 
 Key properties:
@@ -102,17 +125,28 @@ Put together, they make a clean event-driven feature: **an event or message arri
 
 ```mermaid
 sequenceDiagram
-    participant Pub as Publisher (a service)
+    autonumber
+    participant Pub as Publisher (service)
     participant Bus as Messaging (Service Bus / Event Grid)
     participant Fn as Notification Function
     participant Mail as Email provider
-    Pub->>Bus: publish "order placed" event/message
-    Note over Fn: idle (scaled to zero)
-    Bus->>Fn: trigger fires → cold start, then run
+
+    rect rgb(225, 239, 252)
+    Note over Pub,Bus: Event published
+    Pub->>Bus: publish "order placed" event
+    end
+
+    rect rgb(232, 163, 61)
+    Note over Fn: idle (scaled to zero) then trigger fires
+    Bus->>Fn: trigger fires - cold start, then run
     Fn->>Fn: render the email from the event
+    end
+
+    rect rgb(225, 239, 252)
     Fn->>Mail: send email
     Mail-->>Fn: accepted
-    Note over Fn: stays warm briefly, then scales back to zero
+    Note over Fn: stays warm briefly, then scales to zero
+    end
 ```
 
 No always-on service waits around for notifications; the Function exists only for the moments it is needed.
