@@ -113,7 +113,7 @@ AK.<Service>/
 - **Architecture:** Single API project — thin proxy, no domain layer needed
 - **Roles:** `user` (standard), `admin` (full access)
 - **Endpoints:** POST /login, POST /register, POST /refresh, GET /me, GET /admin/users, POST /admin/users/{id}/roles
-- **Auth:** JWT Bearer validated against Keycloak OIDC discovery endpoint
+- **Auth:** JWT Bearer validated against Microsoft Entra ID OIDC metadata (login/registration still proxy Keycloak — to be reworked in the identity-service step)
 - **Tests:** 20 passing (KeycloakService, KeycloakAdminService, ExceptionHandlerMiddleware — all mocked HTTP; includes RegisterAsync publish + conflict tests, GetAdminTokenAsync, AssignRole step-2 failure, GetUsers missing optional fields)
 - **Swagger:** `http://localhost:5085/swagger` (Development only)
 - **Design doc:** [AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md](AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md)
@@ -131,8 +131,9 @@ AK.<Service>/
 - `Logging/SerilogExtensions` — Serilog with console + rolling file + Elasticsearch sink
 - `HealthChecks/HealthCheckExtensions` — `/health` endpoint
 - `Middleware/CorrelationIdMiddleware` — `X-Correlation-Id` header
-- `Authentication/AuthenticationExtensions` — `AddKeycloakAuthentication()` + `UseKeycloakAuth()` shared JWT auth wiring; validates `azp` claim against `settings.Audience` (`antkart-client`) to prevent cross-client token reuse; logs `JsonException` on malformed `realm_access` claim
-- `Authentication/KeycloakSettings` — typed config record for Keycloak settings
+- `Authentication/AuthenticationExtensions` — `AddEntraAuthentication()` + `UseEntraAuth()` shared JWT auth wiring; validates the token against Microsoft Entra ID (issuer = tenant v2 issuer, audience = the API app registration `api://antkart-api-dev`, lifetime, signature via Entra OIDC keys) and reads authorization from the **flat `roles` claim** (`RoleClaimType = "roles"`, `MapInboundClaims = false`)
+- `Authentication/EntraSettings` — typed, non-secret config record (`Instance`, `TenantId`, `Audience`) bound from the `Entra` section; derives authority/issuer as `{Instance}/{TenantId}/v2.0`
+- `Authentication/KeycloakSettings` — typed config record still consumed by AK.UserIdentity's Keycloak login/admin proxy services (to be reworked in the identity-service step)
 - `Authentication/HttpContextExtensions` — `GetUserId()` extracts `sub` from JWT; `GetUserEmail()` reads `email`/`ClaimTypes.Email`; `GetUserDisplayName()` reads `name`/`given_name`+`family_name`/`preferred_username`
 - `DDD/IDomainEvent` — shared marker interface implemented by all domain event records (Products, Order, Payments)
 - `DDD/IAggregateRoot` — shared marker interface identifying aggregate root entities

@@ -129,4 +129,57 @@ Startup auto-seeding is **disabled by default** for cloud-native operation. A se
 
 ---
 
-*Subsequent steps — managed data store, messaging, identity, and serverless eventing migrations — are added to this guide as they are delivered.*
+## Step 2a — JWT Validation with Microsoft Entra ID
+
+This step migrates the platform's cross-cutting **token validation** from the previous identity provider to **Microsoft Entra ID**, and standardises authorization on the flat `roles` claim Entra emits. It is the authentication half of the identity migration; reworking the identity *service* (login, registration, admin) follows separately.
+
+### Understand
+
+**Authentication vs authorization.** Two distinct questions. *Authentication* asks "is this a genuine, current token from the right issuer, meant for this API?" *Authorization* asks "what is this caller allowed to do?" They are answered by different mechanisms and must not be conflated.
+
+**The four validation checks (authentication).** A bearer token is accepted only if all four hold:
+
+1. **Issuer** — the token's `iss` is our tenant's **Entra v2 issuer** (`https://login.microsoftonline.com/<tenant-id>/v2.0`).
+2. **Audience** — the token's `aud` is **this API's app registration** (its identifier URI `api://antkart-api-dev`), so a token minted for another API cannot be replayed here.
+3. **Signature** — the token is signed by one of **Entra's published OIDC signing keys**, which the middleware fetches (and rotates) automatically from the tenant's OIDC metadata — no key is stored.
+4. **Lifetime** — the token is **not expired** and not used before its valid-from time.
+
+**The flat roles claim (authorization).** Once authenticated, authorization is driven by **app roles**. Entra issues them in a **flat, top-level `roles` claim** (a JSON array of role names). The previous provider nested roles under a `realm_access.roles` structure that each service had to unpack itself. Consuming the **flat `roles` claim** — by mapping the framework's role-claim type to `roles` — is what makes role checks **identical across every service**: the same `RequireRole("admin")` works in the REST APIs and in the gRPC interceptor. Standardising on this claim is also what **resolves KI-001**, the gRPC interceptor that previously read the nested structure and would have failed admin authorization under Entra tokens.
+
+**This is the service's identity boundary, not the user's login.** Validating an incoming token is separate from *issuing* one. Token issuance and the login/registration/admin flows are the identity-service rework, handled in the next step.
+
+### Build
+
+The change is centred on one shared component, `AK.BuildingBlocks.Authentication`, with teaching comments:
+
+- **`EntraSettings`** — a typed, **non-secret** settings record (`Instance`, `TenantId`, `Audience`) bound from the committed `Entra` configuration section. It derives the authority and the expected issuer as `{Instance}/{TenantId}/v2.0`.
+- **`AddEntraAuthentication`** — configures JWT bearer validation:
+  - `Authority` points at the Entra v2 OIDC endpoint, so signing keys are downloaded and rotated automatically.
+  - `TokenValidationParameters` turns on the four checks above (`ValidateIssuer` + `ValidIssuer`, `ValidateAudience` + `ValidAudience`, `ValidateLifetime`, `ValidateIssuerSigningKey`).
+  - `RoleClaimType = "roles"` makes `[Authorize(Roles=…)]`, `RequireRole("admin")`, and the `admin` policy read the **flat** claim directly — no nested parsing.
+  - `MapInboundClaims = false` keeps claims under their original JWT names.
+- **`UseEntraAuth`** — registers `UseAuthentication()` then `UseAuthorization()` in the correct order.
+- **Per service** — every API (`Products`, `ShoppingCart`, `Order`, `Payments`, `Notification`, `Gateway`, `UserIdentity`) calls `AddEntraAuthentication` / `UseEntraAuth` and carries an `Entra` settings section in place of the old provider section. Business logic is unchanged.
+- **gRPC interceptor (KI-001)** — `AK.Discount.Grpc`'s `AuthInterceptor` now reads the flat `roles` claim, so admin write RPCs authorize correctly under Entra tokens; read-only RPCs are unchanged.
+
+### Execute
+
+The Entra settings are **non-secret and committed** (`Entra:Instance`, `Entra:TenantId`, `Entra:Audience`); any value not yet finalized is marked "(to be updated)". To obtain a token for local testing, request one for the API's identifier URI:
+
+```bash
+az account get-access-token --resource api://antkart-api-dev --query accessToken -o tsv
+```
+
+For the token to carry `roles`, the **caller must be assigned the relevant app role** on the API app registration (for example, the `admin` app role for admin-only operations); without an assignment the token authenticates but carries no `roles` claim.
+
+### Verify
+
+- Calling a **protected endpoint** with a valid Entra token (correct issuer, audience, lifetime, signature) **succeeds**.
+- An **admin-only** operation succeeds **only** when the token's flat claim carries `roles: ["admin"]`; a token without it is rejected with 403.
+- A **missing, expired, or wrong-audience** token is rejected with 401.
+
+You can inspect a token's claims by decoding it (for example at a JWT decoder) and confirming `aud` is `api://antkart-api-dev`, `iss` ends in `/v2.0`, and `roles` contains the expected role — without sharing the token, which is a credential.
+
+---
+
+*Subsequent steps — managed data store, the identity-service rework, messaging, and serverless eventing migrations — are added to this guide as they are delivered.*

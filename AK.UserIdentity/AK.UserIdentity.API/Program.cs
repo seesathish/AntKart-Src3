@@ -12,8 +12,12 @@ builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 
 builder.AddSerilogLogging();
 
+// Incoming JWTs are validated against Microsoft Entra ID (shared BuildingBlocks wiring).
+builder.Services.AddEntraAuthentication(builder.Configuration);
+// KeycloakSettings still binds the "Keycloak" section consumed by the login/admin proxy
+// services below. To be reworked in the identity-service step, when this service stops
+// proxying Keycloak and issues/validates tokens entirely through Entra.
 builder.Services.Configure<KeycloakSettings>(builder.Configuration.GetSection("Keycloak"));
-builder.Services.AddKeycloakAuthentication(builder.Configuration);
 builder.Services.AddDefaultHealthChecks();
 builder.Services.AddRabbitMqMassTransit(builder.Configuration, "identity", _ => { });
 
@@ -59,7 +63,7 @@ app.UseMiddleware<ExceptionHandlerMiddleware>();
 
 app.UseSwaggerInDevelopment("AK.UserIdentity API v1");
 
-app.UseKeycloakAuth();
+app.UseEntraAuth();
 
 app.MapAuthEndpoints();
 app.MapAdminEndpoints();

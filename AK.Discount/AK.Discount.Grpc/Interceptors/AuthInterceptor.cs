@@ -38,22 +38,18 @@ public sealed class AuthInterceptor(ILogger<AuthInterceptor> logger) : Intercept
             var handler = new JwtSecurityTokenHandler();
             var jwt = handler.ReadJwtToken(token);
 
-            var realmAccess = jwt.Claims.FirstOrDefault(c => c.Type == "realm_access")?.Value;
-            if (string.IsNullOrEmpty(realmAccess)) return false;
-
-            using var doc = System.Text.Json.JsonDocument.Parse(realmAccess);
-            if (!doc.RootElement.TryGetProperty("roles", out var roles)) return false;
-
-            foreach (var role in roles.EnumerateArray())
-            {
-                if (role.GetString() == "admin") return true;
-            }
+            // KI-001 fix: Microsoft Entra emits app roles in a FLAT, top-level "roles" claim.
+            // JwtSecurityTokenHandler expands that JSON array into one Claim per value, each with
+            // Type == "roles" — so the admin check is a direct claim lookup. This matches how
+            // AK.BuildingBlocks reads roles (RoleClaimType = "roles"), keeping authorization
+            // consistent between the REST services and this gRPC service. (The previous provider
+            // nested roles under realm_access.roles, which this interceptor used to parse.)
+            return jwt.Claims.Any(c => c.Type == "roles" && c.Value == "admin");
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Token validation failed");
+            return false;
         }
-
-        return false;
     }
 }

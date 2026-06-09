@@ -2,11 +2,15 @@
 
 This file tracks known technical debt and deferred fixes. Each item is acknowledged and has a planned resolution point — items here are scheduled, not overlooked.
 
-| ID | Severity | Component | Description | Planned Fix |
-|----|----------|-----------|-------------|-------------|
-| KI-001 | High | AK.Discount.Grpc | The gRPC `AuthInterceptor` reads a nested role-claim structure specific to the current identity provider. When the platform moves to a token format that carries roles in a flat `roles` claim, the admin write RPCs (create/update/delete discount) will fail authorization until the interceptor is updated to read the flat claim, consistent with the other services. Read-only RPCs are unaffected. | Address as part of the identity-provider migration. |
+_No open issues._
+
+## Resolved
+
+| ID | Component | Resolution |
+|----|-----------|------------|
+| KI-001 | AK.Discount.Grpc | The gRPC `AuthInterceptor` read a nested, provider-specific role-claim structure, so the admin write RPCs (create/update/delete discount) would fail authorization once tokens carried roles in a flat `roles` claim. **Resolved in the identity migration to Microsoft Entra ID:** the interceptor now reads the flat top-level `roles` claim, consistent with the shared `AK.BuildingBlocks` authentication. Read-only RPCs are unchanged. |
 
 ## Notes
 
-- Resolved items are removed from the table once verified, with the resolution recorded in the change history (commit message and, where relevant, the migration notes).
+- Resolved items are recorded here (and in the change history) once verified.
 - New deferred issues should be added here with a unique `KI-NNN` id, a severity, the affected component, a clear description, and a planned resolution point.

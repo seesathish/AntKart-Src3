@@ -2,116 +2,92 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
 namespace AK.BuildingBlocks.Authentication;
 
-// Shared JWT authentication setup used by every service (Products, Cart, Order, Payments, Notification).
-// Calling AddKeycloakAuthentication() from a service's Program.cs wires up all of this automatically.
+// Shared JWT authentication used by every service (Products, Cart, Order, Payments,
+// Notification, Gateway, UserIdentity). Calling AddEntraAuthentication() from a service's
+// Program.cs wires up token validation against Microsoft Entra ID once — no per-service copy.
+//
+// AUTHENTICATION (is this a genuine, current token from the right issuer for this API?) is
+// established by the four checks below. AUTHORIZATION (what may the caller do?) is then driven
+// by the FLAT "roles" claim Entra emits — the same claim every service reads, which keeps role
+// checks consistent platform-wide.
 public static class AuthenticationExtensions
 {
-    // Registers JWT Bearer authentication backed by Keycloak as the identity provider.
-    // Each service calls this once in Program.cs — no copy-pasting of JWT config per service.
-    public static IServiceCollection AddKeycloakAuthentication(
+    public static IServiceCollection AddEntraAuthentication(
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var settings = configuration.GetSection("Keycloak").Get<KeycloakSettings>()
-            ?? throw new InvalidOperationException("Keycloak settings are missing from configuration.");
+        var settings = configuration.GetSection("Entra").Get<EntraSettings>()
+            ?? throw new InvalidOperationException("Entra settings are missing from configuration.");
 
-        services.Configure<KeycloakSettings>(configuration.GetSection("Keycloak"));
+        services.Configure<EntraSettings>(configuration.GetSection("Entra"));
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
-                // Authority: Keycloak's OIDC discovery URL. The JWT middleware automatically
-                // downloads the signing keys from {Authority}/.well-known/openid-configuration
-                // and uses them to verify every incoming Bearer token's signature.
-                options.Authority = settings.Authority;
+                // Authority is the Entra v2 OIDC endpoint for the tenant. The middleware downloads
+                // {Authority}/.well-known/openid-configuration and the JWKS signing keys from it
+                // automatically — and refreshes them as Entra rotates keys — so signature
+                // validation never needs a stored key or secret.
+                options.Authority = settings.ResolveAuthority();
                 options.Audience = settings.Audience;
                 options.RequireHttpsMetadata = settings.RequireHttpsMetadata;
+
+                // Keep the original JWT claim names (e.g. "sub", "roles", "email") instead of
+                // remapping them to long XML-style URIs, so downstream code and the role check
+                // below read the claims exactly as Entra issues them.
+                options.MapInboundClaims = false;
+
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
+                    // 1. Issuer — the token must come from OUR tenant's Entra v2 issuer.
                     ValidateIssuer = true,
-                    ValidateAudience = false, // Keycloak uses azp claim; validated manually in OnTokenValidated
+                    ValidIssuer = settings.ResolveIssuer(),
+
+                    // 2. Audience — the token must be intended for THIS API's app registration
+                    //    (its identifier URI / client id). This is what stops a token minted for
+                    //    another API being replayed against this one.
+                    ValidateAudience = true,
+                    ValidAudience = settings.Audience,
+
+                    // 3. Lifetime — not expired and not used before its valid-from time.
                     ValidateLifetime = true,
-                    ValidateIssuerSigningKey = true
-                };
-                options.Events = new JwtBearerEvents
-                {
-                    OnTokenValidated = ctx =>
-                    {
-                        var identity = ctx.Principal?.Identity as System.Security.Claims.ClaimsIdentity;
-                        if (identity is null) return Task.CompletedTask;
 
-                        // azp (authorized party) check: even if the token signature is valid,
-                        // reject tokens that were issued for a different Keycloak client.
-                        // This prevents a token from one microservice being reused against another.
-                        var azp = ctx.Principal?.FindFirst("azp")?.Value;
-                        if (!string.IsNullOrEmpty(settings.Audience) &&
-                            !string.IsNullOrEmpty(azp) &&
-                            azp != settings.Audience)
-                        {
-                            ctx.Fail($"Token azp '{azp}' does not match expected client '{settings.Audience}'.");
-                            return Task.CompletedTask;
-                        }
+                    // 4. Signature — signed by one of Entra's published signing keys.
+                    ValidateIssuerSigningKey = true,
 
-                        // Keycloak stores roles inside a JSON claim called "realm_access":
-                        //   { "realm_access": { "roles": ["user", "admin"] } }
-                        // ASP.NET Core's [Authorize(Roles="admin")] and RequireRole() look for
-                        // ClaimTypes.Role claims, not this custom JSON claim. So we parse the JSON
-                        // and add each role as a standard ClaimTypes.Role claim.
-                        var realmAccess = ctx.Principal?.FindFirst("realm_access")?.Value;
-                        if (realmAccess is null) return Task.CompletedTask;
-
-                        try
-                        {
-                            using var doc = System.Text.Json.JsonDocument.Parse(realmAccess);
-                            if (doc.RootElement.TryGetProperty("roles", out var rolesEl))
-                            {
-                                foreach (var role in rolesEl.EnumerateArray())
-                                {
-                                    var roleValue = role.GetString();
-                                    if (!string.IsNullOrEmpty(roleValue))
-                                        identity.AddClaim(new System.Security.Claims.Claim(
-                                            System.Security.Claims.ClaimTypes.Role, roleValue));
-                                }
-                            }
-                        }
-                        catch (System.Text.Json.JsonException ex)
-                        {
-                            // Non-fatal: log a warning but don't reject the token.
-                            // The user will simply have no roles attached.
-                            var logger = ctx.HttpContext.RequestServices
-                                .GetRequiredService<ILogger<JwtBearerEvents>>();
-                            logger.LogWarning(ex, "Failed to parse realm_access claim");
-                        }
-
-                        return Task.CompletedTask;
-                    }
+                    // Authorization source: Entra emits app roles in a FLAT top-level "roles"
+                    // claim (a JSON array of role names such as admin and user).
+                    // Mapping RoleClaimType to "roles" makes [Authorize(Roles=...)],
+                    // RequireRole("admin") and the policies below read that claim directly — with
+                    // no parsing of a nested provider-specific structure. (The previous provider
+                    // nested roles under realm_access.roles, which each service had to unpack;
+                    // consuming the flat claim is what makes role checks consistent everywhere,
+                    // and is what resolves the gRPC interceptor mismatch tracked as KI-001.)
+                    RoleClaimType = "roles"
                 };
             });
 
-        // Define named policies used in endpoint .RequireAuthorization("admin") calls.
+        // Named policies used by endpoints via .RequireAuthorization("admin") / "authenticated".
         services.AddAuthorization(options =>
         {
-            // "admin" policy: caller must have the "admin" role in their JWT realm_access.roles.
-            options.AddPolicy("admin", policy =>
-                policy.RequireRole("admin"));
+            // "admin" policy: the token's flat "roles" claim must contain "admin".
+            options.AddPolicy("admin", policy => policy.RequireRole("admin"));
 
-            // "authenticated" policy: caller just needs a valid JWT, any role is fine.
-            options.AddPolicy("authenticated", policy =>
-                policy.RequireAuthenticatedUser());
+            // "authenticated" policy: any valid Entra token, regardless of roles.
+            options.AddPolicy("authenticated", policy => policy.RequireAuthenticatedUser());
         });
 
         return services;
     }
 
-    // Registers both UseAuthentication() and UseAuthorization() in the correct order.
-    // Authentication must come before Authorization — calling them in the wrong order causes
-    // authorization policies to always fail because the user identity hasn't been set yet.
-    public static WebApplication UseKeycloakAuth(this WebApplication app)
+    // Registers UseAuthentication() then UseAuthorization() in the correct order.
+    // Authentication must precede Authorization — reversed, policies always fail because the
+    // user identity has not been established yet.
+    public static WebApplication UseEntraAuth(this WebApplication app)
     {
         app.UseAuthentication();
         app.UseAuthorization();

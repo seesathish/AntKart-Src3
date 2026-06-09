@@ -29,7 +29,7 @@ else
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddKeycloakAuthentication(builder.Configuration);
+builder.Services.AddEntraAuthentication(builder.Configuration);
 builder.Services.AddDefaultHealthChecks();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -65,7 +65,7 @@ app.UseMiddleware<ExceptionHandlerMiddleware>();
 
 app.UseSwaggerInDevelopment("AK.Products API v1");
 
-app.UseKeycloakAuth();
+app.UseEntraAuth();
 
 // Cloud-native: startup auto-seeding is opt-in and must never crash the app.
 // It is gated behind Seeding:RunOnStartup (default false) and wrapped so a seed failure
