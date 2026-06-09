@@ -1,6 +1,6 @@
 # Infrastructure as Code: Terraform & Terragrunt — Concepts
 
-A learner-friendly reference for the Infrastructure-as-Code (IaC) foundations the platform's cloud provisioning is built on. Read this first if Terraform and Terragrunt are new to you; the per-resource walkthroughs in the [Infrastructure Guide](infrastructure-guide.md) assume these ideas.
+A first-principles reference for the Infrastructure-as-Code (IaC) foundations the platform's cloud provisioning is built on. It establishes the Terraform and Terragrunt concepts that the per-resource walkthroughs in the [Infrastructure Guide](infrastructure-guide.md) assume.
 
 ---
 

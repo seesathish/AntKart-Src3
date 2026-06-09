@@ -1,6 +1,6 @@
 # Azure Functions & Event Grid — Concepts
 
-A learner-friendly reference for serverless compute and reactive eventing. It explains what "serverless" really means, how Functions are triggered, the instance lifecycle (including cold starts), and how Functions and Event Grid partner to build event-driven features. No prior serverless experience is assumed.
+A first-principles reference for serverless compute and reactive eventing. It explains what "serverless" really means, how Functions are triggered, the instance lifecycle (including cold starts), and how Functions and Event Grid partner to build event-driven features. No prior serverless knowledge is assumed.
 
 ---
 

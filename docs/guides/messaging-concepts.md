@@ -1,6 +1,6 @@
 # Reliable Messaging with Azure Service Bus — Concepts
 
-A learner-friendly reference for the messaging ideas behind the platform. It explains *why* a message broker exists, the two core messaging shapes, the delivery guarantees you must design for, and how it all maps to the platform's design. No prior messaging experience is assumed.
+A first-principles reference for the messaging ideas behind the platform. It explains *why* a message broker exists, the two core messaging shapes, the delivery guarantees you must design for, and how it all maps to the platform's design. No prior messaging knowledge is assumed.
 
 ---
 

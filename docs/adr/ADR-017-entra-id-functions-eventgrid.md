@@ -38,7 +38,7 @@ Two Entra ID app registrations are provisioned by the `infrastructure/modules/en
 | Keep Keycloak in AKS | Additional infrastructure to manage; separate identity silo from the rest of Azure RBAC; no managed SLA |
 | Auth0 / Okta | Third-party dependency; additional cost; doesn't integrate as tightly with Azure RBAC and Managed Identity |
 | Microsoft.Identity.Web | Adds a higher-level abstraction that hides the underlying JWT Bearer config; makes it harder to understand what's actually happening; `AddJwtBearer()` is sufficient and more transparent |
-| Azure AD B2C | Consumer-focused; more complex to configure app roles and admin flows; overkill for an internal/fresher learning platform |
+| Azure AD B2C | Consumer-focused; more complex to configure app roles and admin flows; overkill for this platform's requirements |
 
 ### Why `oid` instead of `sub` as the user identifier
 

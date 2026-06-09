@@ -2,10 +2,10 @@
 
 This guide walks a developer through manually testing every AntKart service end-to-end using Postman. It starts from a clean Docker environment and progresses through each service in dependency order, covering positive flows, negative flows, compensation scenarios, RabbitMQ event monitoring, Kibana log tracing, circuit breaker testing, and email notification verification.
 
-**Intended audience:** Freshers and junior developers performing their first full system test.  
+**Intended audience:** Developers and reviewers running a full end-to-end validation of the platform.  
 **Time required:** 3–4 hours for a complete run-through.
 
-> **Scope note:** This guide covers **Phase-1 local running** of the AntKart platform via Docker Compose, using the public **AntKart reference repository** ([`AntKart-Src1`](https://github.com/seesathish/AntKart-Src1)), which it clones in Section 2. The current repository targets **cloud deployment** — services run locally against live cloud services or are debugged via cloud port-forwarding, with no local docker-compose stack of its own. The `docker-compose` commands below operate on the cloned reference repository.
+> **Scope note:** This guide covers **Phase-1 local running** of the AntKart platform via Docker Compose, using the public **AntKart (Phase 1) microservices repository** ([`AntKart`](https://github.com/seesathish/AntKart)), which it clones in Section 2. The cloud-native repository (Phase 2) targets **cloud deployment** — services run locally against live cloud services or are debugged via cloud port-forwarding, with no local docker-compose stack of its own. The `docker-compose` commands below operate on the cloned Phase 1 repository.
 
 ---
 
@@ -58,8 +58,8 @@ Both commands must print a version number. If Docker Desktop is not running, sta
 ### 2.1 Clone and Navigate
 
 ```bash
-git clone https://github.com/seesathish/AntKart-Src1.git
-cd AntKart-Src1
+git clone https://github.com/seesathish/AntKart.git
+cd AntKart
 ```
 
 ### 2.2 Start All Services

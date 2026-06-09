@@ -1,6 +1,6 @@
 # Azure Cosmos DB Concepts — Primer
 
-A learner-friendly reference for the Cosmos DB ideas behind the platform's data layer. It explains the concepts first, then shows how they shape the way the database is provisioned and used. No prior Cosmos DB experience is assumed.
+A first-principles reference for the Cosmos DB ideas behind the platform's data layer. It explains the concepts first, then shows how they shape the way the database is provisioned and used. No prior Cosmos DB knowledge is assumed.
 
 ---
 

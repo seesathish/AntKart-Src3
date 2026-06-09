@@ -116,7 +116,7 @@ This is the standard MassTransit pattern. The alternative — mapping MassTransi
 
 **Clarification on the pre-provisioned Terraform entities:**
 
-The `order-commands` queue and `integration-events` topic created by the messaging Terraform module are teaching constructs. They illustrate the Queue vs Topic concept for junior developers learning the platform. They are not used by MassTransit's runtime topology. Both coexist in the namespace — there is no conflict.
+The `order-commands` queue and `integration-events` topic created by the messaging Terraform module are teaching constructs. They illustrate the Queue vs Topic distinction for developers studying the platform. They are not used by MassTransit's runtime topology. Both coexist in the namespace — there is no conflict.
 
 **Requirements for auto-topology:**
 

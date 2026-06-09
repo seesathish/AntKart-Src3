@@ -1,6 +1,6 @@
 # Identity: Entra ID, Managed Identities & Workload Identity — Concepts
 
-A learner-friendly reference for the identity and access model behind the platform. It builds from the foundations (tenant, authentication, RBAC) up to the goal: **code that runs in the cloud authenticating with no stored secret**. No prior identity experience is assumed.
+A first-principles reference for the identity and access model behind the platform. It builds from the foundations (tenant, authentication, RBAC) up to the goal: **code that runs in the cloud authenticating with no stored secret**. No prior identity knowledge is assumed.
 
 ---
 

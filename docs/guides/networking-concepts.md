@@ -1,6 +1,6 @@
 # Networking & Kubernetes Concepts — Primer
 
-A learner-friendly reference for the networking and Kubernetes ideas behind the platform's cloud infrastructure. It explains the concepts first, then shows how they shape the way the network is sized. No prior cloud-networking experience is assumed.
+A first-principles reference for the networking and Kubernetes ideas behind the platform's cloud infrastructure. It explains the concepts first, then shows how they shape the way the network is sized. No prior cloud-networking knowledge is assumed.
 
 ---
 

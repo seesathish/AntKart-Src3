@@ -96,8 +96,8 @@ Prerequisites: the [.NET 9 SDK](https://dotnet.microsoft.com/download), and Dock
 Build and test:
 
 ```bash
-git clone https://github.com/seesathish/AntKart-Src3.git
-cd AntKart-Src3
+git clone https://github.com/seesathish/AntKart.git
+cd AntKart
 dotnet restore   # run from the repository root so nuget.config is applied
 dotnet build
 dotnet test      # 618 tests
@@ -109,7 +109,7 @@ Run a service:
 cd AK.Products/AK.Products.API && dotnet run   # http://localhost:5077/swagger
 ```
 
-Each service binds to its backing infrastructure. The complete self-hosted local stack — Docker Compose for Keycloak, RabbitMQ, the databases, Mailhog, and ELK — is preserved in the public AntKart reference repository; this repository targets cloud deployment, for which the [Infrastructure Guide](docs/guides/infrastructure-guide.md) is the provisioning reference. The [Postman collection](AntKart.postman_collection.json) and the [Developer Testing Guide](docs/test/DevTestGuide.md) cover end-to-end verification.
+Each service binds to its backing infrastructure. The complete self-hosted local stack — Docker Compose for Keycloak, RabbitMQ, the databases, Mailhog, and ELK — is provided by the public AntKart (Phase 1) repository; this cloud-native repository targets cloud deployment, for which the [Infrastructure Guide](docs/guides/infrastructure-guide.md) is the provisioning reference. The [Postman collection](AntKart.postman_collection.json) and the [Developer Testing Guide](docs/test/DevTestGuide.md) cover end-to-end verification.
 
 ---
 
@@ -149,13 +149,15 @@ The cloud-native platform does not replace the baseline; it maps it onto managed
 
 ---
 
-## Learning Challenges
+## Developer Challenge
 
-The repository supports two independent exercises.
+AntKart is published as a professional reference — for architectural review and for hands-on reconstruction. It supports two complementary tracks.
 
-**Cloud-native concepts from first principles.** The concept primers develop each cloud domain — IaC, networking and Kubernetes, identity, messaging, serverless and eventing, and Cosmos DB — without assuming prior cloud experience, and link to the ADR that applies each one. Begin with the [IaC primer](docs/guides/iac-concepts.md).
+**Study the architecture from the documentation and test artefacts.** Work through the cloud-native architecture, concepts, and implementation entirely from this repository's documentation and tests: the C4 model, the concept primers, the Architecture Decision Records, the Infrastructure Guide, and the integration and manual test suites. This track builds a complete understanding of how the platform is designed and verified without provisioning anything.
 
-**Reconstruction of the cloud deployment.** Starting from the application baseline, the managed-Azure platform can be reproduced incrementally: provision the infrastructure as code, map each baseline component to its managed equivalent, and adopt the secret-less identity model. The [Infrastructure Guide](docs/guides/infrastructure-guide.md) sequences this resource by resource.
+**Rebuild and validate the cloud-native platform.** Clone the public AntKart (Phase 1) microservices repository and undertake the cloud-native build and validation by following the [Development Guide](DevelopmentGuide.md) and the [Developer Testing Guide](docs/test/DevTestGuide.md): provision the infrastructure as code, map each baseline component to its managed equivalent, adopt the secret-less identity model, and verify each step end to end.
+
+The relationship between the repositories is **Phase 1 (AntKart — microservices) → Phase 2 (AntKart-CloudNative — the cloud-native build derived from Phase 1)**.
 
 ---
 
@@ -210,7 +212,7 @@ AntKart/
 | Architecture Decisions | Why each key technology was chosen | [docs/adr/](docs/adr/) |
 | Security Tests | Ethical black-box & grey-box security test guide (15 categories) | [SECURITY_TESTS.md](docs/test/SECURITY_TESTS.md) |
 | Skills | Step-by-step guides for development, maintenance, and verification tasks | [docs/skills/](docs/skills/) |
-| Developer Testing Guide | Fresher-level end-to-end manual test guide (Postman, RabbitMQ, Kibana, SAGA, payments) | [DevTestGuide.md](docs/test/DevTestGuide.md) |
+| Developer Testing Guide | End-to-end manual test guide (Postman, RabbitMQ, Kibana, SAGA, payments) | [DevTestGuide.md](docs/test/DevTestGuide.md) |
 
 ---
 

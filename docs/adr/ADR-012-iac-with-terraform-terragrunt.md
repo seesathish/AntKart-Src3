@@ -13,7 +13,7 @@ AntKart Phase 1 ran entirely on Docker Compose on a local developer machine. Pha
 The requirements that drove this decision:
 
 1. **Reproducibility** — dev, staging, and prod environments must be provisionable from the same codebase with different configuration values, not manual portal steps.
-2. **Team safety** — multiple developers (and later mentees learning the platform) must be able to make infrastructure changes without corrupting shared state or accidentally deleting production resources.
+2. **Team safety** — multiple developers must be able to make infrastructure changes without corrupting shared state or accidentally deleting production resources.
 3. **Teaching value** — the chosen toolchain must be widely adopted in industry so that skills built on AntKart transfer to real-world Azure projects.
 4. **DRY module structure** — the eight microservices and their dependencies create significant infrastructure. Backend configuration and provider setup should not be copy-pasted into every module folder.
 5. **State isolation** — each logical component (resource group, networking, AKS, ACR, Key Vault, etc.) must manage its own state independently so that a plan for networking doesn't show every resource on the platform.
@@ -99,7 +99,7 @@ Bicep is Microsoft's first-party IaC language for Azure. It has excellent Azure 
 **Reasons not chosen:**
 - **Azure-only** — skills and modules are not transferable to multi-cloud or hybrid scenarios. The AntKart platform may need AWS or on-premises connectivity in Phase 3.
 - **No Terragrunt equivalent** — Bicep has modules but lacks a DRY orchestration layer comparable to Terragrunt's `include` and `dependency` patterns. Each deployment unit would need its own redundant backend configuration.
-- **Smaller ecosystem** — Terraform has a broader library of community modules and more StackOverflow coverage, which matters when teaching junior developers.
+- **Smaller ecosystem** — Terraform has a broader library of community modules and more StackOverflow coverage, which lowers the learning curve for developers adopting it.
 - **State management** — Bicep uses ARM deployments (server-side history) rather than a local state file. This is simpler for basic cases but gives less control over drift detection and state manipulation.
 
 ### Option B: ARM Templates (rejected)
@@ -121,7 +121,7 @@ Terraform alone can achieve everything in this ADR. Terragrunt is optional.
 - `run-all` enables deploying or destroying an entire environment with one command while respecting dependency order.
 - The overhead is minimal: Terragrunt is a thin wrapper that calls vanilla Terraform. Every `terragrunt init/plan/apply` is exactly `terraform init/plan/apply` with injected configuration.
 
-**Accepted tradeoff:** Adds a second tool to learn. Mitigated by explaining Terragrunt's role clearly (as this ADR and `DevelopmentGuide.md` do) and by the fact that every mentee who learns it gains a marketable skill used widely in the industry.
+**Accepted tradeoff:** Adds a second tool to learn. Mitigated by explaining Terragrunt's role clearly (as this ADR and `DevelopmentGuide.md` do) and by the fact that the skill is widely used across the industry and transfers directly to other projects.
 
 ### Option D: Pulumi (rejected)
 
@@ -142,7 +142,7 @@ Pulumi allows writing infrastructure in TypeScript, Python, Go, or C# — which 
 - **Single source of truth** — the Git repository is the authoritative record of infrastructure. Every change is a PR, every PR has a plan, every merge is an apply.
 - **Environment parity** — dev, staging, and prod are provisionable from identical module code with different `env.hcl` values. Configuration drift is detected by Terraform plan.
 - **Blast radius isolation** — module-level state files mean a plan for AKS shows only AKS resources. Destroying the AKS module doesn't touch the VNet or Key Vault state.
-- **Teaching transfer** — Terraform + Terragrunt skills are directly applicable to most Azure, AWS, and GCP projects the mentees will encounter in industry.
+- **Skill transfer** — Terraform + Terragrunt skills are directly applicable to most Azure, AWS, and GCP projects encountered in industry.
 - **Lifecycle protection** — `prevent_destroy = true` on the resource group prevents accidental deletion via `terraform destroy`, adding a safety layer that portal-based management lacks.
 
 ### Negative
