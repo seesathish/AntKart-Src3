@@ -123,6 +123,10 @@ Confirm the service started and resolved its configuration from Key Vault **with
 
 The log line reports only the **vault URI** (a non-secret value) and never the secret contents — secrets remain in the vault and in memory only. The service is now reading configuration from Key Vault using its own Entra identity, with no connection strings committed: the foundation the remaining migration steps build on.
 
+### Note on data seeding
+
+Startup auto-seeding is **disabled by default** for cloud-native operation. A service must not crash on boot, nor mutate the data store as a side effect of starting, simply because a store is momentarily unavailable. The `AK.Products` seeder is therefore gated behind a `Seeding:RunOnStartup` flag (default `false`) and the startup call is wrapped so that a seed failure logs a warning and the application still starts. Routine data seeding is instead performed as a **deliberate, separate operation** by a dedicated loader (introduced in the test-enablement step), not on application start.
+
 ---
 
 *Subsequent steps — managed data store, messaging, identity, and serverless eventing migrations — are added to this guide as they are delivered.*

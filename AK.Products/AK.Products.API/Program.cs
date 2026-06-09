@@ -67,10 +67,23 @@ app.UseSwaggerInDevelopment("AK.Products API v1");
 
 app.UseKeycloakAuth();
 
-var seedEnabled = app.Environment.IsDevelopment() ||
-    string.Equals(app.Configuration["SEED_DATABASE"], "true", StringComparison.OrdinalIgnoreCase);
-if (seedEnabled)
-    await app.SeedDatabaseAsync();
+// Cloud-native: startup auto-seeding is opt-in and must never crash the app.
+// It is gated behind Seeding:RunOnStartup (default false) and wrapped so a seed failure
+// (e.g. the data store being unavailable) logs a warning and the application still starts.
+// Routine data seeding is a deliberate, separate operation, not a boot-time side effect.
+var runSeedOnStartup = string.Equals(
+    app.Configuration["Seeding:RunOnStartup"], "true", StringComparison.OrdinalIgnoreCase);
+if (runSeedOnStartup)
+{
+    try
+    {
+        await app.SeedDatabaseAsync();
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Startup seeding skipped/failed: {Reason}", ex.Message);
+    }
+}
 
 app.MapProductEndpoints();
 app.MapDefaultHealthChecks();
