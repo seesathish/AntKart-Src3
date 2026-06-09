@@ -89,30 +89,6 @@ Significant design and infrastructure decisions are recorded as [Architecture De
 
 ---
 
-## Quick Start
-
-Prerequisites: the [.NET 9 SDK](https://dotnet.microsoft.com/download), and Docker for the backing services (databases, message broker, identity provider, mail trap).
-
-Build and test:
-
-```bash
-git clone https://github.com/seesathish/AntKart.git
-cd AntKart
-dotnet restore   # run from the repository root so nuget.config is applied
-dotnet build
-dotnet test      # 618 tests
-```
-
-Run a service:
-
-```bash
-cd AK.Products/AK.Products.API && dotnet run   # http://localhost:5077/swagger
-```
-
-Each service binds to its backing infrastructure. The complete self-hosted local stack — Docker Compose for Keycloak, RabbitMQ, the databases, Mailhog, and ELK — is provided by the public AntKart (Phase 1) repository; this cloud-native repository targets cloud deployment, for which the [Infrastructure Guide](docs/guides/infrastructure-guide.md) is the provisioning reference. The [Postman collection](AntKart.postman_collection.json) and the [Developer Testing Guide](docs/test/DevTestGuide.md) cover end-to-end verification.
-
----
-
 ## Documentation
 
 | Document | Scope |
@@ -122,30 +98,19 @@ Each service binds to its backing infrastructure. The complete self-hosted local
 | [Infrastructure Guide](docs/guides/infrastructure-guide.md) | Step-by-step provisioning of the cloud platform — each resource as Understand → Build → Execute → Verify. |
 | [infrastructure/README](infrastructure/README.md) | Layout and operating model of the Terraform/Terragrunt code. |
 | Concept primers | First-principles references for the cloud-native domains: [IaC](docs/guides/iac-concepts.md), [Networking & Kubernetes](docs/guides/networking-concepts.md), [Identity](docs/guides/identity-concepts.md), [Messaging](docs/guides/messaging-concepts.md), [Serverless & Eventing](docs/guides/serverless-eventing-concepts.md), [Cosmos DB](docs/guides/cosmosdb-concepts.md). |
+| Cross-cutting design notes | [Event Bus](docs/design/EVENTBUS.md), [Resilience](docs/design/RESILIENCE.md), and [Observability](docs/design/OBSERVABILITY.md) — the design of the messaging, resilience, and logging concerns. |
+| [Building Blocks](AK.BuildingBlocks/BUILDING_BLOCKS.md) | The shared cross-cutting library: DDD base types, authentication, messaging, resilience, and middleware. |
 | [Architecture Decision Records](docs/adr/README.md) | The rationale behind each significant design and infrastructure decision. |
+| [Integration Tests](AK.IntegrationTests/INTEGRATION_TESTS.md) | SAGA and event-bus tests on the MassTransit in-memory harness. |
 | [Developer Testing Guide](docs/test/DevTestGuide.md) | End-to-end manual verification across Postman, messaging, the SAGA, and payments. |
 | [Security Test Guide](docs/test/SECURITY_TESTS.md) | Black-box and grey-box security testing methodology. |
+| [Development & maintenance guides](docs/skills/) | Step-by-step procedures for common development and maintenance tasks. |
 
 ---
 
 ## Application Baseline and Cloud-Native Target
 
-AntKart is defined at two layers, and both are present throughout the documentation.
-
-The **application baseline** is how the services are built and run against self-hosted backing infrastructure: Keycloak for identity, RabbitMQ for messaging, per-service local databases, and ELK for observability. It is the layer exercised by the [Quick Start](#quick-start).
-
-The **cloud-native target** maps the same services onto managed Azure equivalents under a secret-less, identity-based posture — managed identities, least-privilege RBAC, and no connection strings. The application code is largely unchanged; the infrastructure it binds to is what differs.
-
-The cloud-native platform does not replace the baseline; it maps it onto managed services:
-
-| Application baseline | Cloud-native equivalent |
-|----------------------|-------------------------|
-| Keycloak (identity) | Microsoft Entra ID |
-| RabbitMQ (messaging) | Azure Service Bus |
-| MongoDB (product store) | Azure Cosmos DB (MongoDB API) |
-| PostgreSQL / Redis | Managed Azure data services |
-| ELK (Serilog → Elasticsearch → Kibana) | Azure Monitor / Application Insights |
-| Connection-string secrets | Managed identities — no secrets |
+AntKart is defined at two layers. The **application baseline** — the eight services running against self-hosted backing infrastructure for identity, messaging, per-service databases, and logging — lives in the public AntKart (Phase 1) repository. This repository is the **cloud-native target**: the same services mapped onto managed Azure equivalents under a secret-less, identity-based posture, with the infrastructure defined as code. The application code is largely unchanged across the two; what differs is the infrastructure it binds to. The full concern-by-concern mapping is in the [Technology Stack](#technology-stack) above.
 
 ---
 
@@ -165,14 +130,14 @@ The relationship between the repositories is **Phase 1 (AntKart — microservice
 
 ```
 AntKart/
-├── AK.Products/          REST Minimal API — product catalogue (MongoDB)
+├── AK.Products/          REST Minimal API — product catalogue (MongoDB / Cosmos DB)
 ├── AK.Discount/          gRPC service — discount coupons (SQLite)
 ├── AK.ShoppingCart/      REST Minimal API — shopping cart (Redis)
 ├── AK.Order/             REST Minimal API — order management (PostgreSQL + SAGA)
-├── AK.UserIdentity/      REST Minimal API — Keycloak identity proxy
+├── AK.UserIdentity/      REST Minimal API — identity proxy (Microsoft Entra ID — to be updated)
 ├── AK.Gateway/           API Gateway — Ocelot single entry point
 ├── AK.Payments/          REST Minimal API — payment processing (PostgreSQL + Razorpay)
-├── AK.Notification/      REST Minimal API — transactional notifications (PostgreSQL + Mailhog/SMTP)
+├── AK.Notification/      REST Minimal API — transactional notifications (PostgreSQL + SMTP)
 ├── AK.BuildingBlocks/    Shared library (messaging, resilience, logging, auth)
 ├── AK.IntegrationTests/  SAGA + event bus + notification consumer tests (MassTransit in-memory harness)
 ├── AntKart.postman_collection.json
@@ -180,8 +145,10 @@ AntKart/
 │   ├── adr/              Architecture Decision Records
 │   ├── architecture/     C4 diagram images + Structurizr workspace
 │   ├── design/           Cross-cutting design docs (EVENTBUS, RESILIENCE, OBSERVABILITY)
-│   ├── skills/           Step-by-step development & maintenance guides (12 skills)
+│   ├── guides/           Concept primers + the Infrastructure Guide
+│   ├── skills/           Step-by-step development & maintenance guides
 │   └── test/             Manual test & security test guides (DevTestGuide, SECURITY_TESTS)
+├── infrastructure/       Terraform modules + Terragrunt live units
 └── nuget.config
 ```
 
@@ -189,30 +156,18 @@ AntKart/
 
 ## Microservices
 
-| Service | Transport | Database | Port (Docker) | Design Doc |
-|---------|-----------|----------|---------------|------------|
-| [AK.Products](AK.Products/AK.Products.API) | REST Minimal API | MongoDB | 8080 | [Products Design](AK.Products/PRODUCTS_TECHNICAL_DESIGN.md) |
-| [AK.Discount](AK.Discount/AK.Discount.Grpc) | gRPC | SQLite | 8081 | [Discount Design](AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md) |
-| [AK.ShoppingCart](AK.ShoppingCart/AK.ShoppingCart.API) | REST Minimal API | Redis | 8082 | [ShoppingCart Design](AK.ShoppingCart/SHOPPING_CART_TECHNICAL_DESIGN.md) |
-| [AK.Order](AK.Order/AK.Order.API) | REST Minimal API | PostgreSQL | 8083 | [Order Design](AK.Order/ORDER_TECHNICAL_DESIGN.md) |
-| [AK.UserIdentity](AK.UserIdentity/AK.UserIdentity.API) | REST Minimal API | Keycloak | 8084 | [Identity Design](AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md) |
-| [AK.Payments](AK.Payments/AK.Payments.API) | REST Minimal API | PostgreSQL + Razorpay | 8085 | [Payments Design](AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md) |
-| [AK.Notification](AK.Notification/AK.Notification.API) | REST Minimal API | PostgreSQL + Mailhog/SMTP | 8086 | [Notification Design](AK.Notification/NOTIFICATION_TECHNICAL_DESIGN.md) |
-| [AK.Gateway](AK.Gateway/AK.Gateway.API) | Ocelot API Gateway | — | 9090 | [Gateway Design](AK.Gateway/API_GATEWAY.md) |
+| Service | Transport | Data store | Design Doc |
+|---------|-----------|------------|------------|
+| [AK.Products](AK.Products/AK.Products.API) | REST Minimal API | MongoDB / Cosmos DB | [Products Design](AK.Products/PRODUCTS_TECHNICAL_DESIGN.md) |
+| [AK.Discount](AK.Discount/AK.Discount.Grpc) | gRPC | SQLite | [Discount Design](AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md) |
+| [AK.ShoppingCart](AK.ShoppingCart/AK.ShoppingCart.API) | REST Minimal API | Redis | [ShoppingCart Design](AK.ShoppingCart/SHOPPING_CART_TECHNICAL_DESIGN.md) |
+| [AK.Order](AK.Order/AK.Order.API) | REST Minimal API | PostgreSQL | [Order Design](AK.Order/ORDER_TECHNICAL_DESIGN.md) |
+| [AK.UserIdentity](AK.UserIdentity/AK.UserIdentity.API) | REST Minimal API | Microsoft Entra ID (to be updated) | [Identity Design](AK.UserIdentity/IDENTITY_TECHNICAL_DESIGN.md) |
+| [AK.Payments](AK.Payments/AK.Payments.API) | REST Minimal API | PostgreSQL + Razorpay | [Payments Design](AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md) |
+| [AK.Notification](AK.Notification/AK.Notification.API) | REST Minimal API | PostgreSQL + SMTP | [Notification Design](AK.Notification/NOTIFICATION_TECHNICAL_DESIGN.md) |
+| [AK.Gateway](AK.Gateway/AK.Gateway.API) | Ocelot API Gateway | — | [Gateway Design](AK.Gateway/API_GATEWAY.md) |
 
-## Cross-Cutting
-
-| Component | Technology | Design Doc |
-|-----------|-----------|------------|
-| BuildingBlocks | Shared DDD base classes, auth, messaging, resilience, middleware | [BUILDING_BLOCKS.md](AK.BuildingBlocks/BUILDING_BLOCKS.md) |
-| Event Bus | MassTransit + RabbitMQ + SAGA + Outbox | [EVENTBUS.md](docs/design/EVENTBUS.md) |
-| Resilience | Polly v8 (retry, circuit breaker, timeout) | [RESILIENCE.md](docs/design/RESILIENCE.md) |
-| Observability | Serilog + Elasticsearch + Kibana | [OBSERVABILITY.md](docs/design/OBSERVABILITY.md) |
-| Integration Tests | MassTransit in-memory test harness | [INTEGRATION_TESTS.md](AK.IntegrationTests/INTEGRATION_TESTS.md) |
-| Architecture Decisions | Why each key technology was chosen | [docs/adr/](docs/adr/) |
-| Security Tests | Ethical black-box & grey-box security test guide (15 categories) | [SECURITY_TESTS.md](docs/test/SECURITY_TESTS.md) |
-| Skills | Step-by-step guides for development, maintenance, and verification tasks | [docs/skills/](docs/skills/) |
-| Developer Testing Guide | End-to-end manual test guide (Postman, RabbitMQ, Kibana, SAGA, payments) | [DevTestGuide.md](docs/test/DevTestGuide.md) |
+Cloud ingress and API Management endpoints for each service are **(to be updated)** as the deployment topology is finalized.
 
 ---
 
@@ -227,70 +182,33 @@ AntKart/
 | AK.Payments | Authenticated (`/me` = own payments) | Authenticated |
 | AK.Notification | Authenticated (`/` = own notifications; `/admin` = Admin only) | Event-driven only — no write endpoints |
 | AK.UserIdentity | `/login`, `/register`, `/refresh` anonymous | `/me` authenticated; `/admin/*` admin only |
-| AK.Gateway | Proxied from downstream | JWT validated at gateway + downstream |
+| AK.Gateway | Proxied from downstream | JWT validated at gateway and downstream |
 
-**Roles:** `user` (standard), `admin` (full access)
-**Token issuer:** Keycloak realm `antkart` — get a token via `POST /api/auth/login`
+**Roles:** `user` (standard), `admin` (full access).
+
+**Identity provider:** Microsoft Entra ID. Bearer tokens are validated at the gateway and re-validated by each service against the Entra OIDC metadata; issuer, audience, and token-acquisition specifics are **(to be updated)** pending completion of the identity migration.
 
 ---
 
-## Running the Full Stack
+## Getting Started
 
-This repository targets **cloud deployment**. There is no local docker-compose stack — run the services locally against live cloud services (databases, message broker, identity) or debug them via **cloud port-forwarding**. The earlier docker-compose-based Phase-1 local stack is preserved in the public AntKart reference repository.
-
-The endpoints below use the illustrative ports from that reference setup:
-
-| Service | URL |
-|---------|-----|
-| **API Gateway** | http://localhost:9090 |
-| Keycloak Admin | http://localhost:8090 |
-| RabbitMQ Management | http://localhost:15672  (guest/guest) |
-| Kibana | http://localhost:5601 |
-| AK.Products Swagger | http://localhost:8080/swagger (Development only) |
-| AK.Discount gRPC | http://localhost:8081 |
-| AK.ShoppingCart Swagger | http://localhost:8082/swagger (Development only) |
-| AK.Order Swagger | http://localhost:8083/swagger (Development only) |
-| AK.UserIdentity Swagger | http://localhost:8084/swagger (Development only) |
-| AK.Payments Swagger | http://localhost:8085/swagger (Development only) |
-| AK.Notification Swagger | http://localhost:8086/swagger (Development only) |
-| **Mailhog Web UI** | **http://localhost:8025** (captured emails) |
-
-> **Keycloak auto-import:** The `antkart` realm is imported from `keycloak/antkart-realm.json` on first start. Pre-seeded users: `admin/admin123` (admin+user), `user1/user123` (user), `admin2/Admin2Pass!` (admin+user).
-
-### Individual services (dev)
+**Study the codebase.** Clone the public AntKart (Phase 1) microservices repository and validate the build and tests:
 
 ```bash
-# With the backing services (Keycloak, RabbitMQ, MongoDB, Redis, PostgreSQL,
-# Elasticsearch) reachable in the cloud — directly or via port-forward —
-# run each service locally in separate terminals:
-cd AK.Products/AK.Products.API && dotnet run    # :5077
-cd AK.Discount/AK.Discount.Grpc && dotnet run   # :5001
-cd AK.ShoppingCart/AK.ShoppingCart.API && dotnet run  # :5079
-cd AK.Order/AK.Order.API && dotnet run          # :5080
-cd AK.UserIdentity/AK.UserIdentity.API && dotnet run  # :5085
-cd AK.Payments/AK.Payments.API && dotnet run          # :5086
-cd AK.Notification/AK.Notification.API && dotnet run  # :5087
-cd AK.Gateway/AK.Gateway.API && dotnet run            # :8000
+git clone https://github.com/seesathish/AntKart.git
+cd AntKart
+dotnet restore   # run from the repository root so nuget.config is applied
+dotnet build
+dotnet test      # 618 tests
 ```
 
----
-
-## API Testing
-
-Import **[AntKart.postman_collection.json](AntKart.postman_collection.json)** into Postman.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `gatewayUrl` | `http://localhost:9090` | API Gateway (recommended entry point) |
-| `productsUrl` | `http://localhost:8080` | Products direct |
-| `cartUrl` | `http://localhost:8082` | ShoppingCart direct |
-| `orderUrl` | `http://localhost:8083` | Order direct |
-| `identityUrl` | `http://localhost:8084` | UserIdentity direct |
-| `accessToken` | (set after login) | JWT Bearer token |
+**Provision the cloud-native platform.** Follow the [Infrastructure Guide](docs/guides/infrastructure-guide.md) to provision the managed Azure resources as code — Terraform modules and Terragrunt live units, with a reviewed `plan` before each `apply` — and the [Development Guide](DevelopmentGuide.md) for the delivery phases. With the managed services in place, each service runs locally against live cloud services, directly or via cloud port-forwarding. Service endpoints and ports are **(to be updated)** as the deployment topology is finalized.
 
 ---
 
-## Tests
+## Testing
+
+The test suite is layer-agnostic: it exercises domain logic, validators, handlers, and the SAGA and event bus independently of where the services are deployed.
 
 ```bash
 dotnet test
@@ -307,3 +225,5 @@ dotnet test
 | AK.Payments.Tests | 70 |
 | AK.Notification.Tests | 37 |
 | **Total** | **618** |
+
+For end-to-end and API verification, import the [Postman collection](AntKart.postman_collection.json) and follow the [Developer Testing Guide](docs/test/DevTestGuide.md); cloud service endpoints are **(to be updated)**.
