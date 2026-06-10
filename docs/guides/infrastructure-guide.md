@@ -1242,9 +1242,81 @@ Stateless / rebuildable resources (networking, registry, messaging, Function hos
 | Container Registry | `admin_enabled = false` | Entra — AcrPull (granted with AKS) |
 | Storage (Terraform state) | shared-key access disabled | Entra — Storage Blob Data Contributor |
 | Cosmos DB | connection string vaulted (not exposed) | App reads the secret from Key Vault (Secrets User) |
+| Communication Services (ACS Email) | keys exist but **not exposed** (no output) | Entra — data-plane role on the Communication Service |
 | Storage (Functions runtime) | **shared key enabled — documented exception** | `AzureWebJobsStorage` only (runtime plumbing) |
 
 The automation identity is itself least-privilege (Contributor + Role Based Access Control Administrator, subscription-scoped), and every workload role is scoped to a specific resource — never the subscription.
+
+### 15. Communication Services (ACS Email)
+
+#### Understand
+
+**Azure Communication Services (ACS) Email** is Azure's managed service for sending application email — **no self-hosted SMTP server and no third-party email vendor**. This step provisions the email infrastructure ahead of the application's send path. It has **three resources plus a link**, created in order:
+
+- **Email Communication Service** — the container that owns email **domains**.
+- **Email domain (Azure-managed)** — the sender identity. With **`domain_management = "AzureManaged"`**, Azure provisions a **free `*.azurecomm.net` sender subdomain and auto-configures its SPF/DKIM** — so there is **no custom domain to buy and no DNS records to publish**. (The alternative, `CustomerManaged`, requires owning a domain and publishing verification/DKIM/SPF records.)
+- **Communication Service** — the resource the application connects to; its **`hostname`** is the endpoint the Email SDK targets.
+- **Domain association** — links the managed domain to the Communication Service as an allowed **sender**, so the service may send "from" that domain.
+
+**Authentication — no keys.** ACS exposes connection strings/keys, but the application authenticates to the endpoint with its Microsoft **Entra managed identity**, granted a data-plane role on the Communication Service in the role-assignment step. No key or connection string is output, stored, or committed.
+
+**Cost:** pay-per-message with a free monthly allowance — **effectively free at dev volumes**, no idle cost.
+
+#### Build
+
+This step adds a reusable **communication-services module** and its **dev live unit**:
+
+- **`infrastructure/modules/communication-services/`**:
+  - **`variables.tf`** — `resource_group_name`, `name_prefix` (derives the resource names), `data_location` (data-at-rest residency, default `United States`), and `tags`.
+  - **`main.tf`** — an `azurerm_email_communication_service`; an `azurerm_email_communication_service_domain` with **`name = "AzureManagedDomain"`** (the provider requires this literal name when `domain_management = "AzureManaged"`) and **`domain_management = "AzureManaged"`**; an `azurerm_communication_service`; and an `azurerm_communication_service_email_domain_association` linking the two. Comments explain ACS Email, the managed sender domain (no DNS), and managed-identity auth. The provider version pin (`~> 4.76`) comes from the shared root, so the module declares none of its own.
+  - **`outputs.tf`** — `communication_service_id`, `communication_service_hostname`, `communication_service_endpoint` (`https://<hostname>`), `email_service_id`, `sender_domain` (the `*.azurecomm.net` subdomain), and `sender_address` (`DoNotReply@<managed-subdomain>`). **No keys or connection strings.**
+- **`infrastructure/environments/dev/communication-services/terragrunt.hcl`**:
+  - `include "root"` for the shared backend/provider/version pin.
+  - a **`dependency "resource_group"`** consuming the resource group's `name` (with `mock_outputs` for `init`/`plan`/`validate`). ACS is a **global service and takes no `location`** — only the resource group name is needed.
+  - `terraform { source = "../../../modules/communication-services" }`.
+  - `inputs`: `name_prefix = "antkart-dev"` (yields `acs-antkart-dev` and `acs-email-antkart-dev`), `data_location = "United States"`, matching tags.
+
+#### Execute
+
+```powershell
+cd infrastructure/environments/dev/communication-services
+
+# 1. Init — generates backend.tf/provider.tf and resolves the resource_group dependency
+terragrunt init
+
+# 2. Plan — review before applying
+terragrunt plan
+
+# 3. Apply — create the ACS Email resources
+terragrunt apply
+```
+
+What each does:
+- **`terragrunt init`** — generates the backend/provider, initializes the provider, and resolves the `resource_group` dependency.
+- **`terragrunt plan`** — shows the intended changes; a correct plan reports **4 to add** (email service, managed domain, communication service, domain association), **0 to change, 0 to destroy**.
+- **`terragrunt apply`** — creates the four resources and writes this unit's state to the backend.
+
+#### Verify
+
+```powershell
+$RG = "rg-antkart-dev-eastus"
+
+# Communication Service: name, endpoint host, provisioning state
+az communication show --name "acs-antkart-dev" --resource-group $RG `
+  --query "{name:name, hostName:hostName, provisioningState:provisioningState}" -o json
+
+# Managed sender domain: the auto-issued *.azurecomm.net subdomain
+az communication email domain show `
+  --email-service-name "acs-email-antkart-dev" --name "AzureManagedDomain" --resource-group $RG `
+  --query "{fromSenderDomain:fromSenderDomain, dataLocation:dataLocation}" -o json
+```
+
+A **correct result**:
+- `terragrunt apply` ends with `Apply complete! Resources: 4 added, 0 changed, 0 destroyed.`
+- `az communication show` reports `name = acs-antkart-dev`, `provisioningState = Succeeded`, and a `hostName`.
+- `az communication email domain show` reports a `*.azurecomm.net` `fromSenderDomain`.
+
+> **No access keys** are output or stored. The application reaches the endpoint with **its managed identity**, granted a data-plane role on the Communication Service in the role-assignment step — never a key.
 
 ---
 

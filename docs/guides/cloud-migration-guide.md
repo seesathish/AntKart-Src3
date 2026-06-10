@@ -430,4 +430,44 @@ curl -s http://localhost:5077/health/deps | jq  # diagnostics: per-dependency JS
 
 ---
 
+## Step 7 — Provision Azure Communication Services for Email
+
+The platform sends transactional email (order confirmations, receipts, cancellation notices). This step **provisions the email infrastructure** — Azure Communication Services (ACS) Email — as code, ahead of the test-enablement sub-step that wires the application's send path to it. It is infrastructure only; the application email-sending code is the **next** sub-step. The module and its live unit follow the established Terraform/Terragrunt pattern (see the [Infrastructure Guide](infrastructure-guide.md) §15).
+
+### Understand
+
+**ACS Email** is Azure's managed service for sending application email — no self-hosted SMTP server and no third-party email vendor to contract. It needs three pieces plus a link: an **Email Communication Service** (owns email domains), an **email domain** (the sender identity), a **Communication Service** (what the app connects to), and a **domain association** (authorises the service to send "from" the domain).
+
+**Why an Azure-managed domain — no DNS work.** The email domain is created with `domain_management = "AzureManaged"`, so Azure provisions a **free `*.azurecomm.net` sender subdomain and auto-configures its SPF/DKIM**. There is **no custom domain to buy and no DNS records to publish** — ideal for a non-production platform. (A customer-managed domain would require owning a domain and publishing verification/DKIM/SPF records.)
+
+**The app sends via managed identity — no key.** ACS exposes connection strings and access keys, but the application authenticates to the Communication Service endpoint with its Microsoft **Entra managed identity** (an Azure AD token), granted a data-plane role on the service in the role-assignment step. So **no key or connection string is output, stored, or committed** — consistent with the platform's secret-less posture.
+
+### Build
+
+A reusable **`communication-services` module** (`variables.tf` / `main.tf` / `outputs.tf`, heavy teaching comments) and its **dev live unit** (`environments/dev/communication-services/terragrunt.hcl`, with the resource-group dependency and committed lock file). The module creates the four resources above; its outputs expose the **endpoint** (`https://<hostname>`) and the **MailFrom sender address** (`DoNotReply@<managed-subdomain>`) for the application code to consume — and deliberately **no** keys/connection strings.
+
+### Execute
+
+```powershell
+cd infrastructure/environments/dev/communication-services
+terragrunt init      # generates backend/provider, resolves the resource-group dependency
+terragrunt plan      # expect 4 to add, 0 to change, 0 to destroy
+terragrunt apply
+```
+
+### Verify
+
+```powershell
+$RG = "rg-antkart-dev-eastus"
+az communication show --name "acs-antkart-dev" --resource-group $RG `
+  --query "{name:name, hostName:hostName, provisioningState:provisioningState}" -o json
+az communication email domain show `
+  --email-service-name "acs-email-antkart-dev" --name "AzureManagedDomain" --resource-group $RG `
+  --query "{fromSenderDomain:fromSenderDomain, dataLocation:dataLocation}" -o json
+```
+
+A correct result: `terragrunt apply` ends with `4 added, 0 changed, 0 destroyed`; the Communication Service reports `provisioningState = Succeeded` and a `hostName`; and the managed domain reports a `*.azurecomm.net` `fromSenderDomain`. **No keys** are output — the application reaches the endpoint with its managed identity in the email-sending sub-step.
+
+---
+
 *Subsequent steps are added to this guide as they are delivered.*
