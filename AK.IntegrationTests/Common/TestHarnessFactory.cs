@@ -1,4 +1,3 @@
-using AK.Notification.Application.Consumers;
 using AK.Order.Application.Common.Interfaces;
 using AK.Order.Application.Sagas;
 using AK.ShoppingCart.Application.Consumers;
@@ -128,7 +127,7 @@ public static class TestHarnessFactory
         return services.BuildServiceProvider(true);
     }
 
-    // Harness with all 6 notification consumers. Pass a pre-configured mediator mock so tests can verify Send calls.
+    // Harness with all 5 notification consumers. Pass a pre-configured mediator mock so tests can verify Send calls.
     public static ServiceProvider CreateWithNotificationConsumers(Mock<IMediator> mediatorMock)
     {
         var services = new ServiceCollection();
@@ -138,7 +137,6 @@ public static class TestHarnessFactory
 
         services.AddMassTransitTestHarness(cfg =>
         {
-            cfg.AddConsumer<UserRegisteredConsumer>();
             cfg.AddConsumer<NotifOrderCreatedConsumer>();
             cfg.AddConsumer<NotifOrderConfirmedConsumer>();
             cfg.AddConsumer<NotifOrderCancelledConsumer>();

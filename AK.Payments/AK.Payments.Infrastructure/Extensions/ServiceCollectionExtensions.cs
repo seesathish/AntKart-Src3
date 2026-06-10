@@ -26,7 +26,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRazorpayClient, RazorpayGatewayClient>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-        services.AddRabbitMqMassTransit(configuration, "payments", cfg =>
+        services.AddAzureServiceBusMassTransit(configuration, "payments", cfg =>
         {
             cfg.AddEntityFrameworkOutbox<PaymentsDbContext>(o =>
             {

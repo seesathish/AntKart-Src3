@@ -131,16 +131,16 @@ The dedicated identity microservice was removed in the Entra migration. Microsof
 - `DDD/StringEntity` — same as Entity but with `string Id = Guid.NewGuid().ToString("N")` for MongoDB entities (Products); replaces per-service `BaseEntity`/`Entity` duplicates
 - `DDD/ValueObject` — abstract base for value objects; subclass and implement `GetEqualityComponents()` — `Equals()`, `GetHashCode()`, `==`, `!=` are derived automatically via `SequenceEqual`; used by `ShippingAddress` in AK.Order (deliberately contrasts with `Money` in AK.Products which uses a C# `record` — both approaches valid)
 - `Messaging/IIntegrationEvent` — base interface for all integration events
-- `Messaging/IntegrationEvents/` — `OrderCreatedIntegrationEvent` (enriched: CustomerEmail, CustomerName, OrderNumber), `OrderConfirmedIntegrationEvent` (enriched), `OrderCancelledIntegrationEvent` (enriched + UserId), `PaymentSucceededIntegrationEvent` (enriched), `PaymentFailedIntegrationEvent` (enriched), `UserRegisteredIntegrationEvent` (consumed by AK.Notification's welcome-email seam; in the Entra-native model its publisher is external — see ADR-021), `StockReservedIntegrationEvent`, `StockReservationFailedIntegrationEvent`, `PaymentInitiatedIntegrationEvent` (consumed by `PaymentInitiatedAuditConsumer` in integration tests)
+- `Messaging/IntegrationEvents/` — `OrderCreatedIntegrationEvent` (enriched: CustomerEmail, CustomerName, OrderNumber), `OrderConfirmedIntegrationEvent` (enriched), `OrderCancelledIntegrationEvent` (enriched + UserId), `PaymentSucceededIntegrationEvent` (enriched), `PaymentFailedIntegrationEvent` (enriched), `StockReservedIntegrationEvent`, `StockReservationFailedIntegrationEvent`, `PaymentInitiatedIntegrationEvent` (consumed by `PaymentInitiatedAuditConsumer` in integration tests)
 - `Behaviors/ValidationBehavior<TRequest, TResponse>` — shared MediatR pipeline behavior; every service wires this from BuildingBlocks; replaces per-service copies
 - `Middleware/ExceptionHandlerMiddleware` — shared exception→HTTP mapper used by ShoppingCart, Order, Payments, Notification, Products
-- `Messaging/MassTransitExtensions` — `AddRabbitMqMassTransit(config, servicePrefix, configure)` helper; each service passes a unique prefix ("order", "notification", "payments", "cart", "products", "identity") so consumers get uniquely-named RabbitMQ queues — e.g. `notification-payment-failed` and `order-payment-failed` are separate queues both bound to the same exchange (fan-out, not competing consumers)
+- `Messaging/MassTransitExtensions` — `AddAzureServiceBusMassTransit(config, servicePrefix, configure)` helper; connects to the Service Bus namespace (`ServiceBus:FullyQualifiedNamespace`, non-secret) with `DefaultAzureCredential` (Entra, no connection string). Each service passes a unique prefix ("order", "notification", "payments", "cart", "products") so consumers get uniquely-named receive endpoints. **Topology is owned by infrastructure-as-code** — the identity holds Service Bus Data Sender/Receiver (never Manage), so MassTransit uses the provisioned entities and does not create/alter topology at runtime
 - `Resilience/ResilienceExtensions` — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, `AddNpgsqlResilience()` (Npgsql uses exponential backoff + jitter to prevent thundering herd on DB reconnect)
 - `Swagger/SwaggerExtensions` — `UseSwaggerInDevelopment(title)` gates `UseSwagger()` + `UseSwaggerUI()` to Development only; `AddSwaggerGen()` registration stays in each service
 - `Versioning/ApiVersioningExtensions` — `AddStandardApiVersioning()` sets default v1.0, accepts version via URL segment (`/api/v1/`) or `api-version` header; currently demonstrated in AK.Order, other services adopt by calling this single method
 
 ### ✅ AK.IntegrationTests  (Event Bus Tests)
-- **Framework:** MassTransit in-memory test harness (no RabbitMQ, no DB, no host)
+- **Framework:** MassTransit in-memory test harness (no broker, no DB, no host) — transport-agnostic
 - **Tests:** 35 passing — 6 order saga, 4 order event bus, 7 payment event bus, 5 payment happy-path, 6 payment sad-path, 7 notification consumers
 - **Design doc:** [AK.IntegrationTests/INTEGRATION_TESTS.md](AK.IntegrationTests/INTEGRATION_TESTS.md)
 
@@ -168,7 +168,7 @@ The dedicated identity microservice was removed in the Entra migration. Microsof
 - **Architecture:** DDD + Clean Architecture (Domain → Application → Infrastructure → API)
 - **Patterns:** CQRS (MediatR 12.4.1), FluentValidation, MassTransit consumers, channel abstraction
 - **Channel abstraction:** `INotificationChannel` interface resolved by `INotificationChannelResolver`; Email fully implemented (MailKit); SMS + WhatsApp are stubbed for future activation
-- **Events consumed:** `UserRegisteredIntegrationEvent` (welcome email), `OrderCreatedIntegrationEvent` (order confirmation), `OrderConfirmedIntegrationEvent` (stock confirmed), `OrderCancelledIntegrationEvent` (cancellation notice), `PaymentSucceededIntegrationEvent` (payment receipt), `PaymentFailedIntegrationEvent` (payment failure alert)
+- **Events consumed:** `OrderCreatedIntegrationEvent` (order confirmation), `OrderConfirmedIntegrationEvent` (stock confirmed), `OrderCancelledIntegrationEvent` (cancellation notice), `PaymentSucceededIntegrationEvent` (payment receipt), `PaymentFailedIntegrationEvent` (payment failure alert)
 - **Retention:** `NotificationCleanupService` (BackgroundService) deletes notifications older than 90 days, runs daily at 02:00 UTC
 - **Gateway routes:** `GET /gateway/notifications/{everything}` — authenticated, 20 RPS rate limit
 - **Tests:** 37 passing (domain, command handler, query handlers, consumers, template renderer)
@@ -310,8 +310,9 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | Serilog.AspNetCore | 7.x | BuildingBlocks |
 | Serilog.Sinks.Elasticsearch | 9.0.3 | BuildingBlocks |
 | MassTransit | 8.3.6 | BuildingBlocks, Order, Products, ShoppingCart |
-| MassTransit.RabbitMQ | 8.3.6 | Infrastructure (event bus services) |
+| MassTransit.Azure.ServiceBus.Core | 8.3.6 | BuildingBlocks (Azure Service Bus transport, Entra auth) |
 | MassTransit.EntityFrameworkCore | 8.3.6 | Order Infrastructure (outbox + saga) |
+| Azure.Identity | 1.13.2 | BuildingBlocks (Key Vault + Service Bus token auth) |
 | Microsoft.Extensions.Http.Resilience | 9.0.0 | BuildingBlocks, Products Infrastructure |
 | Microsoft.Extensions.Resilience | 9.0.0 | BuildingBlocks, Order/ShoppingCart Infrastructure |
 | Ocelot | 23.4.2 | Gateway API |

@@ -64,7 +64,7 @@ public sealed class Order : Entity, IAggregateRoot
 
         order._items.AddRange(itemList);
 
-        // Raise domain event — the SAGA (OrderSaga) will pick this up via RabbitMQ
+        // Raise domain event — the SAGA (OrderSaga) will pick this up via the message bus
         // to start the stock reservation process.
         order.AddDomainEvent(new OrderCreatedEvent(order.Id, order.UserId, order.OrderNumber));
         return order;

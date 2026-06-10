@@ -216,4 +216,60 @@ The notification "welcome" consumer is **retained** as a forward-compatible seam
 
 ---
 
-*Subsequent steps — managed data store, messaging, and serverless eventing migrations — are added to this guide as they are delivered.*
+## Step 3 — Messaging on Azure Service Bus
+
+This step moves the messaging transport from the self-hosted broker to **Azure Service Bus**, authenticated with **Microsoft Entra** (no SAS key or connection string) and using the topology **provisioned by infrastructure-as-code**. The decision is recorded in [ADR-015](../adr/ADR-015-messaging-migration-to-service-bus.md).
+
+### Understand
+
+**MassTransit abstracts the transport.** The consumers, the order saga, and every `Publish`/`Send` call are written against MassTransit's API, not the broker's. Changing the transport therefore touches **only the bus configuration** — the business logic, the saga state machine, and the integration-event contracts are unchanged. (This is exactly what keeps the in-memory `ITestHarness` integration tests transport-agnostic and green.)
+
+**Topology is owned by infrastructure-as-code.** The queues, the topic, and its subscriptions are provisioned by the platform's IaC — the single source of truth — not created by the application at runtime. The application's managed identity is granted only **Azure Service Bus Data Sender / Data Receiver**, never **Manage**, so it *cannot* create or alter entities. MassTransit is configured to **send to and receive from the existing provisioned entities and to not deploy or manage topology**. This keeps a clear separation: the platform owns *what* exists; the application only *uses* it, with least privilege.
+
+**Entra authentication, no secret.** The bus connects to the namespace by its fully-qualified hostname (`sb-antkart-dev.servicebus.windows.net` — non-secret, committed) using `DefaultAzureCredential`: the developer's Azure CLI sign-in locally, the resource's managed identity in the cloud. There is no connection string, consistent with the secret-less posture established in the earlier steps.
+
+### Build
+
+The change is centred on one shared helper, `AddAzureServiceBusMassTransit` in `AK.BuildingBlocks.Messaging`, which mirrors the previous broker helper one-for-one:
+
+- It reads the non-secret `ServiceBus:FullyQualifiedNamespace` setting.
+- It keeps the same kebab-case endpoint-name formatter (per-service prefix), so endpoint naming — and the business wiring — is unchanged; only the transport differs.
+- It configures `UsingAzureServiceBus` with `host.TokenCredential = new DefaultAzureCredential()` (Entra auth) and a transport-agnostic message-retry policy, then binds the registered consumers/saga to the provisioned entities.
+
+Per service, the Infrastructure `ServiceCollectionExtensions` swaps the single call from the broker helper to `AddAzureServiceBusMassTransit(...)`; the registered consumers and saga are untouched. The packages move from `MassTransit.RabbitMQ` to `MassTransit.Azure.ServiceBus.Core` (the broker transport package is removed entirely), while `MassTransit` and `MassTransit.EntityFrameworkCore` (outbox/saga) stay. Each service's `appsettings` drops its old broker block and gains `ServiceBus:FullyQualifiedNamespace`.
+
+**Removed:** the orphaned welcome-notification flow. The `UserRegisteredIntegrationEvent` contract and the Notification `UserRegisteredConsumer` were published only by the retired identity service and are now dead; both are deleted, and the affected test is adjusted so the remaining live consumers stay covered.
+
+### Execute
+
+Grant your developer identity the Service Bus data roles on the namespace (Send + Receive), set the non-secret namespace, and run a service locally so it connects over Entra:
+
+```bash
+OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
+SB_ID=$(az servicebus namespace show --name sb-antkart-dev --resource-group rg-antkart-dev-eastus --query id -o tsv)
+
+az role assignment create --assignee-object-id "$OBJECT_ID" --assignee-principal-type User \
+  --role "Azure Service Bus Data Sender"   --scope "$SB_ID"
+az role assignment create --assignee-object-id "$OBJECT_ID" --assignee-principal-type User \
+  --role "Azure Service Bus Data Receiver" --scope "$SB_ID"
+```
+
+The namespace is configured in each service's `appsettings.json`:
+
+```json
+"ServiceBus": {
+  "FullyQualifiedNamespace": "sb-antkart-dev.servicebus.windows.net"
+}
+```
+
+Then run a service with an active `az login` session, e.g. `cd AK.Order/AK.Order.API && dotnet run`.
+
+### Verify
+
+- A service **starts and connects to Service Bus over Entra** — and there is **no broker (RabbitMQ) connection warning**, because the transport is now Service Bus.
+- The **in-memory integration tests pass** (`dotnet test`) — they use the `ITestHarness` and require no Service Bus.
+- Full **end-to-end SAGA over Service Bus** (publish → reserve stock → payment → notification across the provisioned entities) is verified during the **test-enablement step**.
+
+---
+
+*Subsequent steps — managed data store and serverless eventing migrations — are added to this guide as they are delivered.*

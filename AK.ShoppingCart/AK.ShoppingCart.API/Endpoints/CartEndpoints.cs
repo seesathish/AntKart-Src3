@@ -67,7 +67,7 @@ public static class CartEndpoints
         .WithSummary("Remove an item from the authenticated user's cart");
 
         // DELETE /api/v1/cart — clears all items.
-        // Also triggered automatically by ClearCartOnOrderConfirmedConsumer (RabbitMQ event)
+        // Also triggered automatically by ClearCartOnOrderConfirmedConsumer (message-bus event)
         // after an order is confirmed, so the cart resets without the user manually clearing it.
         group.MapDelete("/", async (HttpContext http, IMediator mediator, CancellationToken ct) =>
         {

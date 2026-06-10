@@ -11,7 +11,7 @@ using OrderEntity = AK.Order.Domain.Entities.Order;
 namespace AK.Order.Application.Features.CreateOrder;
 
 // Handles order creation: builds the domain aggregate, persists it, and kicks off the SAGA
-// by publishing OrderCreatedIntegrationEvent to RabbitMQ.
+// by publishing OrderCreatedIntegrationEvent to the message bus.
 //
 // Security: UserId, CustomerEmail, and CustomerName come from the command (injected from JWT
 // at the endpoint layer) — never from the client request body.
@@ -38,7 +38,7 @@ public sealed class CreateOrderCommandHandler(IUnitOfWork uow, IPublishEndpoint 
         var order = OrderEntity.Create(request.UserId, request.CustomerEmail, request.CustomerName, shippingAddress, items, request.Order.Notes);
         await uow.Orders.AddAsync(order, ct);
 
-        // Publish integration event to RabbitMQ — this starts the SAGA in OrderSaga.
+        // Publish integration event to the message bus — this starts the SAGA in OrderSaga.
         // OrderItemPayload carries the product IDs and quantities needed by ReserveStockConsumer.
         var integrationEvent = new OrderCreatedIntegrationEvent(
             order.Id,

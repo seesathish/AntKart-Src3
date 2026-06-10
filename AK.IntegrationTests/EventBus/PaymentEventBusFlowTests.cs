@@ -11,7 +11,7 @@ namespace AK.IntegrationTests.EventBus;
 /// <summary>
 /// End-to-end async communication tests covering the full payment event bus flow.
 /// Verifies that events route to the correct consumers and no cross-order pollution occurs.
-/// Uses in-memory MassTransit harness — no RabbitMQ, no DB.
+/// Uses in-memory MassTransit harness — no broker, no DB.
 /// </summary>
 public sealed class PaymentEventBusFlowTests : IAsyncLifetime
 {

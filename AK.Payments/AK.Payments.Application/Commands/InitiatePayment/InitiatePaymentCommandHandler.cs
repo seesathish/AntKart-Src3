@@ -14,7 +14,7 @@ namespace AK.Payments.Application.Commands.InitiatePayment;
 //   1. Create a Payment domain entity (status = Pending)
 //   2. Call Razorpay to create an "order" — Razorpay returns an order ID
 //   3. Assign the Razorpay order ID to our Payment (status → Initiated)
-//   4. Publish PaymentInitiatedIntegrationEvent to RabbitMQ
+//   4. Publish PaymentInitiatedIntegrationEvent to the message bus
 //   5. Save everything to PostgreSQL (atomic)
 //   6. Return the Razorpay order ID + public key to the frontend
 //

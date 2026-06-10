@@ -22,7 +22,7 @@ builder.AddSerilogLogging();
 // AddApplication: MediatR, FluentValidation pipeline, validators, mappers
 builder.Services.AddApplication();
 
-// AddInfrastructure: EF Core (PostgreSQL), repositories, MassTransit (RabbitMQ + SAGA + Outbox)
+// AddInfrastructure: EF Core (PostgreSQL), repositories, MassTransit (Azure Service Bus + SAGA + Outbox)
 builder.Services.AddInfrastructure(builder.Configuration);
 
 // AddEntraAuthentication: JWT Bearer validation against Microsoft Entra ID, flat-roles

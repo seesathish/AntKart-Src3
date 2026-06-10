@@ -9,7 +9,7 @@ namespace AK.IntegrationTests.Payments;
 
 /// <summary>
 /// Happy-path payment event bus tests.
-/// Uses in-memory MassTransit harness — no RabbitMQ, no DB.
+/// Uses in-memory MassTransit harness — no broker, no DB.
 /// </summary>
 public sealed class PaymentFlowHappyPathTests : IAsyncLifetime
 {

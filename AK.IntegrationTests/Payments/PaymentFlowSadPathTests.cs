@@ -9,7 +9,7 @@ namespace AK.IntegrationTests.Payments;
 
 /// <summary>
 /// Sad-path payment event bus tests — payment failures and stock failures.
-/// Uses in-memory MassTransit harness — no RabbitMQ, no DB.
+/// Uses in-memory MassTransit harness — no broker, no DB.
 /// </summary>
 public sealed class PaymentFlowSadPathTests : IAsyncLifetime
 {

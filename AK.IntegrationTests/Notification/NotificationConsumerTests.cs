@@ -35,23 +35,6 @@ public sealed class NotificationConsumerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UserRegistered_ConsumerPublishesWelcomeEmail()
-    {
-        var evt = new UserRegisteredIntegrationEvent("user-1", "welcome@example.com", "Alice");
-        await _harness.Bus.Publish(evt);
-        await Task.Delay(500);
-
-        (await _harness.Consumed.Any<UserRegisteredIntegrationEvent>()).Should().BeTrue();
-        _mediator.Verify(m => m.Send(
-            It.Is<SendNotificationCommand>(c =>
-                c.Channel == NotificationChannel.Email &&
-                c.TemplateType == NotificationTemplateType.WelcomeEmail &&
-                c.RecipientAddress == "welcome@example.com" &&
-                c.UserId == "user-1"),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
     public async Task OrderCreated_ConsumerPublishesOrderConfirmationEmail()
     {
         var evt = IntegrationTestData.CreateOrderEvent();

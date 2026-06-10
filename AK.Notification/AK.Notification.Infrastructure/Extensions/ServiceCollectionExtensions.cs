@@ -40,9 +40,8 @@ public static class ServiceCollectionExtensions
         services.Configure<EmailSettings>(configuration.GetSection("EmailSettings"));
         services.Configure<NotificationSettings>(configuration.GetSection("NotificationSettings"));
 
-        services.AddRabbitMqMassTransit(configuration, "notification", cfg =>
+        services.AddAzureServiceBusMassTransit(configuration, "notification", cfg =>
         {
-            cfg.AddConsumer<UserRegisteredConsumer>();
             cfg.AddConsumer<OrderCreatedConsumer>();
             cfg.AddConsumer<OrderConfirmedConsumer>();
             cfg.AddConsumer<OrderCancelledConsumer>();

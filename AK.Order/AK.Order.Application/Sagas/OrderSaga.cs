@@ -4,7 +4,7 @@ using MassTransit;
 namespace AK.Order.Application.Sagas;
 
 // The OrderSaga orchestrates the order fulfilment flow across multiple services
-// using RabbitMQ messages — no direct HTTP calls between services.
+// using messages over the bus — no direct HTTP calls between services.
 //
 // Flow:
 //   1. OrderCreatedIntegrationEvent arrives  → store context, move to StockPending
