@@ -48,12 +48,22 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<ProductSeeder>();
 
+        // AK.Discount is an OPTIONAL price-enrichment dependency: the catalogue must render whether
+        // or not discount data is available. So this client is tuned to FAIL FAST and degrade
+        // quietly — the deliberate opposite of the PATIENT resilience used for CRITICAL stores
+        // (Cosmos's Retry-After pipeline above, Service Bus's message retry). A down Discount
+        // service must never slow a product query.
+        //   * 2s HttpClient timeout — a hard per-call ceiling (was 10s).
+        //   * AddOptionalDependencyResilience — NO retry (retrying a down optional service only
+        //     multiplies latency) + a circuit breaker that opens after a couple of failures and
+        //     stays open for a cooldown, so once Discount is known-down, subsequent product queries
+        //     skip the call entirely and return immediately with no discount.
         services.Configure<DiscountGrpcSettings>(configuration.GetSection("DiscountGrpc"));
         services.AddHttpClient("discount-grpc", client =>
         {
-            client.Timeout = TimeSpan.FromSeconds(10);
+            client.Timeout = TimeSpan.FromSeconds(2);
         })
-        .AddHttpResilienceWithCircuitBreaker(maxRetryAttempts: 3, failureRatio: 0.5, minimumThroughput: 3, breakDurationSeconds: 30);
+        .AddOptionalDependencyResilience();
         services.AddScoped<IDiscountGrpcClient, DiscountGrpcClient>();
 
         services.AddAzureServiceBusMassTransit(

@@ -50,6 +50,48 @@ public static class ResilienceExtensions
         return builder;
     }
 
+    // FAIL-FAST resilience for an OPTIONAL dependency (e.g. price enrichment, recommendations) —
+    // a service the caller can do without. This is the deliberate CONTRAST to the *patient*
+    // resilience above (and to Cosmos/Service Bus): a CRITICAL dependency is worth waiting and
+    // retrying for, an OPTIONAL one is NOT — it must never slow or fail the core request.
+    //
+    // The differences from the patient pipeline:
+    //   * NO retry. Retrying a down optional service only MULTIPLIES the user-facing latency for a
+    //     result that is, by definition, dispensable.
+    //   * A circuit breaker that OPENS QUICKLY (after a couple of consecutive failures) and stays
+    //     open for a cooldown. Once the dependency is known-down, every subsequent call
+    //     SHORT-CIRCUITS instantly (microseconds) instead of waiting for another timeout — so a
+    //     page of items doesn't pay the timeout once per item.
+    //   * A SHORT per-call timeout, so a slow/hung optional call cannot drag the request out.
+    // The caller also sets a short HttpClient.Timeout as the hard per-call ceiling, and treats any
+    // failure as "no data" (returns null / degrades silently).
+    public static IHttpClientBuilder AddOptionalDependencyResilience(
+        this IHttpClientBuilder builder,
+        int minimumThroughput = 2,
+        int samplingDurationSeconds = 10,
+        int breakDurationSeconds = 30,
+        double attemptTimeoutSeconds = 2)
+    {
+        builder.AddResilienceHandler("optional-fail-fast", pipeline =>
+        {
+            // Circuit breaker FIRST (outermost): once open it throws immediately, so a known-down
+            // dependency is skipped without even starting a call or a timeout.
+            pipeline.AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
+            {
+                // 0.9 over a small throughput window ⇒ "(almost) all of the last few calls failed".
+                FailureRatio = 0.9,
+                MinimumThroughput = minimumThroughput,
+                SamplingDuration = TimeSpan.FromSeconds(samplingDurationSeconds),
+                BreakDuration = TimeSpan.FromSeconds(breakDurationSeconds)
+            });
+
+            // Short per-call timeout. A Polly timeout surfaces as TimeoutRejectedException, which the
+            // HTTP circuit breaker counts as a failure — so repeated slow calls open the breaker too.
+            pipeline.AddTimeout(TimeSpan.FromSeconds(attemptTimeoutSeconds));
+        });
+        return builder;
+    }
+
     // Retry pipeline for Redis operations (cart reads/writes).
     // Short timeout (5s) because a slow Redis response usually means connection issues.
     public static IServiceCollection AddRedisResilience(this IServiceCollection services)

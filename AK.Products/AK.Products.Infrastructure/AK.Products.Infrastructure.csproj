@@ -9,6 +9,8 @@
     <!-- The seed loader reuses the persistence layer (MongoDbContext + ProductClassMap) rather
          than duplicating Mongo client/mapping code. -->
     <InternalsVisibleTo Include="AK.Tools.ProductsSeedLoader" />
+    <!-- Tests exercise the internal DiscountGrpcClient's graceful-degradation behaviour. -->
+    <InternalsVisibleTo Include="AK.Products.Tests" />
   </ItemGroup>
 
   <ItemGroup>

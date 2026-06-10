@@ -4,34 +4,39 @@
 
 All inter-service HTTP calls and infrastructure connections use **Polly v8** (`Microsoft.Extensions.Http.Resilience 9.0.0` and `Microsoft.Extensions.Resilience 9.0.0`) for retry, circuit breaker, and timeout policies.
 
+### Criticality-tiered resilience
+
+Resilience is **tuned to a dependency's criticality** — there is no one-size-fits-all policy:
+
+- **Critical dependencies** (the data stores and the messaging backbone — Cosmos DB, PostgreSQL, Redis, Service Bus) get **patient** resilience: longer timeouts, **retries** with back-off, and — for Cosmos — honouring the server's **Retry-After**. A request *should* wait and retry, because the operation cannot complete without them.
+- **Optional enrichment dependencies** (data the response can render without — e.g. discount prices) get **fail-fast** resilience: a **short timeout**, **no retries**, a circuit breaker that **opens quickly** and stays open for a cooldown, and **silent degradation** (return "no data", never throw). The core response must never be slowed or failed by an optional extra.
+
+The worked example is the **Products → Discount gRPC** client (§1): the product catalogue must always render whether or not discount data is available, so a down Discount service is *expected* and absorbed in ~2 s (then skipped entirely while the breaker is open) rather than adding ~10 s per product.
+
 ---
 
 ## Resilience Strategies by Layer
 
-### 1. Products → Discount gRPC (HTTP/2)
+### 1. Products → Discount gRPC (HTTP/2) — OPTIONAL dependency, fail-fast
 
 Location: `AK.Products/AK.Products.Infrastructure/Grpc/DiscountGrpcClient.cs`
 
-The Discount gRPC client uses `IHttpClientFactory` so Polly policies are applied at the `HttpMessageHandler` level.
+AK.Discount is an **optional price-enrichment** dependency: the product catalogue must render whether or not discount data is available. The client therefore **fails fast and degrades quietly** — the deliberate opposite of the patient policies used for the critical stores below.
 
 ```csharp
 services.AddHttpClient("discount-grpc", client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(10);
+    client.Timeout = TimeSpan.FromSeconds(2);   // hard per-call ceiling (was 10s)
 })
-.AddHttpResilienceWithCircuitBreaker(
-    maxRetryAttempts: 3,
-    failureRatio: 0.5,
-    minimumThroughput: 3,
-    breakDurationSeconds: 30);
+.AddOptionalDependencyResilience();             // no retry + quick circuit-break + 2s pipeline timeout
 ```
 
-Policy stack (inner → outer):
-1. **Retry** — 3 attempts, exponential back-off (1s, 2s, 4s)
-2. **Circuit Breaker** — opens when ≥50% of last 3 requests fail; stays open 30s
-3. **Timeout** — 10s per attempt (set on `HttpClient.Timeout`)
+Policy (BuildingBlocks `AddOptionalDependencyResilience`):
+1. **No retry** — retrying a down optional service only multiplies the user-facing latency.
+2. **Circuit Breaker** — opens after a couple of consecutive failures (FailureRatio 0.9, MinimumThroughput 2, 10s sampling) and stays open **30s**. While open, calls **short-circuit instantly**, so once Discount is known-down a whole page of products skips the call entirely.
+3. **Timeout** — 2s per call (Polly pipeline + `HttpClient.Timeout`).
 
-When the circuit is open, `DiscountGrpcClient` catches `BrokenCircuitException` and returns a zero-discount fallback — the cart still works, discounts are skipped.
+`DiscountGrpcClient.GetDiscountAsync` **never throws**: a `NotFound` (no coupon) returns `null` silently; any unavailability / timeout / open-circuit returns `null` after logging **one concise single-line warning per request** (message only, no stack trace, subsequent items drop to Debug) — so enriching a page can't flood the log. The product always renders, just without a discounted price. (Running only AK.Products locally, with AK.Discount down, is expected and handled by design.)
 
 ### 2. Redis (ShoppingCart)
 
