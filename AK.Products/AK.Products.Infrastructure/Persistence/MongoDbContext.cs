@@ -1,4 +1,4 @@
-﻿using AK.Products.Infrastructure.Persistence;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using Microsoft.Extensions.Options;
 
@@ -10,9 +10,17 @@ public sealed class MongoDbContext
 
     public MongoDbContext(IOptions<MongoDbSettings> settings)
     {
-        var client = new MongoClient(settings.Value.ConnectionString);
-        _database = client.GetDatabase(settings.Value.DatabaseName);
-        CreateIndexes();
+        var s = settings.Value;
+
+        // The product catalogue runs on Azure Cosmos DB via its MongoDB API, which is
+        // wire-compatible — the same MongoDB driver and data-access code are used unchanged.
+        // The connection string is a SECRET resolved from Key Vault at runtime (see the
+        // Infrastructure ServiceCollectionExtensions); it never appears in committed config.
+        var client = new MongoClient(s.ConnectionString);
+        _database = client.GetDatabase(s.DatabaseName);
+
+        EnsureShardedCollection(s.DatabaseName, s.ProductsCollection);
+        CreateIndexes(s.ProductsCollection);
     }
 
     public MongoDbContext(IMongoDatabase database)
@@ -23,25 +31,63 @@ public sealed class MongoDbContext
     public IMongoCollection<T> GetCollection<T>(string collectionName) =>
         _database.GetCollection<T>(collectionName);
 
-    private void CreateIndexes()
+    // Cosmos DB physically distributes a collection's documents across partitions by a SHARD
+    // (partition) KEY. The Cosmos DB for MongoDB RU/serverless API requires a SINGLE-FIELD,
+    // HASHED shard key. We shard on the product id (`_id`):
+    //   - high cardinality (one value per product) → documents spread evenly, no hot partition;
+    //   - point-reads by id are single-partition and cheap (~1 RU);
+    //   - category/sub-category browse is a low-cost cross-partition query at this catalogue
+    //     scale, served by the secondary indexes below.
+    // The shard key is fixed when the collection is created; this command is a no-op if the
+    // collection is already sharded with the same key. On a standalone MongoDB (the local-dev
+    // fallback), sharding is unsupported and the command is skipped — the app still runs.
+    private void EnsureShardedCollection(string databaseName, string collectionName)
     {
-        var products = _database.GetCollection<Domain.Entities.Product>("products");
+        var command = new BsonDocument
+        {
+            { "shardCollection", $"{databaseName}.{collectionName}" },
+            { "key", new BsonDocument { { "_id", "hashed" } } }
+        };
 
-        var skuIndex = Builders<Domain.Entities.Product>.IndexKeys.Ascending(p => p.SKU);
-        products.Indexes.CreateOne(new CreateIndexModel<Domain.Entities.Product>(
-            skuIndex, new CreateIndexOptions { Unique = true, Name = "sku_unique" }));
+        try
+        {
+            _database.RunCommand<BsonDocument>(command);
+        }
+        catch (MongoCommandException)
+        {
+            // Not supported (standalone MongoDB used for local development) or the collection is
+            // already sharded with this key — either way, safe to continue.
+        }
+    }
 
-        var categoryIndex = Builders<Domain.Entities.Product>.IndexKeys.Ascending(p => p.CategoryName);
-        products.Indexes.CreateOne(new CreateIndexModel<Domain.Entities.Product>(
-            categoryIndex, new CreateIndexOptions { Name = "idx_category" }));
+    private void CreateIndexes(string collectionName)
+    {
+        var products = _database.GetCollection<Domain.Entities.Product>(collectionName);
 
-        var statusIndex = Builders<Domain.Entities.Product>.IndexKeys.Ascending(p => p.Status);
+        // SKU lookup index. NOTE: on a SHARDED Cosmos collection a unique index must include the
+        // shard key (`_id`), so a stand-alone unique constraint on SKU is not enforceable here —
+        // SKU uniqueness is owned by the seed/data layer. This (non-unique) index keeps SKU
+        // lookups efficient.
         products.Indexes.CreateOne(new CreateIndexModel<Domain.Entities.Product>(
-            statusIndex, new CreateIndexOptions { Name = "idx_status" }));
+            Builders<Domain.Entities.Product>.IndexKeys.Ascending(p => p.SKU),
+            new CreateIndexOptions { Name = "idx_sku" }));
 
-        var textIndex = Builders<Domain.Entities.Product>.IndexKeys
-            .Text(p => p.Name).Text(p => p.Brand).Text(p => p.Description);
+        // Secondary indexes for category / sub-category browse and status filtering — supported
+        // cross-partition query patterns at this scale.
         products.Indexes.CreateOne(new CreateIndexModel<Domain.Entities.Product>(
-            textIndex, new CreateIndexOptions { Name = "text_search" }));
+            Builders<Domain.Entities.Product>.IndexKeys.Ascending(p => p.CategoryName),
+            new CreateIndexOptions { Name = "idx_category" }));
+
+        products.Indexes.CreateOne(new CreateIndexModel<Domain.Entities.Product>(
+            Builders<Domain.Entities.Product>.IndexKeys.Ascending(p => p.SubCategoryName),
+            new CreateIndexOptions { Name = "idx_subcategory" }));
+
+        products.Indexes.CreateOne(new CreateIndexModel<Domain.Entities.Product>(
+            Builders<Domain.Entities.Product>.IndexKeys.Ascending(p => p.Status),
+            new CreateIndexOptions { Name = "idx_status" }));
+
+        // The previous text index on Name/Brand/Description is removed: Cosmos DB for MongoDB API
+        // does not support text ($text) indexes. The field indexes above cover the browse paths;
+        // full-text search would be served by a dedicated search service if introduced later.
     }
 }

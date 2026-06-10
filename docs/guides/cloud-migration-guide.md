@@ -272,4 +272,54 @@ Then run a service with an active `az login` session, e.g. `cd AK.Order/AK.Order
 
 ---
 
-*Subsequent steps — managed data store and serverless eventing migrations — are added to this guide as they are delivered.*
+## Step 4 — Product Catalogue on Azure Cosmos DB (MongoDB API)
+
+This step moves the **AK.Products** data store from a self-hosted MongoDB to **Azure Cosmos DB using its MongoDB API**, with the connection string held in **Key Vault** (no secret in config) and a single-field, hashed **shard (partition) key** on the product id. The decision is recorded in [ADR-016](../adr/ADR-016-data-migration-cosmosdb-and-workload-identity.md).
+
+### Understand
+
+**The MongoDB API is wire-compatible.** Cosmos DB's MongoDB API speaks the MongoDB wire protocol, so the existing **MongoDB driver and almost all of the data-access code are unchanged**. The migration is primarily a **connection-string change**, plus one Cosmos-specific design decision: the **shard (partition) key**.
+
+**Partitioning, in plain terms.** Cosmos physically distributes a collection's documents across partitions by the shard key. Choosing it well is what keeps the database fast and cheap:
+
+- A **high-cardinality** key spreads documents evenly and avoids a **hot partition** (one partition taking most of the traffic while others sit idle). The **product id** has one distinct value per product — ideal.
+- **Point-reads by id** land on a **single partition** and are cheap (≈1 RU).
+- **Category / sub-category browse** is a **low-cost cross-partition query** at this catalogue scale, served by **secondary indexes** on those fields.
+
+The key is therefore the **product id, hashed**. Per the current Cosmos DB for MongoDB documentation, the **RU-based (serverless) API requires a single-field, hashed shard key** (range and compound shard keys are a vCore-tier feature), which matches this choice. In a document the product id is stored as `_id`, so the shard key is `{ "_id": "hashed" }`.
+
+**The connection string is a secret.** It is **retrieved from Key Vault** via the configuration foundation built in Step 1, so it **never appears in committed config**. `appsettings` carries only non-secret values — the database and collection names.
+
+### Build
+
+- **Configuration / secret.** The Cosmos connection string is stored as the Key Vault secret **`ProductsCosmosConnectionString`**. The Step 1 Key Vault configuration provider loads it into `IConfiguration`; the Products Infrastructure registration reads `configuration["ProductsCosmosConnectionString"]` and sets it on `MongoDbSettings.ConnectionString` (via `PostConfigure`). `appsettings` keeps only `DatabaseName` (`antkart-products`, the provisioned Cosmos database) and `ProductsCollection` (`products`) — **no connection string**. When the secret is absent (offline development), the non-secret local default (`mongodb://localhost:27017`) applies.
+- **Shard key.** On first construction, `MongoDbContext` ensures the collection is sharded on `{ "_id": "hashed" }` via the `shardCollection` command. The command is a no-op if the collection is already sharded, and is safely skipped on a standalone MongoDB (which does not support sharding) so local development still runs.
+- **Indexes.** The category, sub-category, and status secondary indexes are kept (supported single-field indexes). Two Mongo-only constructs are adjusted for Cosmos: the SKU index is made **non-unique** (a unique index on a sharded collection must include the shard key, so SKU uniqueness moves to the data/seed layer), and the **text index is removed** (Cosmos DB for MongoDB API does not support `$text` indexes). The MongoDB driver, the repository, the class map, and all query code are otherwise unchanged.
+
+### Execute
+
+Store the connection string in Key Vault (so it never touches the repo), then run Products so it resolves the secret from the vault:
+
+```bash
+# Get the Cosmos account's primary MongoDB connection string and store it as a Key Vault secret.
+CONN=$(az cosmosdb keys list --name cosmos-antkart-dev --resource-group rg-antkart-dev-eastus \
+  --type connection-strings --query "connectionStrings[0].connectionString" -o tsv)
+
+az keyvault secret set --vault-name kv-antkart-dev --name "ProductsCosmosConnectionString" --value "$CONN"
+```
+
+The app reads it from the configuration key **`ProductsCosmosConnectionString`** (loaded from Key Vault). Run with an active `az login` session that can read the vault:
+
+```bash
+cd AK.Products/AK.Products.API && dotnet run
+```
+
+### Verify
+
+- Products **starts and connects to Cosmos DB** using the vaulted connection string — there is **no localhost MongoDB** involved.
+- A **create** and a **read** of a single product succeed against Cosmos (a point-read by id is single-partition).
+- Startup seeding remains **opt-in** (`Seeding:RunOnStartup` default `false`); the **bulk seed of the full catalogue** is the later **test-enablement step**, not this one.
+
+---
+
+*Subsequent step — serverless eventing migration — is added to this guide as it is delivered.*

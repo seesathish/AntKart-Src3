@@ -14,7 +14,7 @@ AntKart is a cloud-native e-commerce platform built as independently deployable 
 
 ```
 AntKart/
-├── AK.Products/          REST Minimal API — product catalogue (MongoDB)
+├── AK.Products/          REST Minimal API — product catalogue (Cosmos DB, MongoDB API)
 ├── AK.Discount/          gRPC service — discount coupons (SQLite)
 ├── AK.ShoppingCart/      REST Minimal API — shopping cart (Redis)
 ├── AK.Order/             REST Minimal API — order management (PostgreSQL + SAGA)
@@ -54,7 +54,7 @@ AK.<Service>/
 
 ### ✅ AK.Products  (REST Minimal API)
 - **Transport:** HTTP REST, port 5077 (dev) / 8080 (Docker)
-- **Database:** MongoDB — `AKProductsDb` / `Products` collection
+- **Database:** Azure Cosmos DB (MongoDB API) — `antkart-products` / `products` collection. Sharded on `{ "_id": "hashed" }` (single-field, hashed shard key on the product id). Connection string is a secret read from Key Vault (config key/secret `ProductsCosmosConnectionString`); `appsettings` holds only the non-secret database/collection names. Local fallback: `mongodb://localhost:27017` when no vaulted secret. Wire-compatible, so `MongoDB.Driver` is unchanged.
 - **Architecture:** DDD + Clean Architecture — `MongoDB.Driver` confined to Infrastructure only; Domain has zero infrastructure dependencies
 - **Patterns:** CQRS (MediatR 12.4.1), FluentValidation pipeline, Specification, Unit of Work
 - **Category design:** Data-driven — `CategoryName` (top-level: Men/Women/Kids/Sports/etc.) + `SubCategoryName` (specific: Shirts/Dresses/etc.) are plain strings; no hardcoded enum. Adding a new category is a data change only.

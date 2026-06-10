@@ -16,7 +16,22 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         ProductClassMap.Register();
+
+        // Non-secret values (database + collection names) come from appsettings.
         services.Configure<MongoDbSettings>(configuration.GetSection("MongoDbSettings"));
+
+        // M3 Step 4: the Cosmos DB (MongoDB API) connection string is a SECRET — it is never
+        // committed. It is loaded into configuration from Key Vault (by the Step 1 foundation)
+        // under the secret name "ProductsCosmosConnectionString". When present it sets the
+        // connection string; otherwise the non-secret local default (mongodb://localhost:27017)
+        // applies, so offline development still works.
+        services.PostConfigure<MongoDbSettings>(s =>
+        {
+            var cosmosConnectionString = configuration["ProductsCosmosConnectionString"];
+            if (!string.IsNullOrWhiteSpace(cosmosConnectionString))
+                s.ConnectionString = cosmosConnectionString;
+        });
+
         services.AddSingleton<MongoDbContext>();
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
