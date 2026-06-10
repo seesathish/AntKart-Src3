@@ -170,6 +170,7 @@ The dedicated identity microservice was removed in the Entra migration. Microsof
 - **Transport:** HTTP REST, port 5086 (dev) / 8085 (Docker)
 - **Database:** PostgreSQL — `AKPaymentsDb` via EF Core 9 + Npgsql, code-first migrations
 - **External:** Razorpay sandbox (test cards: 4111 1111 1111 1111 Visa, 5267 3169 4984 2643 Mastercard; OTP: 1234 1234)
+- **Razorpay credentials (secret-less):** `AK.Payments.API` startup calls `AddAzureKeyVaultConfiguration` (same as Products); the sandbox keys are vaulted as `Razorpay--KeyId` / `Razorpay--KeySecret`, projected to `Razorpay:KeyId` / `Razorpay:KeySecret` and bound to `RazorpaySettings`. `appsettings*.json` hold only empty placeholders — **no real keys committed**; runtime auth via `DefaultAzureCredential` (managed identity)
 - **Architecture:** DDD + Clean Architecture
 - **Patterns:** CQRS (MediatR 12.4.1), FluentValidation pipeline, Repository, Unit of Work, EF Core Outbox
 - **Operations:** Initiate payment, verify signature, saved cards CRUD, user payment history

@@ -506,6 +506,16 @@ dotnet run --project AK.Tools/AK.Tools.ProductsSeedLoader       # logs progress;
 
 Verify by re-running the loader: the product count stays at 3,000 (idempotent). The CSV parsing and the upsert logic are unit-tested with a mocked sink, so **no live Cosmos is required** to test the loader.
 
+### Payments — Razorpay sandbox credentials from Key Vault
+
+The **AK.Payments** service calls the Razorpay sandbox, which needs a key id + key secret. Those are **secrets**, so — exactly like the Products Cosmos connection string (Step 1) — they are read from **Key Vault**, never committed.
+
+- **Wiring.** `AK.Payments.API` startup now calls the same `builder.Configuration.AddAzureKeyVaultConfiguration(...)` BuildingBlocks extension that Products uses: conditional on the non-secret `KeyVault:Uri` setting and authenticated with `DefaultAzureCredential` (the developer's `az login` locally, the service's managed identity in the cloud — no secret).
+- **How the secrets flow.** Key Vault secrets named **`Razorpay--KeyId`** and **`Razorpay--KeySecret`** are projected by the configuration provider into `Razorpay:KeyId` / `Razorpay:KeySecret`, which bind to the existing `RazorpaySettings`. (Key Vault's `--` secret-name separator maps to the configuration `:` hierarchy.)
+- **Nothing committed.** The `Razorpay` section in `appsettings.json` / `appsettings.Production.json` holds only empty strings with a note that the values are vaulted; the real sandbox keys exist only in Key Vault. Store them once with, e.g., `az keyvault secret set --vault-name kv-antkart-dev --name "Razorpay--KeyId" --value "<sandbox key id>"` (and `Razorpay--KeySecret`).
+
+Existing Payments tests mock `IConfiguration` / `RazorpaySettings`, so they are unaffected; no host is booted in tests, so no live Key Vault call is made.
+
 ---
 
 *Subsequent steps are added to this guide as they are delivered.*

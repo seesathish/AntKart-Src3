@@ -1,4 +1,5 @@
 using AK.BuildingBlocks.Authentication;
+using AK.BuildingBlocks.Configuration;
 using AK.BuildingBlocks.HealthChecks;
 using AK.BuildingBlocks.Logging;
 using AK.BuildingBlocks.Swagger;
@@ -7,11 +8,27 @@ using AK.Payments.API.Extensions;
 using AK.BuildingBlocks.Middleware;
 using AK.Payments.Application.Extensions;
 using AK.Payments.Infrastructure.Extensions;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 
+// M3 Step 1 — load configuration/secrets from Azure Key Vault (when KeyVault:Uri is set),
+// using this service's own Entra identity, before anything reads configuration. This is how the
+// Razorpay sandbox credentials (vaulted as Razorpay--KeyId / Razorpay--KeySecret) flow into
+// IConfiguration as Razorpay:KeyId / Razorpay:KeySecret and bind to RazorpaySettings — no secret
+// is committed to the repo.
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
+
 builder.AddSerilogLogging();
+
+// Non-secret startup confirmation: record WHETHER Key Vault configuration was loaded, and from
+// which vault URI (a non-secret value). Secret values are never logged.
+var keyVaultUri = builder.Configuration["KeyVault:Uri"];
+if (string.IsNullOrWhiteSpace(keyVaultUri))
+    Log.Information("Key Vault configuration source not configured (KeyVault:Uri absent); using local configuration only");
+else
+    Log.Information("Key Vault configuration loaded from {KeyVaultUri}", keyVaultUri);
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
