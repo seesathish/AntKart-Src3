@@ -8,6 +8,7 @@ using AK.Products.API.Extensions;
 using AK.BuildingBlocks.Middleware;
 using AK.Products.Application.Extensions;
 using AK.Products.Infrastructure.Extensions;
+using AK.Products.Infrastructure.HealthChecks;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -30,7 +31,13 @@ else
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddEntraAuthentication(builder.Configuration);
-builder.Services.AddDefaultHealthChecks();
+
+// Health surfaces: the shared shallow self check (liveness + baseline readiness), plus DEEP
+// dependency checks tagged so they appear ONLY on /health/deps — never on liveness/readiness.
+// A Cosmos or Key Vault blip must never restart a pod or pull the fleet out of rotation.
+builder.Services.AddDefaultHealthChecks()
+    .AddCheck<MongoDbHealthCheck>("cosmos", tags: new[] { HealthCheckTags.Deep })
+    .AddKeyVaultDeepCheck();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {

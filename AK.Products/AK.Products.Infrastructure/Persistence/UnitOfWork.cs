@@ -1,6 +1,7 @@
 ﻿using AK.Products.Application.Interfaces;
 using AK.Products.Infrastructure.Persistence.Repositories;
 using Microsoft.Extensions.Options;
+using Polly.Registry;
 
 namespace AK.Products.Infrastructure.Persistence;
 
@@ -11,10 +12,10 @@ public sealed class UnitOfWork : IUnitOfWork
 
     public IProductRepository Products { get; }
 
-    public UnitOfWork(MongoDbContext context, IOptions<MongoDbSettings> settings)
+    public UnitOfWork(MongoDbContext context, IOptions<MongoDbSettings> settings, ResiliencePipelineProvider<string> pipelines)
     {
         _context = context;
-        Products = new ProductRepository(context, settings);
+        Products = new ProductRepository(context, settings, pipelines);
     }
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default)

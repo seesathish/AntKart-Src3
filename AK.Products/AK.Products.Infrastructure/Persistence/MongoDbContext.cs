@@ -31,6 +31,12 @@ public sealed class MongoDbContext
     public IMongoCollection<T> GetCollection<T>(string collectionName) =>
         _database.GetCollection<T>(collectionName);
 
+    // A real round-trip used by the DEEP Cosmos health check ({ ping: 1 } is the cheapest command
+    // the server answers). Deliberately a single low-cost call — and exposed only on the diagnostic
+    // endpoint, never on liveness/readiness.
+    public Task PingAsync(CancellationToken ct = default) =>
+        _database.RunCommandAsync<BsonDocument>(new BsonDocument("ping", 1), cancellationToken: ct);
+
     // Cosmos DB physically distributes a collection's documents across partitions by a SHARD
     // (partition) KEY. The Cosmos DB for MongoDB RU/serverless API requires a SINGLE-FIELD,
     // HASHED shard key. We shard on the product id (`_id`):

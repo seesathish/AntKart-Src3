@@ -1,5 +1,6 @@
 using AK.Products.Domain.Entities;
 using AK.Products.Infrastructure.Persistence;
+using AK.Products.Tests.Common;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
@@ -17,7 +18,7 @@ public sealed class UnitOfWorkTests
             .Returns(collectionMock.Object);
         var context = new MongoDbContext(dbMock.Object);
         var settings = Options.Create(new MongoDbSettings { ProductsCollection = "products" });
-        return new UnitOfWork(context, settings);
+        return new UnitOfWork(context, settings, TestResilience.CosmosPipelines());
     }
 
     [Fact]

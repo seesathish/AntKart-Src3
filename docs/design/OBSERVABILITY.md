@@ -306,7 +306,16 @@ Dev override reduces heap to 256m for laptop-friendly operation.
 
 ## Health Checks
 
-All services expose `/health` (via `AddDefaultHealthChecks()` from BuildingBlocks). The gateway proxies `/health` for each downstream service. Kibana and Elasticsearch have their own Docker healthchecks.
+Every service exposes **three probe surfaces** plus a backward-compatible alias, wired identically via `AddDefaultHealthChecks()` + `MapDefaultHealthChecks()` (BuildingBlocks). The Kubernetes probes that consume them are connected in the AKS milestone; these endpoints are what they target.
+
+| Endpoint | Selects | Maps to | Job |
+|----------|---------|---------|-----|
+| `GET /health/live` | `ak:live` checks (shallow `self`) | Liveness probe | "Process responsive?" Makes **no external calls** — a failed liveness probe restarts the pod, so checking a dependency here risks a **restart storm**. |
+| `GET /health/ready` | `ak:ready` checks | Readiness probe | "Take traffic?" **Tolerant** — Degraded ⇒ HTTP 200 (still serving). A failed readiness probe de-registers the pod, so failing on a shared-dependency blip risks a fleet-wide **blackout**. |
+| `GET /health/deps` | **all** checks (incl. deep + MassTransit bus) | Diagnostics (humans/dashboards) | Deep reachability (Cosmos, Service Bus, Key Vault), detailed JSON. **Not** a probe — may go red without restarting/de-registering anything. |
+| `GET /health` | `ak:live` (shallow alias) | Legacy monitors | Unchanged shallow behaviour. |
+
+**Tags are namespaced (`ak:`) on purpose.** Third-party libraries register their own checks with plain tags — MassTransit tags its bus check `"ready"` — so selecting by `ak:ready` keeps our readiness probe from silently inheriting a shared dependency's state. Deep checks (`MongoDbHealthCheck` = a real Cosmos `{ ping: 1 }`; reusable `KeyVaultHealthCheck` = lists secret *metadata* only) are tagged `ak:deep` and surface **only** on `/health/deps`. The gateway proxies `/health` for each downstream service.
 
 ---
 

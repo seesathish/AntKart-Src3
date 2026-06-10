@@ -378,4 +378,56 @@ Then run the Order service with an active `az login` session: `cd AK.Order/AK.Or
 
 ---
 
+## Step 6 — Resilience and Health Hardening
+
+This step makes the services behave correctly under real cloud conditions — transient faults and throttling — and exposes health endpoints shaped for orchestrator probes. It has two themes: **resilience** (retry the right way, at the right place) and **health** (three probe surfaces, mapped safely). The cross-cutting design is recorded in [RESILIENCE](../design/RESILIENCE.md) and [OBSERVABILITY](../design/OBSERVABILITY.md).
+
+### Understand
+
+**Theme A — Resilience.** Cloud dependencies throttle and blip, and the application must absorb that without failing the user request:
+
+- **Cosmos DB throttles.** Cosmos enforces a provisioned-throughput (RU) budget. Exceed it and a request is rejected with **429 — "request rate too large"**, accompanied by a **Retry-After** hint saying how long to wait. The correct response is to **retry, but only after the server's Retry-After window** — retrying sooner spends more of the budget and *deepens* the throttling, a self-inflicted outage. So the data-store retry policy must **honour Retry-After**, not apply a blind/fixed backoff. When there is no hint, it falls back to exponential backoff with jitter (so many instances don't retry in lockstep).
+- **Service Bus / Event Grid have transient faults.** A dropped link or a momentary fault should be retried, not surfaced as an error. The Service Bus consumer retry is already configured in MassTransit (`UseMessageRetry`); we keep it and deliberately **do not double-wrap** it with another layer. The Event Grid side-effect publisher (Step 5) already swallows failures (fire-and-forget) and is left as-is.
+- **Why retries live at the call site.** The data-access call site knows the operation's idempotency and holds the `CancellationToken`, so it can retry *safely* and abort promptly. A blind, transport-level retry can replay a non-idempotent write or mask a real outage.
+
+**Theme B — Health, and the three probe types.** A health endpoint is not one thing; conflating the three is how a blip becomes an outage:
+
+- **Liveness** = *shallow*. "Is the process responsive?" It must make **no external calls**. A failed liveness probe **restarts the pod** — so if liveness checked Cosmos or Service Bus, one dependency blip would restart every pod at once (a **restart storm**) and turn a momentary blip into a full outage.
+- **Readiness** = *shallow or lightly gated, but tolerant*. "Should this pod receive traffic?" A failed readiness probe only **removes the pod from the load balancer**. If readiness failed on a *shared*-dependency blip, **every** pod would drop out together — a fleet-wide **blackout**. So readiness must tolerate transient shared-dependency wobble: dependency checks placed here report **Degraded** (still serving, HTTP 200), not Unhealthy.
+- **Deep dependency checks** (Cosmos / Service Bus / Key Vault reachable) belong on a **separate diagnostic endpoint**, for humans and dashboards — **never** wired to liveness/readiness. The diagnostic endpoint is *allowed* to go red without restarting or de-registering anything.
+
+The Kubernetes probes that *consume* these endpoints are wired in the **AKS milestone**; this step **exposes** the endpoints and gets the mapping right.
+
+### Build
+
+- **Resilience (Polly v8, in `AK.BuildingBlocks`).** A reusable `AddDataStoreRetry` pipeline retries a caller-supplied set of transient faults and, via a Polly `DelayGenerator`, **honours a caller-supplied Retry-After** (returning the server's delay verbatim, with no jitter added), falling back to exponential-backoff-with-jitter only when there is no hint. It is **driver-agnostic** — the data-store specifics are passed in as two delegates — so the shared library carries no `MongoDB.Driver` dependency. `AddDataStoreResiliencePipeline(key, …)` registers it as a named pipeline. The Cosmos specifics live in `AK.Products.Infrastructure.Resilience.CosmosResilience`: `IsTransient` (429 / timeout / dropped connection) and `GetRetryAfter` (reads `RetryAfterMs` off the 429 error document). `ProductRepository` runs **every** Cosmos call through the `"cosmos"` pipeline, so the resilience sits exactly at the data-access call site.
+- **Health checks (in `AK.BuildingBlocks` + each service).** `AddDefaultHealthChecks()` registers a single shallow `self` check tagged for **both** liveness and readiness, and returns the builder so a service can chain **deep** checks. `MapDefaultHealthChecks()` exposes the three surfaces consistently for every service:
+  - `GET /health/live` — only `ak:live`-tagged checks (the shallow `self`); excluded checks never execute, so no dependency is touched.
+  - `GET /health/ready` — only `ak:ready`-tagged checks; **Degraded is mapped to HTTP 200** (tolerance), only an explicit Unhealthy returns 503.
+  - `GET /health/deps` — **all** checks (self + every deep dependency + MassTransit's own bus check), rendered as detailed JSON. Not a probe target.
+  - `GET /health` — kept as a backward-compatible shallow alias.
+  Tags use an **`ak:` namespace on purpose**: third-party libraries register their own checks with plain tags (MassTransit tags its bus check `"ready"`), and selecting by `ak:ready` keeps our readiness probe from silently inheriting the bus's state. The deep checks — `MongoDbHealthCheck` (a real `{ ping: 1 }` to Cosmos) and the reusable `KeyVaultHealthCheck` (lists secret *metadata*, never values) — are tagged `ak:deep`, so they surface only on `/health/deps`. **AK.Products** demonstrates the full set; Service Bus reachability is surfaced platform-wide by MassTransit's bus check on `/health/deps`.
+
+### Execute
+
+Everything here is non-secret configuration; the endpoints need no special setup. Run a service locally and hit the three surfaces:
+
+```bash
+cd AK.Products/AK.Products.API && dotnet run    # → http://localhost:5077
+
+curl -i http://localhost:5077/health/live       # shallow: 200 "Healthy" whenever the process is up
+curl -i http://localhost:5077/health/ready      # tolerant readiness: 200 unless the app truly can't serve
+curl -s http://localhost:5077/health/deps | jq  # diagnostics: per-dependency JSON (Cosmos, Key Vault, bus)
+```
+
+### Verify
+
+- **Liveness stays shallow:** `/health/live` returns 200 even while a dependency (Cosmos / Key Vault) is down — it makes no external calls, so a dependency outage can never trigger a restart storm.
+- **Readiness is tolerant:** `/health/ready` keeps returning 200 through a transient shared-dependency wobble (a dependency check there reports Degraded, not Unhealthy), so the fleet is not pulled out of rotation together.
+- **Deep diagnostics are honest and isolated:** `/health/deps` reports each dependency's real state (and may return 503 when one is down) **without** affecting liveness or readiness.
+- **Cosmos throttling is respected:** unit tests prove the data-store pipeline retries on a simulated 429 and **waits the server's Retry-After** (not the base delay), retries other transient faults, and does **not** retry logical errors. The Service Bus consumer retry remains the single MassTransit `UseMessageRetry` (no double-wrapping).
+- **Build and tests are green** (`dotnet build` / `dotnet test`) with no live Azure required — the resilience and health-registration tests use mocks/abstractions.
+
+---
+
 *Subsequent steps are added to this guide as they are delivered.*

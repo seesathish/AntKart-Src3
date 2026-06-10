@@ -6,6 +6,7 @@ using AK.Products.Application.Interfaces;
 using AK.Products.Infrastructure.Grpc;
 using AK.Products.Infrastructure.Persistence;
 using AK.Products.Infrastructure.Persistence.Repositories;
+using AK.Products.Infrastructure.Resilience;
 using AK.Products.Infrastructure.Seeders;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,6 +33,15 @@ public static class ServiceCollectionExtensions
             if (!string.IsNullOrWhiteSpace(cosmosConnectionString))
                 s.ConnectionString = cosmosConnectionString;
         });
+
+        // Cosmos DB throttles under load (429) and tells the client how long to wait. Register a
+        // retry pipeline that honours that Retry-After (falling back to exponential backoff + jitter
+        // otherwise). The ProductRepository runs every data-store call through this pipeline — the
+        // retry lives at the call site, where idempotency and the CancellationToken are known. The
+        // Cosmos-specific transient/Retry-After rules come from CosmosResilience; the mechanism is
+        // the shared BuildingBlocks AddDataStoreRetry.
+        services.AddDataStoreResiliencePipeline(
+            "cosmos", CosmosResilience.IsTransient, CosmosResilience.GetRetryAfter);
 
         services.AddSingleton<MongoDbContext>();
         services.AddScoped<IProductRepository, ProductRepository>();

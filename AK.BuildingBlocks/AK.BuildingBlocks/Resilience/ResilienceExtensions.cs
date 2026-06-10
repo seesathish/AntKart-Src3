@@ -91,4 +91,81 @@ public static class ResilienceExtensions
 
         return services;
     }
+
+    // ── Cloud data-store retry that HONOURS a server-supplied Retry-After ────────────────────────
+    //
+    // Builds a retry pipeline for a throttling cloud data store (e.g. Azure Cosmos DB). It is the
+    // reusable mechanism; the data-store SPECIFICS are supplied by the caller as two delegates, so
+    // this shared library carries NO data-store driver dependency (no MongoDB.Driver here — the
+    // Cosmos specifics live in AK.Products.Infrastructure).
+    //
+    // WHY retries belong HERE, at the data-access call site — not in the driver or a global filter:
+    //   • The call site owns the operation's idempotency and its CancellationToken, so it can retry
+    //     SAFELY and abort promptly. A blind, transport-level retry can replay a non-idempotent
+    //     write or mask a genuine outage.
+    //
+    // WHY Cosmos throttling MUST respect Retry-After rather than retrying blindly:
+    //   • Cosmos enforces a provisioned-throughput (RU) budget. Exceed it and the request is
+    //     rejected with 429 ("request rate too large") AND a Retry-After hint saying HOW LONG to
+    //     wait. Retrying BEFORE that window elapses spends more of the budget and DEEPENS the
+    //     throttling — a self-inflicted outage. Honour the server's hint; only when there is no
+    //     hint do we fall back to our own exponential backoff.
+    //
+    //   isTransient    — which exceptions are worth retrying (429 / timeout / dropped connection);
+    //   getRetryAfter  — pull the server's Retry-After out of the exception (null when absent).
+    public static ResiliencePipelineBuilder AddDataStoreRetry(
+        this ResiliencePipelineBuilder builder,
+        Func<Exception, bool> isTransient,
+        Func<Exception, TimeSpan?> getRetryAfter,
+        int maxRetryAttempts = 5,
+        TimeSpan? baseDelay = null,
+        TimeSpan? attemptTimeout = null)
+    {
+        builder.AddRetry(new Polly.Retry.RetryStrategyOptions
+        {
+            ShouldHandle = args => new ValueTask<bool>(
+                args.Outcome.Exception is { } ex && isTransient(ex)),
+            MaxRetryAttempts = maxRetryAttempts,
+
+            // Fallback schedule when the server gives NO Retry-After: exponential backoff with
+            // jitter. Jitter de-synchronises many instances so they don't all retry on the same
+            // tick (thundering-herd prevention).
+            BackoffType = DelayBackoffType.Exponential,
+            UseJitter = true,
+            Delay = baseDelay ?? TimeSpan.FromMilliseconds(200),
+
+            // DelayGenerator runs before each retry's wait. If the server told us exactly how long
+            // to wait (429 Retry-After), return THAT and Polly uses it verbatim (no jitter added on
+            // top). Returning null hands control back to the exponential-backoff schedule above.
+            DelayGenerator = args =>
+            {
+                var retryAfter = args.Outcome.Exception is { } ex ? getRetryAfter(ex) : null;
+                return new ValueTask<TimeSpan?>(retryAfter);
+            }
+        });
+
+        // Per-attempt ceiling so one wedged call cannot hang a request indefinitely. Added AFTER
+        // the retry strategy, so it wraps each individual attempt (the retry strategy is outer).
+        builder.AddTimeout(attemptTimeout ?? TimeSpan.FromSeconds(20));
+        return builder;
+    }
+
+    // Registers a named data-store retry pipeline (built by AddDataStoreRetry) in DI, resolvable
+    // via ResiliencePipelineProvider<string>.GetPipeline(key). The caller supplies the data-store
+    // specifics (isTransient / getRetryAfter); this keeps the Polly registration in one place so
+    // each service just names its store, e.g. AddDataStoreResiliencePipeline("cosmos", ...).
+    public static IServiceCollection AddDataStoreResiliencePipeline(
+        this IServiceCollection services,
+        string key,
+        Func<Exception, bool> isTransient,
+        Func<Exception, TimeSpan?> getRetryAfter,
+        int maxRetryAttempts = 5,
+        TimeSpan? baseDelay = null,
+        TimeSpan? attemptTimeout = null)
+    {
+        services.AddResiliencePipeline(key, builder =>
+            builder.AddDataStoreRetry(
+                isTransient, getRetryAfter, maxRetryAttempts, baseDelay, attemptTimeout));
+        return services;
+    }
 }

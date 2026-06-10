@@ -7,6 +7,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using Moq;
+using Polly.Registry;
 
 namespace AK.Products.Tests.Infrastructure;
 
@@ -32,7 +33,7 @@ public sealed class ProductRepositoryTests
             .Returns(collection.Object);
         var context = new MongoDbContext(db.Object);
         var settings = Options.Create(new MongoDbSettings { ProductsCollection = "products" });
-        return (new ProductRepository(context, settings), collection);
+        return (new ProductRepository(context, settings, TestResilience.CosmosPipelines()), collection);
     }
 
     [Fact]

@@ -99,6 +99,23 @@ Applied to EF Core Npgsql connection factory for the `AKPaymentsDb` database —
 
 The gateway circuit breaker is independent from the downstream service's own resilience — providing a second layer of protection at the edge.
 
+### 7. Cosmos DB (Products) — retry that honours the 429 Retry-After
+
+```csharp
+// AK.BuildingBlocks — driver-agnostic mechanism (no MongoDB.Driver dependency):
+services.AddDataStoreResiliencePipeline("cosmos",
+    CosmosResilience.IsTransient, CosmosResilience.GetRetryAfter);
+// Pipeline "cosmos": retry transient faults (429 / timeout / dropped connection),
+//   honour the server's Retry-After on a 429, else exponential backoff + jitter; 20s per-attempt timeout.
+```
+
+Azure Cosmos DB enforces a provisioned-throughput (RU) budget. When exceeded it rejects the request with **429 — "request rate too large"** and a **Retry-After** hint. Retrying *before* that window deepens the throttling, so the pipeline must respect the hint rather than back off blindly.
+
+- **Mechanism (BuildingBlocks).** `AddDataStoreRetry` builds a Polly v8 retry whose `DelayGenerator` returns the caller-supplied Retry-After verbatim when present (no jitter added on top), and falls back to exponential-backoff-with-jitter when absent. It takes two delegates — `isTransient` and `getRetryAfter` — so the shared library carries **no** `MongoDB.Driver` dependency.
+- **Cosmos specifics (Products).** `CosmosResilience.IsTransient` retries `MongoCommandException` 16500 (429) / 50 (timeout) and connection-level faults; `GetRetryAfter` reads `RetryAfterMs` off the 429 error document. `ProductRepository` runs **every** Cosmos call through the `"cosmos"` pipeline — resilience lives at the data-access call site, where idempotency and the `CancellationToken` are known.
+
+> **Service Bus** consumer retry stays the single MassTransit `UseMessageRetry` (incremental 3×) — deliberately **not** double-wrapped. The **Event Grid** side-effect publisher is fire-and-forget and swallows failures (see [EVENTBUS](EVENTBUS.md)).
+
 ---
 
 ## Resilience Architecture

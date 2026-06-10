@@ -65,7 +65,9 @@ AK.<Service>/
 - **SKU format:** `{CAT_ABBREV}-{SUBCAT_ABBREV}-{001..NNN}` e.g. `MEN-SHIR-001`, `WOM-DRES-001`
 - **New endpoint:** `GET /api/v1/products/categories` — returns distinct top-level category names from DB
 - **Removed endpoints:** `/men`, `/women`, `/kids` — replaced by `?category=Men`, `?category=Women`, `?category=Kids`
-- **Tests:** 202 passing (domain, commands, queries, validators, specifications, DTO mapping, GetProductCategories handler, ReserveStockConsumer)
+- **Cosmos resilience:** `ProductRepository` runs every Cosmos call through the `"cosmos"` Polly v8 pipeline (`AddDataStoreResiliencePipeline`); `CosmosResilience` (Infrastructure) supplies the transient-fault rules and **honours the 429 `RetryAfterMs`** (falls back to exponential backoff + jitter). Retry lives at the data-access call site; BuildingBlocks carries no MongoDB dependency
+- **Deep health checks:** `MongoDbHealthCheck` (real Cosmos `{ ping: 1 }`) + `AddKeyVaultDeepCheck()` are tagged `ak:deep` and surface only on `/health/deps` — never on liveness/readiness
+- **Tests:** 214 passing (domain, commands, queries, validators, specifications, DTO mapping, GetProductCategories handler, ReserveStockConsumer, Cosmos resilience retry/RetryAfter, health-check registration)
 - **Swagger:** `http://localhost:5077/swagger` (Development only)
 - **Design doc:** [AK.Products/PRODUCTS_TECHNICAL_DESIGN.md](AK.Products/PRODUCTS_TECHNICAL_DESIGN.md)
 
@@ -122,7 +124,7 @@ The dedicated identity microservice was removed in the Entra migration. Microsof
 - `Common/PagedResult<T>`, `Result<T>`
 - `Exceptions/NotFoundException`, `ValidationException`
 - `Logging/SerilogExtensions` — Serilog with console + rolling file + Elasticsearch sink
-- `HealthChecks/HealthCheckExtensions` — `/health` endpoint
+- `HealthChecks/HealthCheckExtensions` + `HealthCheckTags` — three probe surfaces wired into every service: `/health/live` (shallow `self`, no external calls — liveness, avoids restart storms), `/health/ready` (tolerant — Degraded ⇒ 200, avoids fleet blackout), `/health/deps` (all checks incl. deep + MassTransit bus, detailed JSON — diagnostics, not a probe), plus shallow `/health` alias. Tags are namespaced (`ak:live`/`ak:ready`/`ak:deep`) so a third-party check (e.g. MassTransit's `"ready"`-tagged bus check) cannot leak onto our readiness probe. `KeyVaultHealthCheck` + `AddKeyVaultDeepCheck()` is a reusable deep check (lists secret metadata only)
 - `Middleware/CorrelationIdMiddleware` — `X-Correlation-Id` header
 - `Authentication/AuthenticationExtensions` — `AddEntraAuthentication()` + `UseEntraAuth()` shared JWT auth wiring; validates the token against Microsoft Entra ID (issuer = tenant v2 issuer, audience = the API app registration `api://antkart-api-dev`, lifetime, signature via Entra OIDC keys) and reads authorization from the **flat `roles` claim** (`RoleClaimType = "roles"`, `MapInboundClaims = false`)
 - `Authentication/EntraSettings` — typed, non-secret config record (`Instance`, `TenantId`, `Audience`) bound from the `Entra` section; derives authority/issuer as `{Instance}/{TenantId}/v2.0`
@@ -138,7 +140,7 @@ The dedicated identity microservice was removed in the Entra migration. Microsof
 - `Middleware/ExceptionHandlerMiddleware` — shared exception→HTTP mapper used by ShoppingCart, Order, Payments, Notification, Products
 - `Messaging/MassTransitExtensions` — `AddAzureServiceBusMassTransit(config, servicePrefix, configure)` helper; connects to the Service Bus namespace (`ServiceBus:FullyQualifiedNamespace`, non-secret) with `DefaultAzureCredential` (Entra, no connection string). Each service passes a unique prefix ("order", "notification", "payments", "cart", "products") so consumers get uniquely-named receive endpoints. **Topology is owned by infrastructure-as-code** — the identity holds Service Bus Data Sender/Receiver (never Manage), so MassTransit uses the provisioned entities and does not create/alter topology at runtime
 - `Messaging/EventGrid/IEventGridSideEffectPublisher` + `EventGridSideEffectPublisher` — fire-and-forget Event Grid publisher for lightweight side-effects (notification), deliberately separate from the durable Service Bus saga. `TryPublishAsync(eventType, subject, data)` **never throws** — any failure is swallowed + logged, returns `false`, so a side-effect failure cannot roll back or block the core transaction. Builds `EventGridPublisherClient` from non-secret `EventGrid:TopicEndpoint` + `DefaultAzureCredential` (Entra, no topic key); a missing/invalid endpoint makes it a safe no-op. Registered via `AddEventGridSideEffectPublisher()`. See [docs/design/EVENTBUS.md](docs/design/EVENTBUS.md) "Two Eventing Mechanisms"
-- `Resilience/ResilienceExtensions` — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, `AddNpgsqlResilience()` (Npgsql uses exponential backoff + jitter to prevent thundering herd on DB reconnect)
+- `Resilience/ResilienceExtensions` — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, `AddNpgsqlResilience()` (Npgsql uses exponential backoff + jitter to prevent thundering herd on DB reconnect); `AddDataStoreRetry()` / `AddDataStoreResiliencePipeline()` — driver-agnostic data-store retry that **honours a server-supplied Retry-After** (verbatim, no jitter) and falls back to exponential backoff + jitter; the caller passes `isTransient`/`getRetryAfter` delegates so no data-store driver leaks into BuildingBlocks (used by Products for Cosmos 429 throttling)
 - `Swagger/SwaggerExtensions` — `UseSwaggerInDevelopment(title)` gates `UseSwagger()` + `UseSwaggerUI()` to Development only; `AddSwaggerGen()` registration stays in each service
 - `Versioning/ApiVersioningExtensions` — `AddStandardApiVersioning()` sets default v1.0, accepts version via URL segment (`/api/v1/`) or `api-version` header; currently demonstrated in AK.Order, other services adopt by calling this single method
 
@@ -325,12 +327,13 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | MassTransit.Azure.ServiceBus.Core | 8.3.6 | BuildingBlocks (Azure Service Bus transport, Entra auth) |
 | MassTransit.EntityFrameworkCore | 8.3.6 | Order Infrastructure (outbox + saga) |
 | Azure.Identity | 1.13.2 | BuildingBlocks (Key Vault + Service Bus token auth) |
+| Azure.Security.KeyVault.Secrets | 4.7.0 | BuildingBlocks (Key Vault deep health check) |
 | Azure.Messaging.EventGrid | 4.30.0 | BuildingBlocks (fire-and-forget side-effect publisher) |
 | Microsoft.Azure.Functions.Worker | 2.0.0 | AK.NotificationFunctions |
 | Microsoft.Azure.Functions.Worker.Sdk | 2.0.0 | AK.NotificationFunctions |
 | Microsoft.Azure.Functions.Worker.Extensions.EventGrid | 3.4.3 | AK.NotificationFunctions |
 | Microsoft.Extensions.Http.Resilience | 9.0.0 | BuildingBlocks, Products Infrastructure |
-| Microsoft.Extensions.Resilience | 9.0.0 | BuildingBlocks, Order/ShoppingCart Infrastructure |
+| Microsoft.Extensions.Resilience | 9.0.0 | BuildingBlocks, Order/ShoppingCart/Products Infrastructure |
 | Ocelot | 23.4.2 | Gateway API |
 | Razorpay | 3.3.2 | Payments Infrastructure |
 | xunit | 2.9.x | Tests |
