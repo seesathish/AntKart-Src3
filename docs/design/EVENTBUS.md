@@ -2,7 +2,9 @@
 
 ## Overview
 
-Async communication between microservices uses **MassTransit 8.3.6** with **RabbitMQ 3.13** as the message broker. The order flow implements a **SAGA choreography pattern** with an **EF Core Outbox** to guarantee at-least-once delivery and prevent dual-write problems.
+Async communication between microservices uses **MassTransit 8.3.6** over **Azure Service Bus** as the transport. The order flow implements a **SAGA choreography pattern** with an **EF Core Outbox** to guarantee at-least-once delivery and prevent dual-write problems.
+
+MassTransit keeps the consumers and saga **transport-agnostic** — they are written against MassTransit's API, so the move from a self-hosted broker to Service Bus changed only the bus configuration. The service connects to Service Bus with **Microsoft Entra authentication** (`DefaultAzureCredential`) against the namespace's fully-qualified hostname — there is no connection string or SAS key. The Service Bus **topology is owned by infrastructure-as-code** (see [Service Bus Topology & Observability](#service-bus-topology--observability)).
 
 ---
 
@@ -20,7 +22,7 @@ flowchart TD
     Client([Client]):::service
     OrderAPI[AK.Order API]:::service
     Handler[CreateOrderCommandHandler]:::service
-    MQ_OC{{RabbitMQ: order-created}}:::event
+    MQ_OC{{Service Bus: order-created}}:::event
     Saga[OrderSaga]:::saga
     RSC[ReserveStockConsumer\nAK.Products]:::service
     MongoDB[(MongoDB)]:::database
@@ -31,14 +33,14 @@ flowchart TD
     MQ_OC --> Saga
     MQ_OC --> RSC
     RSC -->|load & validate stock| MongoDB
-    RSC -->|all stock OK| MQ_SR{{RabbitMQ: stock-reserved}}:::event
-    RSC -->|stock insufficient| MQ_SRF{{RabbitMQ: stock-reservation-failed}}:::event
+    RSC -->|all stock OK| MQ_SR{{Service Bus: stock-reserved}}:::event
+    RSC -->|stock insufficient| MQ_SRF{{Service Bus: stock-reservation-failed}}:::event
 
     MQ_SR --> Saga
     MQ_SRF --> Saga
 
-    Saga -->|StockReserved| MQ_OConf{{RabbitMQ: order-confirmed}}:::event
-    Saga -->|StockReservationFailed| MQ_OCan{{RabbitMQ: order-cancelled}}:::event
+    Saga -->|StockReserved| MQ_OConf{{Service Bus: order-confirmed}}:::event
+    Saga -->|StockReservationFailed| MQ_OCan{{Service Bus: order-cancelled}}:::event
 
     MQ_OConf --> OCC[OrderConfirmedConsumer\nAK.Order]:::service
     MQ_OConf --> CCC[ClearCartOnOrderConfirmedConsumer\nAK.ShoppingCart]:::service
@@ -46,7 +48,7 @@ flowchart TD
 
     OCC -->|Status = Confirmed| OrderDB[(PostgreSQL\nAKOrdersDb)]:::database
     CCC -->|DeleteCart| Redis[(Redis)]:::database
-    CCC -->|CartClearedIntegrationEvent| MQ_CC{{RabbitMQ: cart-cleared}}:::event
+    CCC -->|CartClearedIntegrationEvent| MQ_CC{{Service Bus: cart-cleared}}:::event
     OCan -->|Status = Cancelled| OrderDB
 ```
 
@@ -110,7 +112,7 @@ sequenceDiagram
     participant C as Client
     participant P as AK.Payments
     participant R as Razorpay
-    participant MQ as RabbitMQ
+    participant MQ as Service Bus
     participant O as AK.Order
 
     C->>P: POST /api/payments/initiate
@@ -153,87 +155,53 @@ modelBuilder.AddOutboxStateEntity();
 
 ---
 
-## RabbitMQ Configuration
+## Service Bus Configuration
+
+The transport is configured by a single **non-secret** setting — the namespace's fully-qualified hostname. There is no connection string or SAS key: the service authenticates to Service Bus with **Microsoft Entra** via `DefaultAzureCredential` (the developer's Azure CLI sign-in locally, the resource's managed identity in the cloud).
 
 ```json
-"RabbitMq": {
-  "Host": "rabbitmq",
-  "VirtualHost": "/",
-  "Username": "guest",
-  "Password": "guest"
+"ServiceBus": {
+  "FullyQualifiedNamespace": "sb-antkart-dev.servicebus.windows.net"
 }
 ```
 
-Exchange and queue names are auto-formatted by MassTransit using kebab-case convention (e.g., `order-created-integration-event`).
+Receive-endpoint names are formatted by MassTransit using a per-service prefix and kebab-case (e.g. `order-payment-succeeded`), so each service's endpoints are uniquely named.
 
 **Global retry policy** (configured in `MassTransitExtensions`):
-- 3 retries with exponential back-off: 1s, 3s, 9s
+- 3 retries with incremental back-off (1s, then +2s each) before the message is dead-lettered
 
 ---
 
-## RabbitMQ Management Portal
+## Service Bus Topology & Observability
 
-### Access
-| URL | `http://localhost:15672` |
-|-----|--------------------------|
-| Username | `guest` |
-| Password | `guest` |
+### Topology is owned by infrastructure-as-code
 
----
+The Service Bus entities are **provisioned by infrastructure-as-code** (the platform's source of truth), not created by the application at runtime. The platform provisions:
 
-### What to look at
+- an **`integration-events` topic** — carries the published integration events (publish/subscribe);
+- a **subscription per consuming service** on that topic (e.g. `products`, `notification`) — each receives its own copy of every event (fan-out, not competing consumers);
+- an **`order-commands` queue** — for commands with a single owner (point-to-point / competing consumers).
 
-#### Exchanges
-**RabbitMQ → Exchanges tab**
+The application's managed identity holds only **Azure Service Bus Data Sender / Data Receiver** — never **Manage** — so MassTransit is configured to **send to and receive from the existing entities and to not create or alter topology** at runtime. Adding a new entity (a subscription or queue) is therefore an **infrastructure-as-code change**, not an application concern.
 
-Every integration event gets its own exchange (named after the event class in kebab-case). Useful ones to inspect:
+### Events and their consumers
 
-| Exchange | Published by |
-|----------|-------------|
-| `order-created-integration-event` | AK.Order |
-| `stock-reserved-integration-event` | AK.Products |
-| `stock-reservation-failed-integration-event` | AK.Products |
-| `order-confirmed-integration-event` | AK.Order (SAGA) |
-| `order-cancelled-integration-event` | AK.Order (SAGA) |
-| `payment-initiated-integration-event` | AK.Payments |
-| `payment-succeeded-integration-event` | AK.Payments |
-| `payment-failed-integration-event` | AK.Payments |
-| `user-registered-integration-event` | AK.UserIdentity |
+| Integration event | Published by | Consumed by |
+|-------------------|--------------|-------------|
+| `OrderCreatedIntegrationEvent` | AK.Order | AK.Order (OrderSaga), AK.Notification |
+| `StockReservedIntegrationEvent` / `StockReservationFailedIntegrationEvent` | AK.Products | AK.Order (OrderSaga) |
+| `OrderConfirmedIntegrationEvent` | AK.Order (SAGA) | AK.Order, AK.Payments, AK.ShoppingCart, AK.Notification |
+| `OrderCancelledIntegrationEvent` | AK.Order (SAGA) | AK.Order, AK.Notification |
+| `PaymentSucceededIntegrationEvent` / `PaymentFailedIntegrationEvent` | AK.Payments | AK.Order, AK.Notification |
 
-Click an exchange → **Bindings** tab to see which queues are bound to it (fan-out delivery).
+Each consuming service receives events through its own subscription on the `integration-events` topic, so the same event reaches every interested service independently.
 
-#### Queues
-**RabbitMQ → Queues tab**
+### Observing the flow
 
-Each consumer gets its own uniquely-named queue (prefixed by service name):
+Inspect the live topology and message flow with the **Azure portal → Service Bus namespace** (Service Bus Explorer) or the Azure CLI:
 
-| Queue | Consumer service |
-|-------|----------------|
-| `order-order-confirmed` | AK.Order — OrderConfirmedConsumer |
-| `order-order-cancelled` | AK.Order — OrderCancelledConsumer |
-| `order-payment-succeeded` | AK.Order — PaymentSucceededConsumer |
-| `order-payment-failed` | AK.Order — PaymentFailedConsumer |
-| `notification-user-registered` | AK.Notification |
-| `notification-order-created` | AK.Notification |
-| `notification-payment-succeeded` | AK.Notification |
-| `notification-payment-failed` | AK.Notification |
-| `products-reserve-stock` | AK.Products — ReserveStockConsumer |
-| `cart-order-confirmed` | AK.ShoppingCart — ClearCartOnOrderConfirmedConsumer |
-
-Click a queue to see:
-- **Ready** — messages waiting to be consumed
-- **Unacked** — messages being processed by a consumer
-- **Total** — throughput counter
-- **Messages** tab — browse actual message payloads (useful for debugging stuck messages)
-
-#### Monitoring a live event flow
-1. Go to **Queues** — note all queues show 0 Ready
-2. Trigger an action (e.g. create an order via Postman)
-3. Refresh Queues — messages briefly appear as Unacked then clear (fast consumers)
-4. If a queue shows **Ready > 0** for more than a few seconds, the consumer is down or erroring — check that service's logs
-
-#### Dead-letter queues
-Failed messages after all retries (3 × exponential backoff) land in dead-letter queues named `<queue>_skipped` or `<queue>_error`. These appear in the Queues list if any message has been dead-lettered. Click the queue → **Get messages** to inspect the failed payload and reason.
+- **Subscriptions / queue** — view active and dead-lettered message counts and peek messages on the `integration-events` topic's subscriptions and the `order-commands` queue.
+- **Dead-letter sub-queue** — every queue and subscription has a built-in **dead-letter sub-queue (DLQ)**. After a message exceeds its max delivery attempts (the retry policy above) or its time-to-live, Service Bus moves it to the DLQ, where it can be inspected, the cause fixed, and the message resubmitted — nothing is silently lost.
 
 ---
 
@@ -241,11 +209,10 @@ Failed messages after all retries (3 × exponential backoff) land in dead-letter
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| Queue has Ready messages accumulating | Consumer service is down | Check `docker logs antkart-<service>` |
-| Exchange missing | Service never started (no consumers registered) | start the relevant service |
-| Messages appearing in `_error` queue | Consumer threw unhandled exception | Inspect message payload; check service logs |
-| No exchanges visible at all | RabbitMQ just restarted; services not yet connected | Wait ~30s for services to reconnect; check service healthcheck |
-| `guest` login rejected | RabbitMQ default user disabled | Check `RABBITMQ_DEFAULT_USER/PASS` env vars in the broker configuration |
+| Messages accumulating on a subscription | Consumer service is down or erroring | Check the service's logs |
+| A service cannot connect to Service Bus | Missing Entra role or no active sign-in | Ensure the identity holds Azure Service Bus Data Sender/Receiver on the namespace, and a token is available (`az login` locally / managed identity in the cloud) |
+| Messages landing in the dead-letter sub-queue | Consumer threw repeatedly (poison message) | Inspect the DLQ payload and reason; fix the cause and resubmit |
+| A consumer never receives events | Its subscription does not exist | Add the subscription in infrastructure-as-code (topology is IaC-owned, not created at runtime) |
 
 ---
 
@@ -288,11 +255,11 @@ These keep the Order aggregate's status in sync after the SAGA finalises or paym
 
 ## MassTransit Registration
 
-Each service registers via `AddRabbitMqMassTransit()` (BuildingBlocks helper):
+Each service registers via `AddAzureServiceBusMassTransit()` (BuildingBlocks helper). The second argument is the service prefix used to name its receive endpoints; the bus connects to Service Bus with Entra auth and binds to the IaC-provisioned entities (it does not create topology):
 
 ```csharp
 // AK.Order
-services.AddRabbitMqMassTransit(configuration, cfg =>
+services.AddAzureServiceBusMassTransit(configuration, "order", cfg =>
 {
     cfg.AddSagaStateMachine<OrderSaga, OrderSagaState>()
        .EntityFrameworkRepository(r =>
@@ -313,23 +280,25 @@ services.AddRabbitMqMassTransit(configuration, cfg =>
 });
 
 // AK.Products
-services.AddRabbitMqMassTransit(configuration, cfg =>
+services.AddAzureServiceBusMassTransit(configuration, "products", cfg =>
 {
     cfg.AddConsumer<ReserveStockConsumer>();
 });
 
 // AK.ShoppingCart
-services.AddRabbitMqMassTransit(configuration, cfg =>
+services.AddAzureServiceBusMassTransit(configuration, "cart", cfg =>
 {
     cfg.AddConsumer<ClearCartOnOrderConfirmedConsumer>();
 });
 
 // AK.Payments
-services.AddRabbitMqMassTransit(configuration, cfg =>
+services.AddAzureServiceBusMassTransit(configuration, "payments", cfg =>
 {
-    // publishes PaymentInitiatedIntegrationEvent,
-    //           PaymentSucceededIntegrationEvent,
-    //           PaymentFailedIntegrationEvent
+    cfg.AddEntityFrameworkOutbox<PaymentsDbContext>(o => { o.UsePostgres(); o.UseBusOutbox(); });
+    cfg.AddConsumer<OrderConfirmedConsumer>();
+    // also publishes PaymentInitiatedIntegrationEvent,
+    //                PaymentSucceededIntegrationEvent,
+    //                PaymentFailedIntegrationEvent
 });
 ```
 

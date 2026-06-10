@@ -29,7 +29,7 @@ Use this matrix to determine what to check based on what you are changing:
 | `ExceptionHandlerMiddleware` (shared) | All services using it (all except UserIdentity which has its own) |
 | `HttpContextExtensions.GetUserId()` | Every endpoint and handler that calls `http.GetUserId()` |
 | `AuthenticationExtensions` / `KeycloakSettings` | All services calling `AddKeycloakAuthentication` |
-| `MassTransitExtensions.AddRabbitMqMassTransit` | All services using MassTransit (Order, Payments, Notification, Cart, Products, UserIdentity) |
+| `MassTransitExtensions.AddAzureServiceBusMassTransit` | All services using MassTransit (Order, Payments, Notification, Cart, Products) |
 | `PagedResult<T>` or `Result<T>` | All handlers and endpoints returning these types |
 | `ocelot.json` route change | Gateway, affected downstream service, ocelot.Development.json, docs/design/EVENTBUS.md if routing changes |
 | Integration event field added (non-breaking) | All consumers — verify they compile; new optional field with default is safe |

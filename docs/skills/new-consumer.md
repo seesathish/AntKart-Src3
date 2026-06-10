@@ -1,6 +1,6 @@
 # Skill: Add a New Consumer
 
-**Purpose:** Add a MassTransit consumer to an existing AntKart service to handle an already-defined integration event from BuildingBlocks. Covers: consumer class, MediatR command wiring, DI registration, MassTransit test, and queue naming.
+**Purpose:** Add a MassTransit consumer to an existing AntKart service to handle an already-defined integration event from BuildingBlocks. Covers: consumer class, MediatR command wiring, DI registration, MassTransit test, and receive-endpoint naming on Azure Service Bus.
 
 ---
 
@@ -10,7 +10,7 @@
 - Examples: AK.Payments starts consuming `OrderCancelledIntegrationEvent` to auto-refund; AK.Products consumes `OrderCancelledIntegrationEvent` to release reserved stock
 
 ## Prerequisite Reading
-- [EVENTBUS.md](../design/EVENTBUS.md) — fan-out topology, queue naming, dead-letter queues
+- [EVENTBUS.md](../design/EVENTBUS.md) — fan-out topology (integration-events topic + subscriptions), receive-endpoint naming, dead-lettering, and IaC-owned topology
 - [new-integration-event.md](new-integration-event.md) — if the event doesn't exist yet, create it first
 
 ---
@@ -79,31 +79,33 @@ public class OrderCancelledConsumer(
 
 ## Step 4 — Register the Consumer
 
-Open the service's Infrastructure `ServiceCollectionExtensions.cs` and add the consumer to the `AddRabbitMqMassTransit` configure callback:
+Open the service's Infrastructure `ServiceCollectionExtensions.cs` and add the consumer to the `AddAzureServiceBusMassTransit` configure callback:
 
 ```csharp
-services.AddRabbitMqMassTransit(configuration, "payments", configure =>
+services.AddAzureServiceBusMassTransit(configuration, "payments", configure =>
 {
     configure.AddConsumer<PaymentInitiatedAuditConsumer>();   // existing
     configure.AddConsumer<OrderCancelledConsumer>();           // ← new
 });
 ```
 
-The `"payments"` prefix creates a uniquely-named queue `payments-order-cancelled` bound to the `order-cancelled` RabbitMQ exchange. Multiple services can consume the same event independently (fan-out, not competing consumers).
+The `"payments"` prefix gives the consumer a uniquely-named receive endpoint (`payments-order-cancelled`). The event is delivered through the service's **subscription** on the `integration-events` topic, so multiple services can consume the same event independently (fan-out, not competing consumers).
+
+> **Topology is owned by infrastructure-as-code.** The application's identity holds only Service Bus Data Sender/Receiver — it does not create or alter entities at runtime. Adding a consumer to a service that **already has a subscription** needs no new entity. But if this is the service's **first** consumer (it has no subscription yet), or you are introducing a new command **queue**, that entity must be **added in infrastructure-as-code** — it is not provisioned by the app.
 
 ---
 
-## Step 5 — Verify the Queue Name
+## Step 5 — Verify the Receive-Endpoint Name
 
-Queue name = `{servicePrefix}-{event-kebab-case}`.
+Receive-endpoint name = `{servicePrefix}-{event-kebab-case}`.
 
-| Service prefix | Event | Resulting queue |
-|----------------|-------|-----------------|
+| Service prefix | Event | Resulting endpoint |
+|----------------|-------|--------------------|
 | `payments` | `OrderCancelledIntegrationEvent` | `payments-order-cancelled` |
 | `notification` | `OrderCancelledIntegrationEvent` | `notification-order-cancelled` |
 | `products` | `OrderCancelledIntegrationEvent` | `products-order-cancelled` |
 
-Confirm no other consumer in the same service is already consuming the same event — duplicate registration causes MassTransit to create two competing consumers on the same queue.
+Confirm no other consumer in the same service is already consuming the same event — duplicate registration would route the same event to two consumers on the same subscription.
 
 ---
 
@@ -162,19 +164,15 @@ dotnet test
 
 ## Step 8 — Update docs/design/EVENTBUS.md
 
-Add a row to the **Queues** table in `docs/design/EVENTBUS.md`:
+Update the **Events and their consumers** table in `docs/design/EVENTBUS.md` to add the service as a consumer of the event (and, if a new subscription/queue was required, note it as an infrastructure-as-code change).
 
-```markdown
-| `payments-order-cancelled` | `OrderCancelledIntegrationEvent` | `OrderCancelledConsumer` in AK.Payments |
-```
-
-Also update the target service's `<SERVICE>_TECHNICAL_DESIGN.md` — add the event to "Events Consumed" table.
+Also update the target service's `<SERVICE>_TECHNICAL_DESIGN.md` — add the event to its "Events Consumed" table.
 
 ---
 
 ## Step 9 — Idempotency Consideration
 
-RabbitMQ may redeliver messages (network hiccup, consumer restart). Ensure the handler is idempotent:
+Service Bus guarantees at-least-once delivery, so a message may be redelivered (network hiccup, consumer restart). Ensure the handler is idempotent:
 - Check if the refund already exists before creating a new one
 - Use the event's `OrderId` or `PaymentId` as the idempotency key
 - Return early (not throw) if already processed — throwing causes MassTransit to retry
@@ -186,9 +184,10 @@ RabbitMQ may redeliver messages (network hiccup, consumer restart). Ensure the h
 - [ ] Event contract confirmed in BuildingBlocks (fields sufficient for your needs)
 - [ ] MediatR command created for the business logic
 - [ ] Consumer class created (`IConsumer<T>`, thin — delegates to MediatR)
-- [ ] Consumer registered in `AddRabbitMqMassTransit` configure callback
-- [ ] Queue name verified (no duplicate consumer for same event in same service)
+- [ ] Consumer registered in `AddAzureServiceBusMassTransit` configure callback
+- [ ] Receive-endpoint name verified (no duplicate consumer for same event in same service)
+- [ ] If a new subscription/queue was needed, it was added in infrastructure-as-code
 - [ ] MassTransit in-memory integration test written and passing
 - [ ] Handler is idempotent (safe to receive duplicate events)
-- [ ] `docs/design/EVENTBUS.md` Queues table updated
+- [ ] `docs/design/EVENTBUS.md` Events-and-their-consumers table updated
 - [ ] Target service design doc "Events Consumed" table updated

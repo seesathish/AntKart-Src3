@@ -1,6 +1,6 @@
 # Skill: Add a New Integration Event
 
-**Purpose:** Add a new integration event that flows between two AntKart services via RabbitMQ/MassTransit — event contract definition in BuildingBlocks, publisher wiring in the source service, consumer class and registration in the target service, and a MassTransit in-memory integration test.
+**Purpose:** Add a new integration event that flows between two AntKart services over Azure Service Bus (via MassTransit) — event contract definition in BuildingBlocks, publisher wiring in the source service, consumer class and registration in the target service, and a MassTransit in-memory integration test.
 
 ---
 
@@ -9,7 +9,7 @@
 - Examples: `OrderShippedIntegrationEvent` → Notification sends shipping email; `ReviewPostedIntegrationEvent` → Products updates average rating
 
 ## Prerequisite Reading
-- [EVENTBUS.md](../design/EVENTBUS.md) — fan-out exchange topology, queue naming, SAGA pattern
+- [EVENTBUS.md](../design/EVENTBUS.md) — fan-out topology (integration-events topic + subscriptions), receive-endpoint naming, IaC-owned topology, SAGA pattern
 - [AK.BuildingBlocks/Messaging/IntegrationEvents/](../../AK.BuildingBlocks/AK.BuildingBlocks/Messaging/IntegrationEvents/) — existing event records
 
 ---
@@ -82,14 +82,14 @@ internal sealed class UpdateOrderStatusCommandHandler(
 **2b — Confirm MassTransit is already registered in the source service's Infrastructure:**
 ```csharp
 // AK.Order/AK.Order.Infrastructure/Extensions/ServiceCollectionExtensions.cs
-services.AddRabbitMqMassTransit(configuration, "order", configure =>
+services.AddAzureServiceBusMassTransit(configuration, "order", configure =>
 {
     // existing consumers...
     // no action needed for publishing — IPublishEndpoint is auto-registered by MassTransit
 });
 ```
 
-Publishing requires no additional registration. `IPublishEndpoint` is resolved from DI automatically when `AddRabbitMqMassTransit` is called.
+Publishing requires no additional registration. `IPublishEndpoint` is resolved from DI automatically when `AddAzureServiceBusMassTransit` is called.
 
 ---
 
@@ -126,37 +126,38 @@ public class OrderShippedConsumer(IMediator mediator, ILogger<OrderShippedConsum
 
 ```csharp
 // AK.Notification/AK.Notification.Infrastructure/Extensions/ServiceCollectionExtensions.cs
-services.AddRabbitMqMassTransit(configuration, "notification", configure =>
+services.AddAzureServiceBusMassTransit(configuration, "notification", configure =>
 {
     configure.AddConsumer<OrderCreatedConsumer>();
     configure.AddConsumer<OrderConfirmedConsumer>();
     configure.AddConsumer<OrderCancelledConsumer>();
     configure.AddConsumer<PaymentSucceededConsumer>();
     configure.AddConsumer<PaymentFailedConsumer>();
-    configure.AddConsumer<UserRegisteredConsumer>();
     configure.AddConsumer<OrderShippedConsumer>();   // ← add here
 });
 ```
 
-The `AddRabbitMqMassTransit` helper in BuildingBlocks uses the service prefix (`"notification"`) to create a uniquely-named queue `notification-order-shipped`. This ensures fan-out — both `notification-order-shipped` and any other service's queue (e.g. `analytics-order-shipped`) receive the same event independently.
+The `AddAzureServiceBusMassTransit` helper in BuildingBlocks uses the service prefix (`"notification"`) to give the consumer a uniquely-named receive endpoint (`notification-order-shipped`). The event is delivered through the service's **subscription** on the `integration-events` topic, so every interested service receives its own copy independently (fan-out).
+
+> **Topology is owned by infrastructure-as-code.** If the target service already has a subscription on the `integration-events` topic, no new entity is needed — the new event simply reaches its newly-registered consumer. If the event is delivered through a **new** entity (a first subscription for a service, or a new command **queue**), that entity must be **added in infrastructure-as-code** — the application's identity is Send/Receive-only and never creates topology at runtime.
 
 ---
 
-## Step 4 — Update the RabbitMQ Exchange/Queue Map in docs/design/EVENTBUS.md
+## Step 4 — Update the Events Map in docs/design/EVENTBUS.md
 
-In `docs/design/EVENTBUS.md`, add a row to the Exchanges table and a row to the Queues table:
+In `docs/design/EVENTBUS.md`, add the new event to the **Events and their consumers** table (publisher and consuming services):
 
 ```markdown
-| `OrderShippedIntegrationEvent` | `order-shipped` (fanout) | Published by AK.Order on status→Shipped |
-
-| `notification-order-shipped` | `OrderShippedIntegrationEvent` | `OrderShippedConsumer` in AK.Notification |
+| `OrderShippedIntegrationEvent` | AK.Order (on status → Shipped) | AK.Notification |
 ```
+
+If the new event required a new Service Bus entity (a first subscription for a service, or a new command queue), record that it is provisioned in **infrastructure-as-code**, not by the application.
 
 ---
 
 ## Step 5 — Write an Integration Test
 
-In `AK.IntegrationTests/`, add a test file `OrderShippedConsumerTests.cs` using the MassTransit in-memory test harness. No real RabbitMQ or DB needed.
+In `AK.IntegrationTests/`, add a test file `OrderShippedConsumerTests.cs` using the MassTransit in-memory test harness. The harness is transport-agnostic — no broker or DB needed.
 
 ```csharp
 public class OrderShippedConsumerTests
@@ -204,7 +205,7 @@ dotnet test           # all pass; new integration test included
 
 ## Step 7 — Update Documentation
 
-- `docs/design/EVENTBUS.md` — Exchanges + Queues tables updated (Step 4)
+- `docs/design/EVENTBUS.md` — Events-and-their-consumers table updated (Step 4)
 - Source service `<SERVICE>_TECHNICAL_DESIGN.md` — add event to "Integration Events Published" table
 - Target service `<SERVICE>_TECHNICAL_DESIGN.md` — add event to "Events Consumed" table
 - `CLAUDE.md` — update the BuildingBlocks `Messaging/IntegrationEvents/` list
@@ -217,9 +218,10 @@ dotnet test           # all pass; new integration test included
 - [ ] Event contains all data consumers need (no callback required)
 - [ ] `IPublishEndpoint.Publish(...)` called at correct point in source handler
 - [ ] Consumer class created in target service Infrastructure (`IConsumer<T>` implemented)
-- [ ] Consumer registered in target service `AddRabbitMqMassTransit` configure callback
+- [ ] Consumer registered in target service `AddAzureServiceBusMassTransit` configure callback
+- [ ] If a new subscription/queue was needed, it was added in infrastructure-as-code
 - [ ] MassTransit in-memory integration test written and passing
-- [ ] `docs/design/EVENTBUS.md` Exchanges + Queues tables updated
+- [ ] `docs/design/EVENTBUS.md` Events-and-their-consumers table updated
 - [ ] Source service design doc "Published" table updated
 - [ ] Target service design doc "Consumed" table updated
 - [ ] BuildingBlocks section in `CLAUDE.md` updated
