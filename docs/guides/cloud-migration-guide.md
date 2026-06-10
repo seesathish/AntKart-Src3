@@ -432,7 +432,7 @@ curl -s http://localhost:5077/health/deps | jq  # diagnostics: per-dependency JS
 
 ## Step 7 — Provision Azure Communication Services for Email
 
-The platform sends transactional email (order confirmations, receipts, cancellation notices). This step **provisions the email infrastructure** — Azure Communication Services (ACS) Email — as code, ahead of the test-enablement sub-step that wires the application's send path to it. It is infrastructure only; the application email-sending code is the **next** sub-step. The module and its live unit follow the established Terraform/Terragrunt pattern (see the [Infrastructure Guide](infrastructure-guide.md) §15).
+The platform sends transactional email (order confirmations, receipts, cancellation notices). This step **provisions the email infrastructure** — Azure Communication Services (ACS) Email — as code, then **wires the application's send path** to it. The infrastructure module and its live unit follow the established Terraform/Terragrunt pattern (see the [Infrastructure Guide](infrastructure-guide.md) §15); the application side adds a reusable email sender and connects the notification paths (covered under *Application email sending* below).
 
 ### Understand
 
@@ -466,7 +466,23 @@ az communication email domain show `
   --query "{fromSenderDomain:fromSenderDomain, dataLocation:dataLocation}" -o json
 ```
 
-A correct result: `terragrunt apply` ends with `4 added, 0 changed, 0 destroyed`; the Communication Service reports `provisioningState = Succeeded` and a `hostName`; and the managed domain reports a `*.azurecomm.net` `fromSenderDomain`. **No keys** are output — the application reaches the endpoint with its managed identity in the email-sending sub-step.
+A correct result: `terragrunt apply` ends with `4 added, 0 changed, 0 destroyed`; the Communication Service reports `provisioningState = Succeeded` and a `hostName`; and the managed domain reports a `*.azurecomm.net` `fromSenderDomain`. **No keys** are output — the application reaches the endpoint with its managed identity (next).
+
+### Application email sending
+
+**A reusable sender.** `AK.BuildingBlocks.Email` adds an `IEmailSender` abstraction and an `AcsEmailSender` built on the **`Azure.Communication.Email`** SDK. The notification paths depend on the interface, not the provider. `AddAcsEmailSender(configuration)` wires it from the non-secret `Acs` config section (`Acs:Endpoint`, `Acs:SenderAddress`, optional `Acs:SenderDisplayName`).
+
+**Entra-first authentication (secret-less), with a Key-Vault fallback.** The `EmailClient` is constructed once and selected as follows:
+
+- **Default path — managed identity:** `new EmailClient(new Uri(Acs:Endpoint), new DefaultAzureCredential())`. This is the SDK's Entra constructor (verified against the current `Azure.Communication.Email` docs). It authenticates with the app's **managed identity** in the cloud (and the developer's `az login` locally) — no secret. For this to work, the identity must hold an Azure RBAC role on the Communication Services resource: ACS does not yet expose a granular "email sender" data role, so the documented grant is the **Contributor** role **scoped to that single ACS resource** (assigned in the role-assignment step) — tighten it if a narrower built-in role becomes available.
+- **Fallback — connection string:** if `Acs:ConnectionString` is present, `new EmailClient(connectionString)` is used instead. The connection string is a **secret**; it is **never committed** and, if ever needed (an environment where Entra-based send is unavailable), is supplied from **Key Vault**. Only `Acs:Endpoint` and `Acs:SenderAddress` live in committed config.
+- If neither is configured (e.g. local dev), the sender is a **safe no-op** (logs and returns) — it never faults the caller.
+
+**Managed sender domain + friendly display name.** Mail is sent from the Azure-managed `DoNotReply@<managed-subdomain>.azurecomm.net` address (the `sender_address` output). The optional `Acs:SenderDisplayName = "AntKart"` is applied as the RFC 5322 `"AntKart <DoNotReply@…>"` form, so recipients see a friendly From name.
+
+**Where it's wired.** The Event Grid-triggered Function (`AK.NotificationFunctions`) now composes and sends the order-confirmation email via `IEmailSender` (authenticating through the Function App's managed identity) instead of just logging; the **`AK.Notification`** consumers send through the same `IEmailSender` (its `EmailNotificationChannel` delegates to it), replacing the previous local SMTP/Mailhog path. **Decoupling is preserved:** the Function wraps the send in try/catch, and `SendNotificationCommandHandler` already records a failed send as `Failed` — a mail error never faults the consumer or the (already-committed) order.
+
+**Verifying a send.** Email delivery is exercised with **controlled test-recipient addresses set via test data** (never real customers) — point an order's `customerEmail` at a mailbox you own and confirm receipt. In tests, the `EmailClient`/`IEmailSender` is mocked, so no live Azure is required.
 
 ---
 

@@ -13,6 +13,10 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.EventGrid" Version="3.4.3" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Reuse the shared IEmailSender (ACS) from BuildingBlocks; the Function sends via its managed identity. -->
+    <ProjectReference Include="..\AK.BuildingBlocks\AK.BuildingBlocks\AK.BuildingBlocks.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <None Update="host.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

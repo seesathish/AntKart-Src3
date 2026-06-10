@@ -20,7 +20,7 @@ AntKart/
 ├── AK.Order/             REST Minimal API — order management (PostgreSQL + SAGA)
 ├── AK.Gateway/           API Gateway — Ocelot single entry point
 ├── AK.Payments/          REST Minimal API — payment processing (PostgreSQL + Razorpay)
-├── AK.Notification/      REST Minimal API — transactional notifications (PostgreSQL + Mailhog/SMTP)
+├── AK.Notification/      REST Minimal API — transactional notifications (PostgreSQL + ACS Email)
 ├── AK.BuildingBlocks/    Shared cross-cutting library (no business logic)
 ├── AK.IntegrationTests/  SAGA + event bus + notification consumer tests (no API/Grpc dependency)
 ├── AK.NotificationFunctions/  .NET 9 isolated Azure Functions app — Event Grid-triggered fire-and-forget side-effects (notification)
@@ -139,6 +139,7 @@ The dedicated identity microservice was removed in the Entra migration. Microsof
 - `Behaviors/ValidationBehavior<TRequest, TResponse>` — shared MediatR pipeline behavior; every service wires this from BuildingBlocks; replaces per-service copies
 - `Middleware/ExceptionHandlerMiddleware` — shared exception→HTTP mapper used by ShoppingCart, Order, Payments, Notification, Products
 - `Messaging/MassTransitExtensions` — `AddAzureServiceBusMassTransit(config, servicePrefix, configure)` helper; connects to the Service Bus namespace (`ServiceBus:FullyQualifiedNamespace`, non-secret) with `DefaultAzureCredential` (Entra, no connection string). Each service passes a unique prefix ("order", "notification", "payments", "cart", "products") so consumers get uniquely-named receive endpoints. **Topology is owned by infrastructure-as-code** — the identity holds Service Bus Data Sender/Receiver (never Manage), so MassTransit uses the provisioned entities and does not create/alter topology at runtime
+- `Email/IEmailSender` + `Email/AcsEmailSender` — reusable email sender over the `Azure.Communication.Email` SDK, used by the notification paths (Function + AK.Notification). `AddAcsEmailSender(configuration)` reads the non-secret `Acs` section and selects auth **Entra-first**: default is `EmailClient(endpoint, DefaultAzureCredential)` (managed identity, no secret); if `Acs:ConnectionString` is present (Key-Vault-sourced, never committed) it uses the connection-string client; if neither is configured it is a **safe no-op**. Sender display name applied as RFC 5322 `"AntKart <DoNotReply@…>"`. The managed identity needs the **Contributor** role on the ACS resource (no granular email-send role exists yet)
 - `Messaging/EventGrid/IEventGridSideEffectPublisher` + `EventGridSideEffectPublisher` — fire-and-forget Event Grid publisher for lightweight side-effects (notification), deliberately separate from the durable Service Bus saga. `TryPublishAsync(eventType, subject, data)` **never throws** — any failure is swallowed + logged, returns `false`, so a side-effect failure cannot roll back or block the core transaction. Builds `EventGridPublisherClient` from non-secret `EventGrid:TopicEndpoint` + `DefaultAzureCredential` (Entra, no topic key); a missing/invalid endpoint makes it a safe no-op. Registered via `AddEventGridSideEffectPublisher()`. See [docs/design/EVENTBUS.md](docs/design/EVENTBUS.md) "Two Eventing Mechanisms"
 - `Resilience/ResilienceExtensions` — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, `AddNpgsqlResilience()` (Npgsql uses exponential backoff + jitter to prevent thundering herd on DB reconnect); `AddDataStoreRetry()` / `AddDataStoreResiliencePipeline()` — driver-agnostic data-store retry that **honours a server-supplied Retry-After** (verbatim, no jitter) and falls back to exponential backoff + jitter; the caller passes `isTransient`/`getRetryAfter` delegates so no data-store driver leaks into BuildingBlocks (used by Products for Cosmos 429 throttling)
 - `Swagger/SwaggerExtensions` — `UseSwaggerInDevelopment(title)` gates `UseSwagger()` + `UseSwaggerUI()` to Development only; `AddSwaggerGen()` registration stays in each service
@@ -154,9 +155,9 @@ The dedicated identity microservice was removed in the Entra migration. Microsof
 - **Trigger:** `OrderConfirmedNotificationFunction` — `[EventGridTrigger] EventGridEvent`; consumes the fire-and-forget side-effect events pushed by Event Grid (topic `evgt-antkart-dev`); deployed to the provisioned Function App `func-antkart-notifications-dev`
 - **Role in the platform:** the push-based, scale-to-zero half of the **two-mechanism eventing model** — discrete fire-and-forget side-effects (notification), deliberately separate from the durable Service Bus saga; a failure here cannot roll back the order
 - **Auth:** no secrets — reaches any Azure resource it needs via its **managed identity**
-- **Current behaviour:** records (logs) the side-effect; actual email delivery deferred to the test-enablement step
+- **Behaviour:** composes and sends the order-confirmation email via the shared `IEmailSender` (ACS Email) using the Function App's managed identity; the send is wrapped in try/catch (a delivery failure is logged, never faults the Function — decoupling preserved). References `AK.BuildingBlocks` for `IEmailSender`/`AddAcsEmailSender`; non-secret `Acs__Endpoint`/`Acs__SenderAddress`/`Acs__SenderDisplayName` in `local.settings.json` (Function App settings in cloud)
 - **Packages:** `Microsoft.Azure.Functions.Worker` 2.0.0, `Microsoft.Azure.Functions.Worker.Sdk` 2.0.0, `Microsoft.Azure.Functions.Worker.Extensions.EventGrid` 3.4.3
-- **Note:** standalone Functions app — no Domain/Application/Infrastructure layers and no unit-test project (the publish side is unit-tested in AK.Order.Tests); design recorded in [ADR-019](docs/adr/ADR-019-serverless-notification-functions-eventgrid.md)
+- **Note:** standalone Functions app — no Domain/Application/Infrastructure layers and no unit-test project (the email sender is unit-tested in AK.Notification.Tests, the publish side in AK.Order.Tests); design recorded in [ADR-019](docs/adr/ADR-019-serverless-notification-functions-eventgrid.md)
 
 ### ✅ AK.Payments  (REST Minimal API)
 - **Transport:** HTTP REST, port 5086 (dev) / 8085 (Docker)
@@ -176,16 +177,14 @@ The dedicated identity microservice was removed in the Entra migration. Microsof
 ### ✅ AK.Notification  (REST Minimal API — Event-driven)
 - **Transport:** HTTP REST, port 5087 (dev) / 8086 (Docker)
 - **Database:** PostgreSQL — `AKNotificationsDb` via EF Core 9 + Npgsql, auto-migrates on startup
-- **Email (local dev):** Mailhog SMTP trap — port 1025 (SMTP), port 8025 (web UI at `http://localhost:8025`)
-- **Email (production):** Gmail SMTP via `antkartadmin@gmail.com`; credentials supplied through the notification service's `EmailSettings` (kept out of source control); `EmailSettings__Password` must be a Gmail App Password (not the account password)
-- **Email SSL:** `EmailNotificationChannel` uses explicit `SecureSocketOptions` — port 465 → `SslOnConnect`, port 587 → `StartTls`, Mailhog/plain → `None`; never pass a bare `bool` to `ConnectAsync`
+- **Email:** Azure Communication Services (ACS) Email via the shared `IEmailSender` (BuildingBlocks). `EmailNotificationChannel` delegates to `IEmailSender` — no SMTP server/credentials. Entra-first auth (managed identity), Key-Vault connection-string fallback; non-secret `Acs:Endpoint`/`Acs:SenderAddress`/`Acs:SenderDisplayName` in config. Replaced the previous MailKit/Mailhog/Gmail SMTP path.
 - **Architecture:** DDD + Clean Architecture (Domain → Application → Infrastructure → API)
 - **Patterns:** CQRS (MediatR 12.4.1), FluentValidation, MassTransit consumers, channel abstraction
-- **Channel abstraction:** `INotificationChannel` interface resolved by `INotificationChannelResolver`; Email fully implemented (MailKit); SMS + WhatsApp are stubbed for future activation
+- **Channel abstraction:** `INotificationChannel` interface resolved by `INotificationChannelResolver`; Email fully implemented (ACS via `IEmailSender`); SMS + WhatsApp are stubbed for future activation
 - **Events consumed:** `OrderCreatedIntegrationEvent` (order confirmation), `OrderConfirmedIntegrationEvent` (stock confirmed), `OrderCancelledIntegrationEvent` (cancellation notice), `PaymentSucceededIntegrationEvent` (payment receipt), `PaymentFailedIntegrationEvent` (payment failure alert)
 - **Retention:** `NotificationCleanupService` (BackgroundService) deletes notifications older than 90 days, runs daily at 02:00 UTC
 - **Gateway routes:** `GET /gateway/notifications/{everything}` — authenticated, 20 RPS rate limit
-- **Tests:** 37 passing (domain, command handler, query handlers, consumers, template renderer)
+- **Tests:** 42 passing (domain, command handler, query handlers, consumers, template renderer, ACS email sender, email channel delegation)
 - **Swagger:** `http://localhost:5087/swagger` (Development only)
 - **Design doc:** [AK.Notification/NOTIFICATION_TECHNICAL_DESIGN.md](AK.Notification/NOTIFICATION_TECHNICAL_DESIGN.md)
 
@@ -329,6 +328,7 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | Azure.Identity | 1.13.2 | BuildingBlocks (Key Vault + Service Bus token auth) |
 | Azure.Security.KeyVault.Secrets | 4.7.0 | BuildingBlocks (Key Vault deep health check) |
 | Azure.Messaging.EventGrid | 4.30.0 | BuildingBlocks (fire-and-forget side-effect publisher) |
+| Azure.Communication.Email | 1.0.1 | BuildingBlocks (ACS email sender) |
 | Microsoft.Azure.Functions.Worker | 2.0.0 | AK.NotificationFunctions |
 | Microsoft.Azure.Functions.Worker.Sdk | 2.0.0 | AK.NotificationFunctions |
 | Microsoft.Azure.Functions.Worker.Extensions.EventGrid | 3.4.3 | AK.NotificationFunctions |

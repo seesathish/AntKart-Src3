@@ -1,3 +1,4 @@
+using AK.BuildingBlocks.Email;
 using AK.BuildingBlocks.Messaging;
 using MassTransit;
 using AK.Notification.Application.Channels;
@@ -38,7 +39,9 @@ public static class ServiceCollectionExtensions
 
         services.AddHostedService<NotificationCleanupService>();
 
-        services.Configure<EmailSettings>(configuration.GetSection("EmailSettings"));
+        // Email is sent via Azure Communication Services (Entra/managed-identity by default; the
+        // EmailNotificationChannel delegates to this shared IEmailSender).
+        services.AddAcsEmailSender(configuration);
         services.Configure<NotificationSettings>(configuration.GetSection("NotificationSettings"));
 
         services.AddAzureServiceBusMassTransit(
