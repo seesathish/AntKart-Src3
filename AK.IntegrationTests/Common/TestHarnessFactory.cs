@@ -1,3 +1,4 @@
+using AK.BuildingBlocks.Messaging.EventGrid;
 using AK.Order.Application.Common.Interfaces;
 using AK.Order.Application.Sagas;
 using AK.ShoppingCart.Application.Consumers;
@@ -44,6 +45,7 @@ public static class TestHarnessFactory
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSingleton<IEventGridSideEffectPublisher, NoOpEventGridSideEffectPublisher>();
 
         configure?.Invoke(services);
 
@@ -109,6 +111,7 @@ public static class TestHarnessFactory
         mockUow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(0);
 
         services.AddScoped<IUnitOfWork>(_ => mockUow.Object);
+        services.AddSingleton<IEventGridSideEffectPublisher, NoOpEventGridSideEffectPublisher>();
 
         configure?.Invoke(services);
 

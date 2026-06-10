@@ -1,4 +1,5 @@
 using AK.BuildingBlocks.Messaging;
+using AK.BuildingBlocks.Messaging.EventGrid;
 using AK.BuildingBlocks.Resilience;
 using AK.Order.Application.Consumers;
 using AK.Order.Application.Common.Interfaces;
@@ -26,6 +27,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddNpgsqlResilience();
+
+        // Fire-and-forget Event Grid side-effect publisher (notifications), decoupled from the
+        // durable Service Bus saga. Authenticates via DefaultAzureCredential (no key); reads the
+        // non-secret EventGrid:TopicEndpoint setting.
+        services.AddEventGridSideEffectPublisher();
 
         services.AddAzureServiceBusMassTransit(
             configuration,

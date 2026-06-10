@@ -23,6 +23,7 @@ AntKart/
 ├── AK.Notification/      REST Minimal API — transactional notifications (PostgreSQL + Mailhog/SMTP)
 ├── AK.BuildingBlocks/    Shared cross-cutting library (no business logic)
 ├── AK.IntegrationTests/  SAGA + event bus + notification consumer tests (no API/Grpc dependency)
+├── AK.NotificationFunctions/  .NET 9 isolated Azure Functions app — Event Grid-triggered fire-and-forget side-effects (notification)
 ├── AntKart.sln
 ├── AntKart.postman_collection.json
 ├── KNOWN-ISSUES.md       Tracker for known technical debt & deferred fixes (KI-NNN ids)
@@ -102,7 +103,8 @@ AK.<Service>/
 - **Order status state machine:** `_allowedTransitions` dictionary enforces valid transitions — Pending→Confirmed|Cancelled|PaymentFailed, Confirmed→Processing|Shipped|Cancelled, Processing→Shipped|Cancelled, Shipped→Delivered, Delivered/Cancelled are terminal (no further transitions). `UpdateStatus()` throws `InvalidOperationException` for invalid transitions.
 - **Result\<T\> pattern:** `CancelOrderCommandHandler` and `UpdateOrderStatusCommandHandler` return `Result<T>` (BuildingBlocks) instead of throwing for expected failures (not found, invalid transition, already cancelled, delivered). Endpoints map `Result.IsSuccess` → 204/200, `Result.Failure` → 409 with error message. `CreateOrderCommandHandler` deliberately uses exceptions — the CQRS article compares both approaches.
 - **API versioning:** `AddStandardApiVersioning()` registered — v1.0 default, URL segment or `api-version` header. Other services adopt by calling the same single method.
-- **Tests:** 113 passing (domain, features, validators, behaviors, infrastructure with EF InMemory)
+- **Event Grid side-effect:** `OrderConfirmedConsumer` updates `Order.Status = Confirmed`, commits, then fires a fire-and-forget Event Grid notification side-effect via `IEventGridSideEffectPublisher.TryPublishAsync` (never-throws) — decoupled from the saga; a publish failure cannot roll back the confirmation. Topic endpoint in `appsettings` as non-secret `EventGrid:TopicEndpoint`
+- **Tests:** 116 passing (domain, features, validators, behaviors, infrastructure with EF InMemory, OrderConfirmedConsumer side-effect + decoupling)
 - **Swagger:** `http://localhost:5080/swagger` (Development only)
 - **Design doc:** [AK.Order/ORDER_TECHNICAL_DESIGN.md](AK.Order/ORDER_TECHNICAL_DESIGN.md)
 
@@ -135,6 +137,7 @@ The dedicated identity microservice was removed in the Entra migration. Microsof
 - `Behaviors/ValidationBehavior<TRequest, TResponse>` — shared MediatR pipeline behavior; every service wires this from BuildingBlocks; replaces per-service copies
 - `Middleware/ExceptionHandlerMiddleware` — shared exception→HTTP mapper used by ShoppingCart, Order, Payments, Notification, Products
 - `Messaging/MassTransitExtensions` — `AddAzureServiceBusMassTransit(config, servicePrefix, configure)` helper; connects to the Service Bus namespace (`ServiceBus:FullyQualifiedNamespace`, non-secret) with `DefaultAzureCredential` (Entra, no connection string). Each service passes a unique prefix ("order", "notification", "payments", "cart", "products") so consumers get uniquely-named receive endpoints. **Topology is owned by infrastructure-as-code** — the identity holds Service Bus Data Sender/Receiver (never Manage), so MassTransit uses the provisioned entities and does not create/alter topology at runtime
+- `Messaging/EventGrid/IEventGridSideEffectPublisher` + `EventGridSideEffectPublisher` — fire-and-forget Event Grid publisher for lightweight side-effects (notification), deliberately separate from the durable Service Bus saga. `TryPublishAsync(eventType, subject, data)` **never throws** — any failure is swallowed + logged, returns `false`, so a side-effect failure cannot roll back or block the core transaction. Builds `EventGridPublisherClient` from non-secret `EventGrid:TopicEndpoint` + `DefaultAzureCredential` (Entra, no topic key); a missing/invalid endpoint makes it a safe no-op. Registered via `AddEventGridSideEffectPublisher()`. See [docs/design/EVENTBUS.md](docs/design/EVENTBUS.md) "Two Eventing Mechanisms"
 - `Resilience/ResilienceExtensions` — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, `AddNpgsqlResilience()` (Npgsql uses exponential backoff + jitter to prevent thundering herd on DB reconnect)
 - `Swagger/SwaggerExtensions` — `UseSwaggerInDevelopment(title)` gates `UseSwagger()` + `UseSwaggerUI()` to Development only; `AddSwaggerGen()` registration stays in each service
 - `Versioning/ApiVersioningExtensions` — `AddStandardApiVersioning()` sets default v1.0, accepts version via URL segment (`/api/v1/`) or `api-version` header; currently demonstrated in AK.Order, other services adopt by calling this single method
@@ -143,6 +146,15 @@ The dedicated identity microservice was removed in the Entra migration. Microsof
 - **Framework:** MassTransit in-memory test harness (no broker, no DB, no host) — transport-agnostic
 - **Tests:** 35 passing — 6 order saga, 4 order event bus, 7 payment event bus, 5 payment happy-path, 6 payment sad-path, 7 notification consumers
 - **Design doc:** [AK.IntegrationTests/INTEGRATION_TESTS.md](AK.IntegrationTests/INTEGRATION_TESTS.md)
+
+### ✅ AK.NotificationFunctions  (Azure Functions — .NET 9 isolated)
+- **Runtime:** Azure Functions v4, **.NET 9 isolated worker** (`OutputType=Exe`, `HostBuilder().ConfigureFunctionsWorkerDefaults()`)
+- **Trigger:** `OrderConfirmedNotificationFunction` — `[EventGridTrigger] EventGridEvent`; consumes the fire-and-forget side-effect events pushed by Event Grid (topic `evgt-antkart-dev`); deployed to the provisioned Function App `func-antkart-notifications-dev`
+- **Role in the platform:** the push-based, scale-to-zero half of the **two-mechanism eventing model** — discrete fire-and-forget side-effects (notification), deliberately separate from the durable Service Bus saga; a failure here cannot roll back the order
+- **Auth:** no secrets — reaches any Azure resource it needs via its **managed identity**
+- **Current behaviour:** records (logs) the side-effect; actual email delivery deferred to the test-enablement step
+- **Packages:** `Microsoft.Azure.Functions.Worker` 2.0.0, `Microsoft.Azure.Functions.Worker.Sdk` 2.0.0, `Microsoft.Azure.Functions.Worker.Extensions.EventGrid` 3.4.3
+- **Note:** standalone Functions app — no Domain/Application/Infrastructure layers and no unit-test project (the publish side is unit-tested in AK.Order.Tests); design recorded in [ADR-019](docs/adr/ADR-019-serverless-notification-functions-eventgrid.md)
 
 ### ✅ AK.Payments  (REST Minimal API)
 - **Transport:** HTTP REST, port 5086 (dev) / 8085 (Docker)
@@ -313,6 +325,10 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | MassTransit.Azure.ServiceBus.Core | 8.3.6 | BuildingBlocks (Azure Service Bus transport, Entra auth) |
 | MassTransit.EntityFrameworkCore | 8.3.6 | Order Infrastructure (outbox + saga) |
 | Azure.Identity | 1.13.2 | BuildingBlocks (Key Vault + Service Bus token auth) |
+| Azure.Messaging.EventGrid | 4.30.0 | BuildingBlocks (fire-and-forget side-effect publisher) |
+| Microsoft.Azure.Functions.Worker | 2.0.0 | AK.NotificationFunctions |
+| Microsoft.Azure.Functions.Worker.Sdk | 2.0.0 | AK.NotificationFunctions |
+| Microsoft.Azure.Functions.Worker.Extensions.EventGrid | 3.4.3 | AK.NotificationFunctions |
 | Microsoft.Extensions.Http.Resilience | 9.0.0 | BuildingBlocks, Products Infrastructure |
 | Microsoft.Extensions.Resilience | 9.0.0 | BuildingBlocks, Order/ShoppingCart Infrastructure |
 | Ocelot | 23.4.2 | Gateway API |

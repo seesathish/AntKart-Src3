@@ -8,6 +8,29 @@ MassTransit keeps the consumers and saga **transport-agnostic** — they are wri
 
 ---
 
+## Two Eventing Mechanisms
+
+The platform deliberately runs **two** eventing transports, each for a different class of work. They are kept strictly separate — the distinction is by design, not accident. The decision is recorded in [ADR-019](../adr/ADR-019-serverless-notification-functions-eventgrid.md).
+
+| | **Service Bus + saga** (this document's backbone) | **Event Grid + serverless Function** (side-effects) |
+|---|---|---|
+| **Carries** | Transaction-critical workflow: reserve stock → take payment → confirm | Discrete fire-and-forget reactions (e.g. notification) |
+| **Model** | Pull-based; consumer processes at its own pace | Push-based; Event Grid delivers to the Function (the handler) |
+| **Delivery** | Ordered, guaranteed; retried + dead-lettered until handled | Best-effort; failure is logged, never blocks the producer |
+| **Correctness** | The order is wrong if a step is skipped | The order is correct whether or not the side-effect runs |
+| **Hosting** | Always-on service (consumer/saga host) | Function App that **scales to zero**, billed per execution |
+| **Auth** | Entra (`DefaultAzureCredential`), Data Sender/Receiver | Entra publish (EventGrid Data Sender); Function uses managed identity |
+
+**The rule for choosing between them:**
+
+> **Service Bus carries work and workflow steps that must complete for the transaction to be correct.** Use it when ordering, guaranteed processing, or saga progression matters.
+>
+> **Event Grid carries discrete "something happened" side-effects that must _not_ fail or delay the core transaction.** Use it when the reaction is optional to correctness, may fan out to multiple evolving consumers, and benefits from scale-to-zero serverless hosting.
+
+**The decoupling guarantee (side-effect path).** A side-effect is published only **after** the durable commit, through `IEventGridSideEffectPublisher.TryPublishAsync` in `AK.BuildingBlocks.Messaging.EventGrid` — a helper whose contract is that **it never throws**: any publish failure is swallowed and logged, returning `false`. The `OrderConfirmedConsumer` updates the order to `Confirmed`, saves, and only then attempts the publish; a failure (or an unreachable topic) leaves the order confirmed and the saga unaffected. The Function (`AK.NotificationFunctions`, .NET 9 isolated, `[EventGridTrigger]`) runs in a separate process — if it throws, only that one notification is lost. This is the structural opposite of the saga's at-least-once guarantee, and intentionally so.
+
+---
+
 ## Event Flow
 
 ```mermaid
@@ -244,12 +267,12 @@ Location: `AK.ShoppingCart/AK.ShoppingCart.Application/Consumers/ClearCartOnOrde
 
 | Consumer | Event | Action |
 |----------|-------|--------|
-| `OrderConfirmedConsumer` | `OrderConfirmedIntegrationEvent` | Updates `Order.Status = Confirmed` |
+| `OrderConfirmedConsumer` | `OrderConfirmedIntegrationEvent` | Updates `Order.Status = Confirmed`, then **fires a fire-and-forget Event Grid side-effect** (`AntKart.Order.Confirmed`) for notification |
 | `OrderCancelledConsumer` | `OrderCancelledIntegrationEvent` | Updates `Order.Status = Cancelled` |
 | `PaymentSucceededConsumer` | `PaymentSucceededIntegrationEvent` | Updates `Order.Status = Paid` |
 | `PaymentFailedConsumer` | `PaymentFailedIntegrationEvent` | Updates `Order.Status = PaymentFailed` |
 
-These keep the Order aggregate's status in sync after the SAGA finalises or payment completes.
+These keep the Order aggregate's status in sync after the SAGA finalises or payment completes. `OrderConfirmedConsumer` additionally publishes a notification side-effect over Event Grid — but only **after** its durable commit, through the never-throws `TryPublishAsync`, so a publish failure can never roll back the confirmation (see [Two Eventing Mechanisms](#two-eventing-mechanisms)).
 
 ---
 

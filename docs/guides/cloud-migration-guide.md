@@ -322,4 +322,60 @@ cd AK.Products/AK.Products.API && dotnet run
 
 ---
 
-*Subsequent step — serverless eventing migration — is added to this guide as it is delivered.*
+## Step 5 — Serverless Side-Effects with Event Grid and Azure Functions
+
+This step brings the provisioned **Azure Event Grid** custom topic (`evgt-antkart-dev`) and **Azure Function App** (`func-antkart-notifications-dev`) into use for lightweight, **fire-and-forget side-effects** — starting with notification. It is a deliberate counterpart to Step 3: the durable Service Bus saga stays exactly as it is, and Event Grid is added *alongside* it for a different class of work. The decision is recorded in [ADR-019](../adr/ADR-019-serverless-notification-functions-eventgrid.md).
+
+### Understand
+
+**Two eventing mechanisms, two jobs.** The platform now runs two transports on purpose, and the distinction is the whole point of this step:
+
+- **Service Bus + the order saga — the durable backbone.** This carries the *transaction-critical* workflow: reserve stock → take payment → confirm. It is **ordered**, **pull-based** (each consumer processes at its own pace), and **guaranteed** — messages are retried and dead-lettered until handled. Correctness of the order depends on every step completing.
+- **Event Grid + a serverless Function — fire-and-forget side-effects.** This carries *discrete reactions* that must **not fail or delay** the core transaction — sending a confirmation email is the canonical example. Event Grid **pushes** each event to the Function (the Function is the registered handler), the Function App **scales to zero** when idle, and it is **billed per execution**. A customer's order is correct whether or not the confirmation email is sent.
+
+**The decoupling guarantee.** The side-effect path is wired so that **a failure in Event Grid publishing, or in the Function itself, cannot roll back or block the saga.** Three properties enforce this:
+
+1. The event is published **after** the durable database commit — the order is already `Confirmed` and saved before any side-effect is attempted.
+2. The publish goes through a **never-throws** helper (`TryPublishAsync`): any failure is swallowed and logged, returning `false`; the consumer carries on. There is no transactional coupling between the commit and the publish.
+3. The Function runs in a **separate process** (the Function App) reached by a push from Event Grid. If it throws, only that one notification is affected; the order remains confirmed.
+
+**Entra authentication, no key.** The Order service publishes to the topic using `DefaultAzureCredential` against the topic's endpoint hostname (non-secret, committed) — there is **no topic access key**. The publisher identity is granted only **EventGrid Data Sender**. The Function, in turn, reaches any Azure resource it needs (Key Vault, an email service) via its **managed identity**. This continues the secret-less posture from the earlier steps.
+
+### Build
+
+- **A reusable fire-and-forget publisher** lives in `AK.BuildingBlocks.Messaging.EventGrid`: `IEventGridSideEffectPublisher` with a single `TryPublishAsync(eventType, subject, data)` whose contract is that **it never throws**. The implementation builds an `EventGridPublisherClient` from the non-secret `EventGrid:TopicEndpoint` setting and `DefaultAzureCredential`; if the endpoint is missing or invalid the publisher becomes a **safe no-op** (logged once at startup), so a service starts cleanly offline. `AddEventGridSideEffectPublisher()` registers it. The package `Azure.Messaging.EventGrid` is added to BuildingBlocks.
+- **The publish happens at the natural domain moment.** The existing `OrderConfirmedConsumer` (AK.Order) already updates the order to `Confirmed` and commits; *after* that commit it calls `TryPublishAsync("AntKart.Order.Confirmed", "orders/{id}", …)`. No new consumer, no change to the saga, no change to the Service Bus wiring — the side-effect is bolted on after the durable work is done. `appsettings` gains a non-secret `EventGrid:TopicEndpoint`.
+- **The serverless handler** is a new **.NET 9 isolated** Functions project, `AK.NotificationFunctions`, deployed to `func-antkart-notifications-dev`. `OrderConfirmedNotificationFunction` is an `[EventGridTrigger]` function that, for now, **records** the side-effect (logs the event); actual email delivery is deferred to the test-enablement step. The project carries heavy teaching comments explaining where it sits in the two-mechanism model and why a failure here is harmless to the order.
+- **Tests.** The new behaviour is unit-tested with the publisher mocked (no live Azure): the consumer confirms the order **and** publishes the side-effect; and — proving the decoupling — when the publish returns `false`, the order is **still confirmed** and nothing throws. The transport-agnostic in-memory integration harness registers a no-op publisher so the existing saga/consumer tests stay green.
+
+### Execute
+
+Grant your developer identity the publisher role on the topic and set the non-secret endpoint, then run the Order service so it publishes over Entra after a confirmation:
+
+```bash
+OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
+TOPIC_ID=$(az eventgrid topic show --name evgt-antkart-dev --resource-group rg-antkart-dev-eastus --query id -o tsv)
+
+az role assignment create --assignee-object-id "$OBJECT_ID" --assignee-principal-type User \
+  --role "EventGrid Data Sender" --scope "$TOPIC_ID"
+```
+
+The topic endpoint is configured in the Order service's `appsettings.json` (non-secret — committed):
+
+```json
+"EventGrid": {
+  "TopicEndpoint": "https://evgt-antkart-dev.eastus-1.eventgrid.azure.net/api/events"
+}
+```
+
+Then run the Order service with an active `az login` session: `cd AK.Order/AK.Order.API && dotnet run`.
+
+### Verify
+
+- The Order service **starts and publishes to Event Grid over Entra** when an order is confirmed — and if the topic is unreachable, the order is **still confirmed** (the publish failure is logged, not thrown).
+- The **unit and in-memory integration tests pass** (`dotnet test`) with the publisher mocked — no Event Grid or Function host is required.
+- End-to-end delivery — Event Grid **pushing** the event to the deployed Function and the Function sending a real email — is exercised during the **test-enablement step**, not this one.
+
+---
+
+*Subsequent steps are added to this guide as they are delivered.*
