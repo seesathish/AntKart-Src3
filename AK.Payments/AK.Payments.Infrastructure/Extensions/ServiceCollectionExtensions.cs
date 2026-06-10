@@ -26,16 +26,26 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRazorpayClient, RazorpayGatewayClient>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-        services.AddAzureServiceBusMassTransit(configuration, "payments", cfg =>
-        {
-            cfg.AddEntityFrameworkOutbox<PaymentsDbContext>(o =>
+        services.AddAzureServiceBusMassTransit(
+            configuration,
+            x =>
             {
-                o.UsePostgres();
-                o.UseBusOutbox();
-            });
+                x.AddEntityFrameworkOutbox<PaymentsDbContext>(o =>
+                {
+                    o.UsePostgres();
+                    o.UseBusOutbox();
+                });
 
-            cfg.AddConsumer<OrderConfirmedConsumer>();
-        });
+                x.AddConsumer<OrderConfirmedConsumer>();
+            },
+            // Bind the provisioned "payments" subscription on the integration-events topic.
+            (context, cfg) =>
+            {
+                cfg.SubscriptionEndpoint("payments", MassTransitExtensions.IntegrationEventsTopic, e =>
+                {
+                    e.ConfigureConsumer<OrderConfirmedConsumer>(context);
+                });
+            });
 
         return services;
     }

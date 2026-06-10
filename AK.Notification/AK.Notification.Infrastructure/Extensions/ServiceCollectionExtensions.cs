@@ -1,4 +1,5 @@
 using AK.BuildingBlocks.Messaging;
+using MassTransit;
 using AK.Notification.Application.Channels;
 using AK.Notification.Application.Repositories;
 using AK.Notification.Application.Templates;
@@ -40,14 +41,28 @@ public static class ServiceCollectionExtensions
         services.Configure<EmailSettings>(configuration.GetSection("EmailSettings"));
         services.Configure<NotificationSettings>(configuration.GetSection("NotificationSettings"));
 
-        services.AddAzureServiceBusMassTransit(configuration, "notification", cfg =>
-        {
-            cfg.AddConsumer<OrderCreatedConsumer>();
-            cfg.AddConsumer<OrderConfirmedConsumer>();
-            cfg.AddConsumer<OrderCancelledConsumer>();
-            cfg.AddConsumer<PaymentSucceededConsumer>();
-            cfg.AddConsumer<PaymentFailedConsumer>();
-        });
+        services.AddAzureServiceBusMassTransit(
+            configuration,
+            x =>
+            {
+                x.AddConsumer<OrderCreatedConsumer>();
+                x.AddConsumer<OrderConfirmedConsumer>();
+                x.AddConsumer<OrderCancelledConsumer>();
+                x.AddConsumer<PaymentSucceededConsumer>();
+                x.AddConsumer<PaymentFailedConsumer>();
+            },
+            // Bind the provisioned "notification" subscription on the integration-events topic.
+            (context, cfg) =>
+            {
+                cfg.SubscriptionEndpoint("notification", MassTransitExtensions.IntegrationEventsTopic, e =>
+                {
+                    e.ConfigureConsumer<OrderCreatedConsumer>(context);
+                    e.ConfigureConsumer<OrderConfirmedConsumer>(context);
+                    e.ConfigureConsumer<OrderCancelledConsumer>(context);
+                    e.ConfigureConsumer<PaymentSucceededConsumer>(context);
+                    e.ConfigureConsumer<PaymentFailedConsumer>(context);
+                });
+            });
 
         return services;
     }

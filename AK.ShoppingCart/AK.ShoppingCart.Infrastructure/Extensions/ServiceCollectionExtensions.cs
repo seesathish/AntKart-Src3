@@ -1,5 +1,6 @@
 using AK.BuildingBlocks.Messaging;
 using AK.BuildingBlocks.Resilience;
+using MassTransit;
 using AK.ShoppingCart.Application.Consumers;
 using AK.ShoppingCart.Application.Interfaces;
 using AK.ShoppingCart.Infrastructure.Persistence;
@@ -20,10 +21,17 @@ public static class ServiceCollectionExtensions
 
         services.AddRedisResilience();
 
-        services.AddAzureServiceBusMassTransit(configuration, "cart", cfg =>
-        {
-            cfg.AddConsumer<ClearCartOnOrderConfirmedConsumer>();
-        });
+        services.AddAzureServiceBusMassTransit(
+            configuration,
+            x => x.AddConsumer<ClearCartOnOrderConfirmedConsumer>(),
+            // Bind the provisioned "cart" subscription on the integration-events topic.
+            (context, cfg) =>
+            {
+                cfg.SubscriptionEndpoint("cart", MassTransitExtensions.IntegrationEventsTopic, e =>
+                {
+                    e.ConfigureConsumer<ClearCartOnOrderConfirmedConsumer>(context);
+                });
+            });
 
         return services;
     }

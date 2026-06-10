@@ -32,8 +32,10 @@ terraform {
 }
 
 # inputs: this environment's values. The resource group name/location come from
-# the dependency's outputs. The queue/topic/subscription names are left to the
-# module defaults (order-commands; integration-events; products + notification).
+# the dependency's outputs. The queue (order-commands) and topic (integration-events)
+# keep the module defaults; subscription_names lists ONE subscription per consuming
+# service on the integration-events topic — each service reads its own subscription.
+# Adding a new consuming service is an infrastructure change: add its subscription here.
 inputs = {
   resource_group_name = dependency.resource_group.outputs.name
   location            = dependency.resource_group.outputs.location
@@ -41,6 +43,9 @@ inputs = {
   # NOTE: namespace names are GLOBALLY UNIQUE (part of the hostname). If this one
   # is taken, choose another and update the verification commands.
   namespace_name = "sb-antkart-dev"
+
+  # One subscription per consuming service on the integration-events topic.
+  subscription_names = ["products", "notification", "order", "payments", "cart"]
 
   tags = {
     environment = "dev"

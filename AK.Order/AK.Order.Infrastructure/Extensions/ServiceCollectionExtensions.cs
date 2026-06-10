@@ -27,27 +27,45 @@ public static class ServiceCollectionExtensions
 
         services.AddNpgsqlResilience();
 
-        services.AddAzureServiceBusMassTransit(configuration, "order", cfg =>
-        {
-            cfg.AddSagaStateMachine<OrderSaga, OrderSagaState>()
-               .EntityFrameworkRepository(r =>
-               {
-                   r.ConcurrencyMode = ConcurrencyMode.Optimistic;
-                   r.ExistingDbContext<OrderDbContext>();
-                   r.UsePostgres();
-               });
-
-            cfg.AddEntityFrameworkOutbox<OrderDbContext>(o =>
+        services.AddAzureServiceBusMassTransit(
+            configuration,
+            // Register the saga (with its EF repository), the outbox, and the event consumers.
+            x =>
             {
-                o.UsePostgres();
-                o.UseBusOutbox();
-            });
+                x.AddSagaStateMachine<OrderSaga, OrderSagaState>()
+                 .EntityFrameworkRepository(r =>
+                 {
+                     r.ConcurrencyMode = ConcurrencyMode.Optimistic;
+                     r.ExistingDbContext<OrderDbContext>();
+                     r.UsePostgres();
+                 });
 
-            cfg.AddConsumer<OrderConfirmedConsumer>();
-            cfg.AddConsumer<OrderCancelledConsumer>();
-            cfg.AddConsumer<PaymentSucceededConsumer>();
-            cfg.AddConsumer<PaymentFailedConsumer>();
-        });
+                x.AddEntityFrameworkOutbox<OrderDbContext>(o =>
+                {
+                    o.UsePostgres();
+                    o.UseBusOutbox();
+                });
+
+                x.AddConsumer<OrderConfirmedConsumer>();
+                x.AddConsumer<OrderCancelledConsumer>();
+                x.AddConsumer<PaymentSucceededConsumer>();
+                x.AddConsumer<PaymentFailedConsumer>();
+            },
+            // Bind to the provisioned "order" subscription on the integration-events topic. The
+            // saga and the event consumers all consume PUBLISHED integration events, so they read
+            // from this subscription. (The provisioned order-commands queue is reserved for
+            // command-style messaging; the current order workflow is event-driven.)
+            (context, cfg) =>
+            {
+                cfg.SubscriptionEndpoint("order", MassTransitExtensions.IntegrationEventsTopic, e =>
+                {
+                    e.ConfigureSaga<OrderSagaState>(context);
+                    e.ConfigureConsumer<OrderConfirmedConsumer>(context);
+                    e.ConfigureConsumer<OrderCancelledConsumer>(context);
+                    e.ConfigureConsumer<PaymentSucceededConsumer>(context);
+                    e.ConfigureConsumer<PaymentFailedConsumer>(context);
+                });
+            });
 
         return services;
     }

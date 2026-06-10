@@ -1,5 +1,6 @@
 ﻿using AK.BuildingBlocks.Messaging;
 using AK.BuildingBlocks.Resilience;
+using MassTransit;
 using AK.Products.Application.Consumers;
 using AK.Products.Application.Interfaces;
 using AK.Products.Infrastructure.Grpc;
@@ -45,10 +46,17 @@ public static class ServiceCollectionExtensions
         .AddHttpResilienceWithCircuitBreaker(maxRetryAttempts: 3, failureRatio: 0.5, minimumThroughput: 3, breakDurationSeconds: 30);
         services.AddScoped<IDiscountGrpcClient, DiscountGrpcClient>();
 
-        services.AddAzureServiceBusMassTransit(configuration, "products", cfg =>
-        {
-            cfg.AddConsumer<ReserveStockConsumer>();
-        });
+        services.AddAzureServiceBusMassTransit(
+            configuration,
+            x => x.AddConsumer<ReserveStockConsumer>(),
+            // Bind the provisioned "products" subscription on the integration-events topic.
+            (context, cfg) =>
+            {
+                cfg.SubscriptionEndpoint("products", MassTransitExtensions.IntegrationEventsTopic, e =>
+                {
+                    e.ConfigureConsumer<ReserveStockConsumer>(context);
+                });
+            });
 
         return services;
     }

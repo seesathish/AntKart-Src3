@@ -165,7 +165,7 @@ The transport is configured by a single **non-secret** setting — the namespace
 }
 ```
 
-Receive-endpoint names are formatted by MassTransit using a per-service prefix and kebab-case (e.g. `order-payment-succeeded`), so each service's endpoints are uniquely named.
+Each service binds **explicit receive endpoints** to the existing provisioned entities — it does **not** auto-create endpoints. A consuming service reads its own named **subscription** on the `integration-events` topic (e.g. `products`, `notification`, `order`, `payments`, `cart`).
 
 **Global retry policy** (configured in `MassTransitExtensions`):
 - 3 retries with incremental back-off (1s, then +2s each) before the message is dead-lettered
@@ -176,13 +176,13 @@ Receive-endpoint names are formatted by MassTransit using a per-service prefix a
 
 ### Topology is owned by infrastructure-as-code
 
-The Service Bus entities are **provisioned by infrastructure-as-code** (the platform's source of truth), not created by the application at runtime. The platform provisions:
+The Service Bus entities are **provisioned by infrastructure-as-code** (the platform's source of truth — the Service Bus Terraform module), not created by the application at runtime:
 
-- an **`integration-events` topic** — carries the published integration events (publish/subscribe);
-- a **subscription per consuming service** on that topic (e.g. `products`, `notification`) — each receives its own copy of every event (fan-out, not competing consumers);
-- an **`order-commands` queue** — for commands with a single owner (point-to-point / competing consumers).
+- **A single `integration-events` topic.** Every integration event is published to this one shared topic. MassTransit's default topic-per-message-type naming is overridden so that all integration-event types map onto this single topic.
+- **One named subscription per consuming service** on that topic — `products`, `notification`, `order`, `payments`, and `cart`. Each subscription receives its own copy of every event (fan-out, not competing consumers), and the service reads its own subscription.
+- **An `order-commands` queue** for command-style messages with a single owner (point-to-point / competing consumers).
 
-The application's managed identity holds only **Azure Service Bus Data Sender / Data Receiver** — never **Manage** — so MassTransit is configured to **send to and receive from the existing entities and to not create or alter topology** at runtime. Adding a new entity (a subscription or queue) is therefore an **infrastructure-as-code change**, not an application concern.
+The application **conforms to** this topology — it never creates or manages it. The runtime identity holds only **Azure Service Bus Data Sender / Data Receiver** (never **Manage**), and the bus binds **explicit receive endpoints** to the existing entities. It does **not** call `ConfigureEndpoints` (which would auto-create MassTransit's conventional entities: a queue per consumer and a topic per message type). **Adding a new consumer or integration event that needs a new subscription or queue is an infrastructure change** — add the entity to the Service Bus Terraform module — **not a runtime concern.**
 
 ### Events and their consumers
 
@@ -255,52 +255,51 @@ These keep the Order aggregate's status in sync after the SAGA finalises or paym
 
 ## MassTransit Registration
 
-Each service registers via `AddAzureServiceBusMassTransit()` (BuildingBlocks helper). The second argument is the service prefix used to name its receive endpoints; the bus connects to Service Bus with Entra auth and binds to the IaC-provisioned entities (it does not create topology):
+Each service registers via `AddAzureServiceBusMassTransit()` (BuildingBlocks helper). It takes **two callbacks**: the first **registers** the consumers / saga; the second **binds explicit receive endpoints** to the existing provisioned entities (a subscription on `integration-events`, and/or the `order-commands` queue). The helper connects with Entra auth, maps all integration events to the single `integration-events` topic, and does **not** auto-create topology.
 
 ```csharp
-// AK.Order
-services.AddAzureServiceBusMassTransit(configuration, "order", cfg =>
-{
-    cfg.AddSagaStateMachine<OrderSaga, OrderSagaState>()
-       .EntityFrameworkRepository(r =>
-       {
-           r.ConcurrencyMode = ConcurrencyMode.Optimistic;
-           r.ExistingDbContext<OrderDbContext>();
-           r.UsePostgres();
-       });
-    cfg.AddEntityFrameworkOutbox<OrderDbContext>(o =>
+// AK.Products — reads the provisioned "products" subscription.
+services.AddAzureServiceBusMassTransit(
+    configuration,
+    x => x.AddConsumer<ReserveStockConsumer>(),
+    (context, cfg) =>
     {
-        o.UsePostgres();
-        o.UseBusOutbox();
+        cfg.SubscriptionEndpoint("products", MassTransitExtensions.IntegrationEventsTopic, e =>
+            e.ConfigureConsumer<ReserveStockConsumer>(context));
     });
-    cfg.AddConsumer<OrderConfirmedConsumer>();
-    cfg.AddConsumer<OrderCancelledConsumer>();
-    cfg.AddConsumer<PaymentSucceededConsumer>();
-    cfg.AddConsumer<PaymentFailedConsumer>();
-});
 
-// AK.Products
-services.AddAzureServiceBusMassTransit(configuration, "products", cfg =>
-{
-    cfg.AddConsumer<ReserveStockConsumer>();
-});
-
-// AK.ShoppingCart
-services.AddAzureServiceBusMassTransit(configuration, "cart", cfg =>
-{
-    cfg.AddConsumer<ClearCartOnOrderConfirmedConsumer>();
-});
-
-// AK.Payments
-services.AddAzureServiceBusMassTransit(configuration, "payments", cfg =>
-{
-    cfg.AddEntityFrameworkOutbox<PaymentsDbContext>(o => { o.UsePostgres(); o.UseBusOutbox(); });
-    cfg.AddConsumer<OrderConfirmedConsumer>();
-    // also publishes PaymentInitiatedIntegrationEvent,
-    //                PaymentSucceededIntegrationEvent,
-    //                PaymentFailedIntegrationEvent
-});
+// AK.Order — saga + event consumers read the provisioned "order" subscription.
+services.AddAzureServiceBusMassTransit(
+    configuration,
+    x =>
+    {
+        x.AddSagaStateMachine<OrderSaga, OrderSagaState>()
+         .EntityFrameworkRepository(r =>
+         {
+             r.ConcurrencyMode = ConcurrencyMode.Optimistic;
+             r.ExistingDbContext<OrderDbContext>();
+             r.UsePostgres();
+         });
+        x.AddEntityFrameworkOutbox<OrderDbContext>(o => { o.UsePostgres(); o.UseBusOutbox(); });
+        x.AddConsumer<OrderConfirmedConsumer>();
+        x.AddConsumer<OrderCancelledConsumer>();
+        x.AddConsumer<PaymentSucceededConsumer>();
+        x.AddConsumer<PaymentFailedConsumer>();
+    },
+    (context, cfg) =>
+    {
+        cfg.SubscriptionEndpoint("order", MassTransitExtensions.IntegrationEventsTopic, e =>
+        {
+            e.ConfigureSaga<OrderSagaState>(context);
+            e.ConfigureConsumer<OrderConfirmedConsumer>(context);
+            e.ConfigureConsumer<OrderCancelledConsumer>(context);
+            e.ConfigureConsumer<PaymentSucceededConsumer>(context);
+            e.ConfigureConsumer<PaymentFailedConsumer>(context);
+        });
+    });
 ```
+
+`AK.Notification`, `AK.Payments`, and `AK.ShoppingCart` follow the same shape, each binding its own provisioned subscription (`notification`, `payments`, `cart`). The `order-commands` queue is the provisioned command entity for command-style messaging; the current order workflow is event-driven and uses the `order` subscription.
 
 ---
 
