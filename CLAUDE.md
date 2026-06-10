@@ -24,6 +24,11 @@ AntKart/
 ├── AK.BuildingBlocks/    Shared cross-cutting library (no business logic)
 ├── AK.IntegrationTests/  SAGA + event bus + notification consumer tests (no API/Grpc dependency)
 ├── AK.NotificationFunctions/  .NET 9 isolated Azure Functions app — Event Grid-triggered fire-and-forget side-effects (notification)
+├── AK.Tools/             Developer tools
+│   ├── AK.Tools.ProductsSeedGenerator/  Console tool — deterministically generates AK.Seed-Data/products.csv (3,000 products)
+│   ├── AK.Tools.ProductsSeedLoader/      Console tool — idempotent, secret-less upsert of products.csv into Cosmos (keyed on SKU-derived id)
+│   └── AK.Tools.ProductsSeedLoader.Tests/  Unit tests for the loader (CSV parsing + deterministic id, mocked sink)
+├── AK.Seed-Data/         Committed product seed dataset (products.csv + README)
 ├── AntKart.sln
 ├── AntKart.postman_collection.json
 ├── KNOWN-ISSUES.md       Tracker for known technical debt & deferred fixes (KI-NNN ids)
@@ -66,6 +71,7 @@ AK.<Service>/
 - **New endpoint:** `GET /api/v1/products/categories` — returns distinct top-level category names from DB
 - **Removed endpoints:** `/men`, `/women`, `/kids` — replaced by `?category=Men`, `?category=Women`, `?category=Kids`
 - **Cosmos resilience:** `ProductRepository` runs every Cosmos call through the `"cosmos"` Polly v8 pipeline (`AddDataStoreResiliencePipeline`); `CosmosResilience` (Infrastructure) supplies the transient-fault rules and **honours the 429 `RetryAfterMs`** (falls back to exponential backoff + jitter). Retry lives at the data-access call site; BuildingBlocks carries no MongoDB dependency
+- **Seed dataset & loader:** `AK.Seed-Data/products.csv` is a committed, deterministic dataset of **3,000 products** (1,000 each Men/Women/Kids) produced by `AK.Tools.ProductsSeedGenerator`. `AK.Tools.ProductsSeedLoader` upserts it into Cosmos **idempotently** — the document `_id` is derived from the SKU (MD5 → 32-hex), so the upsert is a single-partition point write on the hashed `_id` and re-running never duplicates. `Product.CreateForSeed(id, …)` assigns that deterministic id; the loader reuses `MongoDbContext`/`ProductClassMap` (no duplicated Mongo code) and reads the Cosmos connection string from Key Vault (secret-less)
 - **Deep health checks:** `MongoDbHealthCheck` (real Cosmos `{ ping: 1 }`) + `AddKeyVaultDeepCheck()` are tagged `ak:deep` and surface only on `/health/deps` — never on liveness/readiness
 - **Tests:** 214 passing (domain, commands, queries, validators, specifications, DTO mapping, GetProductCategories handler, ReserveStockConsumer, Cosmos resilience retry/RetryAfter, health-check registration)
 - **Swagger:** `http://localhost:5077/swagger` (Development only)
@@ -329,6 +335,7 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | Azure.Security.KeyVault.Secrets | 4.7.0 | BuildingBlocks (Key Vault deep health check) |
 | Azure.Messaging.EventGrid | 4.30.0 | BuildingBlocks (fire-and-forget side-effect publisher) |
 | Azure.Communication.Email | 1.0.1 | BuildingBlocks (ACS email sender) |
+| CsvHelper | 33.0.1 | AK.Tools.ProductsSeedGenerator / ProductsSeedLoader (seed CSV) |
 | Microsoft.Azure.Functions.Worker | 2.0.0 | AK.NotificationFunctions |
 | Microsoft.Azure.Functions.Worker.Sdk | 2.0.0 | AK.NotificationFunctions |
 | Microsoft.Azure.Functions.Worker.Extensions.EventGrid | 3.4.3 | AK.NotificationFunctions |

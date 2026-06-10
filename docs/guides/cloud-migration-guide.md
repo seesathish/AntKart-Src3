@@ -484,6 +484,28 @@ A correct result: `terragrunt apply` ends with `4 added, 0 changed, 0 destroyed`
 
 **Verifying a send.** Email delivery is exercised with **controlled test-recipient addresses set via test data** (never real customers) — point an order's `customerEmail` at a mailbox you own and confirm receipt. In tests, the `EmailClient`/`IEmailSender` is mocked, so no live Azure is required.
 
+### Product seed data — a committed dataset and an idempotent loader
+
+To run realistic end-to-end tests, the catalogue needs realistic data. This sub-step adds a **committed seed dataset** and a **secret-less, idempotent loader**.
+
+**The dataset (`AK.Seed-Data/products.csv`).** A **deterministic generator** (`AK.Tools.ProductsSeedGenerator`) produces **3,000 products** — 1,000 each across Men / Women / Kids, with 10 realistic subcategories each spanning apparel, footwear and accessories — with realistic names, brands, prices, sizes, colours, stock, and a **unique SKU** per product. The generator uses a fixed RNG seed and a fixed iteration order, so regenerating yields **byte-identical output**. The CSV is plain data (not a secret) and is **committed** alongside the generator. Its columns mirror the `AK.Products` domain model exactly; list fields (`Sizes`, `Colors`) are pipe-delimited; there is **no id column**.
+
+**Idempotent-by-SKU design.** The loader (`AK.Tools.ProductsSeedLoader`) derives each document's `_id` **deterministically from the SKU** (an MD5 of the SKU → a 32-hex string, the same shape as the default GUID id). Because the `products` collection is sharded on `{ "_id": "hashed" }`, the upsert filters on `_id` — a **single-partition point write**. The same SKU therefore always maps to the same document, so the load is **idempotent**: re-running converges to exactly 3,000 products and **never creates duplicates** (`ReplaceOneAsync` with `IsUpsert = true`). The domain exposes a `Product.CreateForSeed(id, …)` factory so the loader can assign that deterministic id; mapping/Mongo code is **reused** from the Products persistence layer (not duplicated).
+
+**Secret-less connection.** The loader reuses the **same configuration foundation** as the Products service: non-secret `MongoDbSettings` (database + collection) from `appsettings.json`, and the Cosmos connection string resolved from **Key Vault** via `DefaultAzureCredential` — no secret in the tool or the repo.
+
+**Run it** (with an identity holding Key Vault Secrets User + Cosmos access; safe to run repeatedly):
+
+```bash
+# (re)generate the CSV — optional, it is already committed
+dotnet run --project AK.Tools/AK.Tools.ProductsSeedGenerator   # writes AK.Seed-Data/products.csv (3,000 rows)
+
+# upsert the catalogue into Cosmos
+dotnet run --project AK.Tools/AK.Tools.ProductsSeedLoader       # logs progress; "Upserted 3000 products (total)."
+```
+
+Verify by re-running the loader: the product count stays at 3,000 (idempotent). The CSV parsing and the upsert logic are unit-tested with a mocked sink, so **no live Cosmos is required** to test the loader.
+
 ---
 
 *Subsequent steps are added to this guide as they are delivered.*

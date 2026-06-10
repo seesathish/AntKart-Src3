@@ -80,6 +80,26 @@ public sealed class Product : StringEntity, IAggregateRoot
         return product;
     }
 
+    // Reconstitutes a product with a caller-supplied DETERMINISTIC id (used by the seed loader).
+    // The loader derives the id from the stable SKU, so the same SKU always maps to the same
+    // document — making the load an idempotent, single-partition point upsert on the `_id` hashed
+    // shard key (re-running never creates duplicates). Domain events are cleared because a seed
+    // import is not a domain "create".
+    public static Product CreateForSeed(
+        string id, string name, string description, string sku, string brand,
+        string categoryName, string? subCategoryName,
+        decimal price, string currency, int stockQuantity,
+        List<string> sizes, List<string> colors, string? material = null)
+    {
+        if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Id is required.", nameof(id));
+
+        var product = Create(name, description, sku, brand, categoryName, subCategoryName,
+            price, currency, stockQuantity, sizes, colors, material);
+        product.Id = id;
+        product.ClearDomainEvents();
+        return product;
+    }
+
     public void Update(string name, string description, string brand, decimal price, int stockQuantity, string? material)
     {
         Name = name;
