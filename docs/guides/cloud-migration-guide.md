@@ -516,6 +516,18 @@ The **AK.Payments** service calls the Razorpay sandbox, which needs a key id + k
 
 Existing Payments tests mock `IConfiguration` / `RazorpaySettings`, so they are unaffected; no host is booted in tests, so no live Key Vault call is made.
 
+### Notification — reusable core for the serverless model
+
+Notifications are moving to a pure serverless model (Event Grid + Azure Functions; see Step 5 and [ADR-019](../adr/ADR-019-serverless-notification-functions-eventgrid.md)). This sub-step builds the **reusable core the Functions will call** — without yet wiring the Functions or removing the existing AK.Notification host (both later steps).
+
+- **Library:** `AK.Notification.Core` — framework-agnostic, registered with a single `AddNotificationCore(configuration)`.
+- **Channel abstraction (the extension point):** `NotificationChannelType` (Email now; WhatsApp/Sms placeholders) + `INotificationChannel` returning a `NotificationSendResult`. `EmailNotificationChannel` wraps the shared ACS `IEmailSender`. Adding a channel is an Open/Closed change — implement `INotificationChannel`, register it; no dispatcher/template/caller changes.
+- **Templates:** one per `NotificationType` (OrderCreated, OrderConfirmed, OrderCancelled, PaymentSucceeded, PaymentFailed), resolved by type, composing subject + HTML + plain-text from the loose event data.
+- **Dispatcher:** `INotificationDispatcher` resolves the template → composes the message → sends on each target channel (default Email) → writes one **history audit row per attempt** (Sent/Failed). It **never throws** for a delivery failure — it records the failure and returns the result, so notification stays a best-effort side-effect that can't fault the originating transaction.
+- **History:** an EF Core `NotificationHistory` audit trail (id, notificationType, recipient, channelType, status, timestamp, correlationId, error), secret-less connection (`ConnectionStrings:Notifications`, Key-Vault-sourced in the cloud) — the same pattern as the other services.
+
+The core is unit-tested with EF InMemory + mocks (templates, email channel, dispatcher send/persist/failure) — **no live Azure or database required**.
+
 ---
 
 *Subsequent steps are added to this guide as they are delivered.*
