@@ -87,7 +87,7 @@ Significant design and infrastructure decisions are recorded as [Architecture De
 | Serverless / eventing | — | Azure Functions + Event Grid (target) |
 | Secrets / access | Connection strings | Key Vault + managed identities (no secrets) |
 | Observability | Serilog → Elasticsearch → Kibana | Azure Monitor / Application Insights |
-| Testing | xUnit · Moq · FluentAssertions (618 tests) | Unchanged |
+| Testing | xUnit · Moq · FluentAssertions (621 tests) | Unchanged |
 
 ---
 
@@ -138,9 +138,10 @@ AntKart/
 ├── AK.Order/             REST Minimal API — order management (PostgreSQL + SAGA)
 ├── AK.Gateway/           API Gateway — Ocelot single entry point
 ├── AK.Payments/          REST Minimal API — payment processing (PostgreSQL + Razorpay)
-├── AK.Notification/      REST Minimal API — transactional notifications (PostgreSQL + SMTP)
+├── AK.Notification/      AK.Notification.Core — reusable notification library (channels, templates, ACS Email, history)
+├── AK.NotificationFunctions/  Serverless notifications — .NET 9 isolated Azure Functions (Event Grid-triggered)
 ├── AK.BuildingBlocks/    Shared library (messaging, resilience, logging, auth)
-├── AK.IntegrationTests/  SAGA + event bus + notification consumer tests (MassTransit in-memory harness)
+├── AK.IntegrationTests/  SAGA + event bus tests (MassTransit in-memory harness)
 ├── AntKart.postman_collection.json
 ├── docs/
 │   ├── adr/              Architecture Decision Records
@@ -182,7 +183,7 @@ Identity is **Entra-native**: Microsoft Entra ID issues tokens and each service 
 | AK.ShoppingCart | Authenticated | Authenticated |
 | AK.Order | Authenticated (`/me` = own orders) | Authenticated; status update = Admin only |
 | AK.Payments | Authenticated (`/me` = own payments) | Authenticated |
-| AK.Notification | Authenticated (`/` = own notifications; `/admin` = Admin only) | Event-driven only — no write endpoints |
+| AK.NotificationFunctions | No HTTP surface (Event Grid-triggered) | Serverless side-effect — no client-facing endpoints |
 | AK.Gateway | Proxied from downstream | JWT validated at gateway and downstream |
 
 **Roles:** `user` (standard), `admin` (full access).
@@ -200,7 +201,7 @@ git clone https://github.com/seesathish/AntKart.git
 cd AntKart
 dotnet restore   # run from the repository root so nuget.config is applied
 dotnet build
-dotnet test      # 618 tests
+dotnet test      # 621 tests
 ```
 
 **Provision the cloud-native platform.** Follow the [Infrastructure Guide](docs/guides/infrastructure-guide.md) to provision the managed Azure resources as code — Terraform modules and Terragrunt live units, with a reviewed `plan` before each `apply` — and the [Development Guide](DevelopmentGuide.md) for the delivery phases. With the managed services in place, each service runs locally against live cloud services, directly or via cloud port-forwarding. Service endpoints and ports are **(to be updated)** as the deployment topology is finalized.

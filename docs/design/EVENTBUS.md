@@ -188,7 +188,7 @@ The transport is configured by a single **non-secret** setting — the namespace
 }
 ```
 
-Each service binds **explicit receive endpoints** to the existing provisioned entities — it does **not** auto-create endpoints. A consuming service reads its own named **subscription** on the `integration-events` topic (e.g. `products`, `notification`, `order`, `payments`, `cart`).
+Each service binds **explicit receive endpoints** to the existing provisioned entities — it does **not** auto-create endpoints. A consuming service reads its own named **subscription** on the `integration-events` topic (`products`, `order`, `payments`, `cart`).
 
 **Global retry policy** (configured in `MassTransitExtensions`):
 - 3 retries with incremental back-off (1s, then +2s each) before the message is dead-lettered
@@ -202,7 +202,7 @@ Each service binds **explicit receive endpoints** to the existing provisioned en
 The Service Bus entities are **provisioned by infrastructure-as-code** (the platform's source of truth — the Service Bus Terraform module), not created by the application at runtime:
 
 - **A single `integration-events` topic.** Every integration event is published to this one shared topic. MassTransit's default topic-per-message-type naming is overridden so that all integration-event types map onto this single topic.
-- **One named subscription per consuming service** on that topic — `products`, `notification`, `order`, `payments`, and `cart`. Each subscription receives its own copy of every event (fan-out, not competing consumers), and the service reads its own subscription.
+- **One named subscription per consuming service** on that topic — `products`, `order`, `payments`, and `cart`. Each subscription receives its own copy of every event (fan-out, not competing consumers), and the service reads its own subscription. (There is no `notification` subscription — notifications are serverless via Event Grid + Functions.)
 - **An `order-commands` queue** for command-style messages with a single owner (point-to-point / competing consumers).
 
 The application **conforms to** this topology — it never creates or manages it. The runtime identity holds only **Azure Service Bus Data Sender / Data Receiver** (never **Manage**), and the bus binds **explicit receive endpoints** to the existing entities. It does **not** call `ConfigureEndpoints` (which would auto-create MassTransit's conventional entities: a queue per consumer and a topic per message type). **Adding a new consumer or integration event that needs a new subscription or queue is an infrastructure change** — add the entity to the Service Bus Terraform module — **not a runtime concern.**
@@ -211,13 +211,15 @@ The application **conforms to** this topology — it never creates or manages it
 
 | Integration event | Published by | Consumed by |
 |-------------------|--------------|-------------|
-| `OrderCreatedIntegrationEvent` | AK.Order | AK.Order (OrderSaga), AK.Notification |
+| `OrderCreatedIntegrationEvent` | AK.Order | AK.Order (OrderSaga) |
 | `StockReservedIntegrationEvent` / `StockReservationFailedIntegrationEvent` | AK.Products | AK.Order (OrderSaga) |
-| `OrderConfirmedIntegrationEvent` | AK.Order (SAGA) | AK.Order, AK.Payments, AK.ShoppingCart, AK.Notification |
-| `OrderCancelledIntegrationEvent` | AK.Order (SAGA) | AK.Order, AK.Notification |
-| `PaymentSucceededIntegrationEvent` / `PaymentFailedIntegrationEvent` | AK.Payments | AK.Order, AK.Notification |
+| `OrderConfirmedIntegrationEvent` | AK.Order (SAGA) | AK.Order, AK.Payments, AK.ShoppingCart |
+| `OrderCancelledIntegrationEvent` | AK.Order (SAGA) | AK.Order |
+| `PaymentSucceededIntegrationEvent` / `PaymentFailedIntegrationEvent` | AK.Payments | AK.Order |
 
 Each consuming service receives events through its own subscription on the `integration-events` topic, so the same event reaches every interested service independently.
+
+> **Notifications are not on this topic.** Customer notifications are not a Service Bus consumer. AK.Order and AK.Payments publish discrete **Event Grid** events (`AntKart.Order.Created/Confirmed/Cancelled`, `AntKart.Payment.Succeeded/Failed`) as fire-and-forget side-effects **after** each durable commit; the serverless `AK.NotificationFunctions` consume those and dispatch through `AK.Notification.Core` (channel-extensible — Email/ACS now, WhatsApp/SMS later — with history persisted to `AKNotificationsDb`). See [Two Eventing Mechanisms](#two-eventing-mechanisms).
 
 ### Observing the flow
 
@@ -322,7 +324,7 @@ services.AddAzureServiceBusMassTransit(
     });
 ```
 
-`AK.Notification`, `AK.Payments`, and `AK.ShoppingCart` follow the same shape, each binding its own provisioned subscription (`notification`, `payments`, `cart`). The `order-commands` queue is the provisioned command entity for command-style messaging; the current order workflow is event-driven and uses the `order` subscription.
+`AK.Payments` and `AK.ShoppingCart` follow the same shape, each binding its own provisioned subscription (`payments`, `cart`). The `order-commands` queue is the provisioned command entity for command-style messaging; the current order workflow is event-driven and uses the `order` subscription.
 
 ---
 

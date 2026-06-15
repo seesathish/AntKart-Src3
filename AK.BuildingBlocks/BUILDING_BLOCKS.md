@@ -313,7 +313,7 @@ app.UseMiddleware<ExceptionHandlerMiddleware>();
 
 ### `CorrelationIdMiddleware`
 
-Reads or generates an `X-Correlation-Id` header and sets it on every response. All Serilog log entries include the correlation ID, enabling cross-service request tracing in Kibana.
+Reads or generates an `X-Correlation-Id` header and sets it on every response. All Serilog log entries include the correlation ID, enabling cross-service request tracing in Application Insights / Log Analytics.
 
 ```csharp
 app.UseMiddleware<CorrelationIdMiddleware>();
@@ -416,11 +416,10 @@ builder.AddSerilogLogging();
 ```
 
 Configures Serilog with:
-- **Console sink** — structured JSON in Docker, human-readable in development
-- **Rolling file sink** — `logs/log-.txt` with daily rotation and 7-day retention
-- **Elasticsearch sink** — ships to `http://elasticsearch:9200`; Kibana reads from here
+- **Console sink** — structured output (the standard sink for containers and serverless); in the cloud the console stream is collected by Application Insights / Log Analytics
+- **Rolling file sink** — `logs/{ServiceName}-.txt` with daily rotation and 7-day retention (local development convenience)
 
-All log entries include the `X-Correlation-Id` enricher added by `CorrelationIdMiddleware`.
+There is no Elasticsearch/Kibana sink — cloud telemetry is provided by Application Insights, not a log-store sink configured in code. All log entries include the `X-Correlation-Id` enricher added by `CorrelationIdMiddleware`.
 
 ---
 

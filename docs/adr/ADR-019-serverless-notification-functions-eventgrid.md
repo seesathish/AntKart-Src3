@@ -1,8 +1,10 @@
 # ADR-019 — Serverless Notification with Azure Functions and Event Grid
 
-**Status:** Accepted  
+**Status:** Accepted (implemented)  
 **Date:** 2026-06-02  
 **Relates to:** ADR-017 (Entra ID, Azure Functions, Event Grid), ADR-015 (Service Bus messaging), ADR-014 (Cosmos DB and Service Bus provisioning)
+
+> **Update — as built.** This ADR originally proposed triggering the notification Functions from a **Service Bus** subscription. The delivered implementation triggers them from **Event Grid** instead: AK.Order and AK.Payments publish discrete notification events to Event Grid as fire-and-forget side-effects **after** each durable commit, and the Functions are `[EventGridTrigger]`-bound. The old AK.Notification microservice and its Service Bus `notification` subscription were removed — notifications no longer consume the Service Bus integration-events topic. The reasoning below stands; only the notification trigger changed (Service Bus → Event Grid). The Service-Bus-vs-Event-Grid boundary table remains the guiding rule.
 
 ---
 
@@ -68,13 +70,13 @@ A low-code workflow orchestrator with built-in connectors (including email and S
 
 ## Decision
 
-Adopt **Azure Functions (isolated worker, Consumption plan)** as the target hosting model for the notification capability, triggered by **Azure Service Bus**, and use **Azure Event Grid** for discrete reactive event routing where a broadcast/fan-out notification semantic is the better fit.
+Adopt **Azure Functions (isolated worker, Consumption plan)** as the hosting model for the notification capability, triggered by **Azure Event Grid** (the owning services publish discrete notification events as fire-and-forget side-effects after their durable commit), with the function dispatching through a reusable, channel-extensible notification core.
 
 ### Hosting and trigger model
 
-- **Isolated worker, current .NET runtime.** The isolated model runs the function in its own process, decoupled from the Functions host runtime version, and is the forward-looking model for all new Functions (the in-process model is retired). It uses the standard `HostBuilder` DI container, so the existing infrastructure registration (database, channel abstraction, template renderer) is reused as-is.
-- **Service Bus trigger.** Notification functions are triggered by a Service Bus topic subscription. The trigger replaces the always-on MassTransit consumer host; the downstream business logic is invoked through the same application command path, so the domain code is unchanged.
-- **Token-based authentication.** The Service Bus connection uses `DefaultAzureCredential` (namespace FQDN only, no connection string), consistent with the platform-wide messaging-auth decision in ADR-015. Locally this resolves via the developer's CLI sign-in; in the cluster it resolves via workload identity.
+- **Isolated worker, current .NET runtime.** The isolated model runs the function in its own process, decoupled from the Functions host runtime version, and is the forward-looking model for all new Functions (the in-process model is retired). It uses the standard `HostBuilder` DI container, so the notification core (channel abstraction, templates, history persistence) is registered and reused as-is.
+- **Event Grid trigger.** The notification functions are `[EventGridTrigger]`-bound, one per customer notification event. The trigger replaces the always-on MassTransit consumer host; each function is thin — it deserializes the event and dispatches through `AK.Notification.Core`. (Notifications do **not** consume the Service Bus integration-events topic.)
+- **Token-based authentication.** The function reaches Azure resources (ACS, Key Vault) with `DefaultAzureCredential` (no connection string), consistent with the platform-wide secret-less auth decision. Locally this resolves via the developer's CLI sign-in; in the cloud via the Function App's managed identity.
 
 ### Service Bus vs Event Grid — the transport boundary
 

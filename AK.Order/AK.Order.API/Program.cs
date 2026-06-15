@@ -15,7 +15,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 
 // Replaces the default Microsoft.Extensions.Logging with Serilog.
-// Serilog outputs structured JSON logs to console, rolling file, and Elasticsearch.
+// Serilog outputs structured logs to the console (collected by Application Insights / Log
+// Analytics in the cloud) and a local rolling file.
 // Must be called before any other service registration so early startup logs are captured.
 builder.AddSerilogLogging();
 

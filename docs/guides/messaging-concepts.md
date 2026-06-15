@@ -62,14 +62,14 @@ flowchart TB
     PUB([Publisher]) -->|publishes event| T{{integration-events topic}}
     subgraph Subs["Subscriptions · each gets its own copy"]
       S1[products subscription]
-      S2[notification subscription]
+      S2[order subscription]
       S3[future subscription]
     end
     T -->|fans out| S1
     T -->|fans out| S2
     T -->|fans out| S3
     S1 -->|delivers to| H1[Products consumer]
-    S2 -->|delivers to| H2[Notification consumer]
+    S2 -->|delivers to| H2[Order consumer]
     S3 -->|delivers to| H3[New consumer]
 
     classDef actor   fill:#08427B,stroke:#052c54,color:#ffffff;
@@ -85,7 +85,7 @@ flowchart TB
     class T focus
 ```
 
-This is the right shape for **integration events** — "this happened" — because an event has **many independent listeners**. When an order is placed, Products wants to reserve stock *and* Notification wants to email the customer; each reads its own copy and neither affects the other. Adding a new listener is just **adding a subscription** — publishers don't change.
+This is the right shape for **integration events** — "this happened" — because an event has **many independent listeners**. When an order is placed, Products reserves stock *and* the Order saga advances its workflow; each reads its own copy and neither affects the other. Adding a new listener is just **adding a subscription** — publishers don't change.
 
 > **Rule of thumb: commands have one owner → use a queue. Events have many listeners → use a topic with subscriptions.**
 
@@ -164,7 +164,7 @@ The short version: **Service Bus when losing the message is unacceptable; Event 
 The platform provisions a **Service Bus namespace** (Standard tier, because it uses pub/sub) containing:
 
 - an **`order-commands` queue** — commands with a single owner (competing consumers process each exactly once);
-- an **`integration-events` topic** with **per-service subscriptions** (e.g. `products`, `notification`) — events fan out, each consumer reading its own copy;
+- an **`integration-events` topic** with **per-service subscriptions** (`products`, `order`, `payments`, `cart`) — events fan out, each consumer reading its own copy. (Notifications are **not** on this topic — they run on a separate serverless Event Grid path; see [ADR-019](../adr/ADR-019-serverless-notification-functions-eventgrid.md).)
 - **dead-lettering** on every entity, so failed messages are recoverable, not lost.
 
 Crucially, the **data plane accepts Microsoft Entra identities only** — local SAS authentication is disabled, so there are **no connection-string secrets**. Each service authenticates with **its own identity** (token auth) and is granted the Service Bus data-plane roles it needs. This keeps the messaging backbone consistent with the platform's secret-less security model.
