@@ -17,7 +17,6 @@
     <ProjectReference Include="..\AK.Products\AK.Products.Application\AK.Products.Application.csproj" />
     <ProjectReference Include="..\AK.ShoppingCart\AK.ShoppingCart.Application\AK.ShoppingCart.Application.csproj" />
     <ProjectReference Include="..\AK.Payments\AK.Payments.Application\AK.Payments.Application.csproj" />
-    <ProjectReference Include="..\AK.Notification\AK.Notification.Application\AK.Notification.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>

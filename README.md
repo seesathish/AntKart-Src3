@@ -164,7 +164,7 @@ AntKart/
 | [AK.ShoppingCart](AK.ShoppingCart/AK.ShoppingCart.API) | REST Minimal API | Redis | [ShoppingCart Design](AK.ShoppingCart/SHOPPING_CART_TECHNICAL_DESIGN.md) |
 | [AK.Order](AK.Order/AK.Order.API) | REST Minimal API | PostgreSQL | [Order Design](AK.Order/ORDER_TECHNICAL_DESIGN.md) |
 | [AK.Payments](AK.Payments/AK.Payments.API) | REST Minimal API | PostgreSQL + Razorpay | [Payments Design](AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md) |
-| [AK.Notification](AK.Notification/AK.Notification.API) | REST Minimal API | PostgreSQL + SMTP | [Notification Design](AK.Notification/NOTIFICATION_TECHNICAL_DESIGN.md) |
+| [AK.Notification](AK.Notification/AK.Notification.Core) | Serverless (Event Grid + Azure Functions) | PostgreSQL (history) + ACS Email | [Cloud Migration Guide §7](docs/guides/cloud-migration-guide.md) |
 | [AK.Gateway](AK.Gateway/AK.Gateway.API) | Ocelot API Gateway | — | [Gateway Design](AK.Gateway/API_GATEWAY.md) |
 
 Cloud ingress and API Management endpoints for each service are **(to be updated)** as the deployment topology is finalized.

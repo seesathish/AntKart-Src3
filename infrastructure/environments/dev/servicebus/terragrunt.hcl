@@ -45,7 +45,9 @@ inputs = {
   namespace_name = "sb-antkart-dev"
 
   # One subscription per consuming service on the integration-events topic.
-  subscription_names = ["products", "notification", "order", "payments", "cart"]
+  # (The "notification" subscription was removed when notifications moved to the serverless
+  # Event Grid + Functions model — notifications no longer consume from Service Bus.)
+  subscription_names = ["products", "order", "payments", "cart"]
 
   tags = {
     environment = "dev"

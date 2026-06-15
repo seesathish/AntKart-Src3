@@ -20,9 +20,9 @@ AntKart/
 ├── AK.Order/             REST Minimal API — order management (PostgreSQL + SAGA)
 ├── AK.Gateway/           API Gateway — Ocelot single entry point
 ├── AK.Payments/          REST Minimal API — payment processing (PostgreSQL + Razorpay)
-├── AK.Notification/      REST Minimal API — transactional notifications (PostgreSQL + ACS Email)
+├── AK.Notification/      Serverless notifications — AK.Notification.Core (reusable library) + AK.Notification.Core.Tests (no microservice host; consumed by AK.NotificationFunctions)
 ├── AK.BuildingBlocks/    Shared cross-cutting library (no business logic)
-├── AK.IntegrationTests/  SAGA + event bus + notification consumer tests (no API/Grpc dependency)
+├── AK.IntegrationTests/  SAGA + event bus tests (no API/Grpc dependency)
 ├── AK.NotificationFunctions/  .NET 9 isolated Azure Functions app — Event Grid-triggered notifications, dispatched through AK.Notification.Core
 ├── AK.NotificationFunctions.Tests/  Unit tests for the notification Functions (mock dispatcher)
 ├── AK.Tools/             Developer tools
@@ -156,7 +156,7 @@ The dedicated identity microservice was removed in the Entra migration. Microsof
 
 ### ✅ AK.IntegrationTests  (Event Bus Tests)
 - **Framework:** MassTransit in-memory test harness (no broker, no DB, no host) — transport-agnostic
-- **Tests:** 35 passing — 6 order saga, 4 order event bus, 7 payment event bus, 5 payment happy-path, 6 payment sad-path, 7 notification consumers
+- **Tests:** 28 passing — order saga, order event bus, payment event bus, payment happy-path, payment sad-path (notification consumer tests were removed with the old microservice — notifications are serverless)
 - **Design doc:** [AK.IntegrationTests/INTEGRATION_TESTS.md](AK.IntegrationTests/INTEGRATION_TESTS.md)
 
 ### ✅ AK.NotificationFunctions  (Azure Functions — .NET 9 isolated)
@@ -186,20 +186,11 @@ The dedicated identity microservice was removed in the Entra migration. Microsof
 - **Removed:** Unimplemented `/api/payments/webhook` stub endpoint was removed
 - **Design doc:** [AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md](AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md)
 
-### ✅ AK.Notification  (REST Minimal API — Event-driven)
-- **Transport:** HTTP REST, port 5087 (dev) / 8086 (Docker)
-- **Database:** PostgreSQL — `AKNotificationsDb` via EF Core 9 + Npgsql, auto-migrates on startup
-- **Email:** Azure Communication Services (ACS) Email via the shared `IEmailSender` (BuildingBlocks). `EmailNotificationChannel` delegates to `IEmailSender` — no SMTP server/credentials. Entra-first auth (managed identity), Key-Vault connection-string fallback; non-secret `Acs:Endpoint`/`Acs:SenderAddress`/`Acs:SenderDisplayName` in config. Replaced the previous MailKit/Mailhog/Gmail SMTP path.
-- **Architecture:** DDD + Clean Architecture (Domain → Application → Infrastructure → API)
-- **Patterns:** CQRS (MediatR 12.4.1), FluentValidation, MassTransit consumers, channel abstraction
-- **Channel abstraction:** `INotificationChannel` interface resolved by `INotificationChannelResolver`; Email fully implemented (ACS via `IEmailSender`); SMS + WhatsApp are stubbed for future activation
-- **Events consumed:** `OrderCreatedIntegrationEvent` (order confirmation), `OrderConfirmedIntegrationEvent` (stock confirmed), `OrderCancelledIntegrationEvent` (cancellation notice), `PaymentSucceededIntegrationEvent` (payment receipt), `PaymentFailedIntegrationEvent` (payment failure alert)
-- **Retention:** `NotificationCleanupService` (BackgroundService) deletes notifications older than 90 days, runs daily at 02:00 UTC
-- **Gateway routes:** `GET /gateway/notifications/{everything}` — authenticated, 20 RPS rate limit
-- **Tests:** 42 passing (domain, command handler, query handlers, consumers, template renderer, ACS email sender, email channel delegation)
-- **Reusable notification core (`AK.Notification.Core`):** the framework-agnostic core the serverless model will call (Event Grid + Azure Functions, wired in a later step). Holds the channel abstraction (`NotificationChannelType` Email/WhatsApp/Sms, `INotificationChannel` → `NotificationSendResult`, `EmailNotificationChannel` wrapping the shared `IEmailSender`), message/request models, one template per `NotificationType` (OrderCreated/OrderConfirmed/OrderCancelled/PaymentSucceeded/PaymentFailed) resolved by type, `INotificationDispatcher` (resolve template → compose → send per channel → write one `NotificationHistory` audit row per attempt; never throws on a delivery failure — records it), an EF Core `NotificationHistoryDbContext` + `InitialCreate` migration (secret-less Npgsql; design-time factory for `dotnet ef`), and `AddNotificationCore(configuration)`. The EF history adapter lives in Core (a surviving project — not the old Infrastructure that is deleted later). Adding a channel = implement `INotificationChannel` + register it (Open/Closed). The serverless **AK.NotificationFunctions** consume the shared event contracts (BuildingBlocks) and dispatch through this core; the REST host + Service Bus consumers above are unchanged (removed in a later step). **17 tests** (templates, email channel, dispatcher send/persist/failure, EF history-store persist — EF InMemory + mocks, no live Azure/DB).
-- **Swagger:** `http://localhost:5087/swagger` (Development only)
-- **Design doc:** [AK.Notification/NOTIFICATION_TECHNICAL_DESIGN.md](AK.Notification/NOTIFICATION_TECHNICAL_DESIGN.md)
+### ✅ AK.Notification — serverless (Event Grid + Functions)
+Notifications are a **pure serverless** capability: there is no notification microservice host or Service Bus subscription. The old REST microservice (`AK.Notification.API`/`.Application`/`.Infrastructure`/`.Domain` + their tests) and the Service Bus `notification` subscription were **removed** once the serverless path fully replaced them. The capability is now:
+- **`AK.Notification.Core`** (reusable library) — the channel abstraction (`NotificationChannelType` Email/WhatsApp/Sms, `INotificationChannel` → `NotificationSendResult`, `EmailNotificationChannel` wrapping the shared ACS `IEmailSender`), message/request models, one template per `NotificationType` (OrderCreated/OrderConfirmed/OrderCancelled/PaymentSucceeded/PaymentFailed) resolved by type, `INotificationDispatcher` (resolve template → compose → send per channel → write one `NotificationHistory` audit row per attempt; never throws on a delivery failure — records it), an EF Core `NotificationHistoryDbContext` + `InitialCreate` migration (secret-less Npgsql; design-time factory), and `AddNotificationCore(configuration)`. Adding a channel = implement `INotificationChannel` + register it (Open/Closed). **17 tests** (templates, email channel, dispatcher send/persist/failure, EF history persist — EF InMemory + mocks).
+- **`AK.NotificationFunctions`** (Azure Functions, see its own section) — Event Grid-triggered, dispatch through the Core.
+- **Publishers** — AK.Order and AK.Payments emit the five `AK.BuildingBlocks.Messaging.Notifications` events to Event Grid as fire-and-forget side-effects after each durable commit.
 
 ---
 

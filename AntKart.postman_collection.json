@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "antkart-microservices-collection",
     "name": "AntKart Microservices",
-    "description": "Unified Postman collection for all AntKart microservices.\n\n**Services (Local Dev / Docker Compose):**\n- AK.Products   REST  — localhost:5077 / localhost:8080\n- AK.Discount   gRPC  — localhost:5001 / localhost:8081\n- AK.ShoppingCart REST — localhost:5079 / localhost:8082\n- AK.Order      REST  — localhost:5080 / localhost:8083\n- AK.Payments   REST  — localhost:5086 / localhost:8085\n- AK.Notification REST — localhost:5087 / localhost:8086\n- AK.Gateway    REST  — localhost:8000 / localhost:9090\n- Mailhog UI          — localhost:8025 (Docker only)\n\n**Import environments:**\n- `AntKart.Local.postman_environment.json` — direct service ports\n- `AntKart.Docker.postman_environment.json` — Docker Compose mapped ports\n\n**Quick start:**\n1. Import this collection + your chosen environment file\n2. Run `POST Login (User)` — {{accessToken}} is saved automatically\n3. All protected requests use `Bearer {{accessToken}}`\n\n**Security:** userId is never sent in URL paths or request bodies — always derived from the JWT by each service.",
+    "description": "Unified Postman collection for all AntKart microservices.\n\n**Services (Local Dev / Docker Compose):**\n- AK.Products   REST  — localhost:5077 / localhost:8080\n- AK.Discount   gRPC  — localhost:5001 / localhost:8081\n- AK.ShoppingCart REST — localhost:5079 / localhost:8082\n- AK.Order      REST  — localhost:5080 / localhost:8083\n- AK.Payments   REST  — localhost:5086 / localhost:8085\n- AK.Gateway    REST  — localhost:8000 / localhost:9090\n- Mailhog UI          — localhost:8025 (Docker only)\n\n**Import environments:**\n- `AntKart.Local.postman_environment.json` — direct service ports\n- `AntKart.Docker.postman_environment.json` — Docker Compose mapped ports\n\n**Quick start:**\n1. Import this collection + your chosen environment file\n2. Run `POST Login (User)` — {{accessToken}} is saved automatically\n3. All protected requests use `Bearer {{accessToken}}`\n\n**Security:** userId is never sent in URL paths or request bodies — always derived from the JWT by each service.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -11,7 +11,6 @@
     { "key": "cartUrl",          "value": "http://localhost:5079", "type": "string" },
     { "key": "orderUrl",         "value": "http://localhost:5080", "type": "string" },
     { "key": "paymentsUrl",      "value": "http://localhost:5086", "type": "string" },
-    { "key": "notificationUrl",  "value": "http://localhost:5087", "type": "string" },
     { "key": "gatewayUrl",       "value": "http://localhost:8000", "type": "string" },
     { "key": "accessToken",      "value": "", "type": "string",   "description": "JWT access token — set automatically by the Login request test script" },
     { "key": "productId",        "value": "replace-with-actual-id", "type": "string" },
@@ -23,8 +22,7 @@
     { "key": "razorpayPaymentId","value": "", "type": "string" },
     { "key": "razorpaySignature","value": "", "type": "string" },
     { "key": "razorpayCustomerId","value": "", "type": "string" },
-    { "key": "cardId",           "value": "", "type": "string" },
-    { "key": "notificationId",   "value": "", "type": "string" }
+    { "key": "cardId",           "value": "", "type": "string" }
   ],
   "item": [
     {
@@ -557,44 +555,6 @@
           "request": {
             "method": "GET", "header": [],
             "url": { "raw": "{{paymentsUrl}}/health", "host": ["{{paymentsUrl}}"], "path": ["health"] }
-          }
-        }
-      ]
-    },
-    {
-      "name": "AK.Notification API",
-      "description": "Notification microservice — REST/HTTP (event-driven).\nSwagger UI: {{notificationUrl}}/swagger\n\nNotifications are created automatically by consuming integration events from the message bus:\n- OrderCreatedIntegrationEvent → order confirmation\n- OrderConfirmedIntegrationEvent → stock confirmed\n- OrderCancelledIntegrationEvent → cancellation notice\n- PaymentSucceededIntegrationEvent → payment receipt\n- PaymentFailedIntegrationEvent → payment failure alert\n\nIDOR-safe: users can only read their own notifications. Admin endpoint returns all.",
-      "item": [
-        {
-          "name": "GET My Notifications",
-          "request": {
-            "method": "GET",
-            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}"}],
-            "url": { "raw": "{{notificationUrl}}/api/notifications?page=1&pageSize=20", "host": ["{{notificationUrl}}"], "path": ["api","notifications"], "query": [{"key":"page","value":"1"},{"key":"pageSize","value":"20"}] }
-          }
-        },
-        {
-          "name": "GET Notification by ID",
-          "request": {
-            "method": "GET",
-            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}"}],
-            "url": { "raw": "{{notificationUrl}}/api/notifications/{{notificationId}}", "host": ["{{notificationUrl}}"], "path": ["api","notifications","{{notificationId}}"] }
-          }
-        },
-        {
-          "name": "GET All Notifications (admin only)",
-          "request": {
-            "method": "GET",
-            "header": [{"key":"Authorization","value":"Bearer {{accessToken}}"}],
-            "description": "Requires admin role. Returns all notifications across all users.",
-            "url": { "raw": "{{notificationUrl}}/api/notifications/admin?page=1&pageSize=20", "host": ["{{notificationUrl}}"], "path": ["api","notifications","admin"], "query": [{"key":"page","value":"1"},{"key":"pageSize","value":"20"}] }
-          }
-        },
-        {
-          "name": "GET Notification Health Check",
-          "request": {
-            "method": "GET", "header": [],
-            "url": { "raw": "{{notificationUrl}}/health", "host": ["{{notificationUrl}}"], "path": ["health"] }
           }
         }
       ]

@@ -35,7 +35,7 @@ variable "topic_name" {
 variable "subscription_names" {
   description = "Subscriptions on the topic — one per consuming service. Each subscription receives its own copy of every message published to the topic."
   type        = list(string)
-  default     = ["products", "notification"]
+  default     = ["products"]
 }
 
 variable "tags" {

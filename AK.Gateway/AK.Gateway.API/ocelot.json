@@ -165,36 +165,6 @@
       "DownstreamPathTemplate": "/health",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [ { "Host": "ak-payments-api", "Port": 8080 } ]
-    },
-    {
-      "UpstreamPathTemplate": "/gateway/notifications/{everything}",
-      "UpstreamHttpMethod": [ "GET" ],
-      "DownstreamPathTemplate": "/api/notifications/{everything}",
-      "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [
-        { "Host": "ak-notification-api", "Port": 8080 }
-      ],
-      "AuthenticationOptions": {
-        "AuthenticationProviderKey": "Bearer"
-      },
-      "RateLimitOptions": {
-        "EnableRateLimiting": true,
-        "Period": "1s",
-        "PeriodTimespan": 1,
-        "Limit": 20
-      },
-      "QoSOptions": {
-        "ExceptionsAllowedBeforeBreaking": 3,
-        "DurationOfBreak": 30000,
-        "TimeoutValue": 10000
-      }
-    },
-    {
-      "UpstreamPathTemplate": "/gateway/health/notifications",
-      "UpstreamHttpMethod": [ "GET" ],
-      "DownstreamPathTemplate": "/health",
-      "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [ { "Host": "ak-notification-api", "Port": 8080 } ]
     }
   ],
   "GlobalConfiguration": {
