@@ -9,6 +9,8 @@
     <!-- The seed loader reuses the persistence layer (MongoDbContext + ProductClassMap) rather
          than duplicating Mongo client/mapping code. -->
     <InternalsVisibleTo Include="AK.Tools.ProductsSeedLoader" />
+    <!-- The discount seed loader reads product ids from Cosmos via the same persistence layer. -->
+    <InternalsVisibleTo Include="AK.Tools.DiscountSeedLoader" />
     <!-- Tests exercise the internal DiscountGrpcClient's graceful-degradation behaviour. -->
     <InternalsVisibleTo Include="AK.Products.Tests" />
   </ItemGroup>

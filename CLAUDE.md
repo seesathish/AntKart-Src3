@@ -29,7 +29,9 @@ AntKart/
 ├── AK.Tools/             Developer tools
 │   ├── AK.Tools.ProductsSeedGenerator/  Console tool — deterministically generates AK.Seed-Data/products.csv (3,000 products)
 │   ├── AK.Tools.ProductsSeedLoader/      Console tool — idempotent, secret-less upsert of products.csv into Cosmos (keyed on SKU-derived id)
-│   └── AK.Tools.ProductsSeedLoader.Tests/  Unit tests for the loader (CSV parsing + deterministic id, mocked sink)
+│   ├── AK.Tools.ProductsSeedLoader.Tests/  Unit tests for the loader (CSV parsing + deterministic id, mocked sink)
+│   ├── AK.Tools.DiscountSeedLoader/      Console tool — seeds coupons into AKDiscountDb correlated to REAL Cosmos product ids (idempotent upsert by ProductId)
+│   └── AK.Tools.DiscountSeedLoader.Tests/  Unit tests for the deterministic selection rules + idempotent EF upsert
 ├── AK.Seed-Data/         Committed product seed dataset (products.csv + README)
 ├── AntKart.sln
 ├── AntKart.postman_collection.json
@@ -87,7 +89,7 @@ AK.<Service>/
 - **Patterns:** CQRS (MediatR 12.4.1), FluentValidation pipeline, Repository
 - **Proto:** `AK.Discount/AK.Discount.Grpc/Protos/discount.proto`
 - **RPCs:** GetDiscount, CreateDiscount, UpdateDiscount, DeleteDiscount, GetAllDiscounts
-- **Seed data:** 300 coupons matching AK.Products SKUs (one per product)
+- **Seed data:** the in-process `DiscountSeeder` writes 300 SKU-keyed sample coupons on startup. For real, queryable discounts, `AK.Tools.DiscountSeedLoader` seeds coupons whose `ProductId` is a **real Cosmos product `_id`** (so `GetDiscount(product_id)` resolves and `discountPrice` is computed) — category rules (Kids 15%, Men/Shirts 10%) plus a deterministic ~20% spread, idempotent by `ProductId`
 - **Tests:** 53 passing (domain, commands, queries, validators, DTO mapping)
 - **Design doc:** [AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md](AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md)
 

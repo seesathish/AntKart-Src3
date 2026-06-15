@@ -87,7 +87,7 @@ Significant design and infrastructure decisions are recorded as [Architecture De
 | Serverless / eventing | — | Azure Functions + Event Grid (target) |
 | Secrets / access | Connection strings | Key Vault + managed identities (no secrets) |
 | Observability | Serilog → Elasticsearch → Kibana | Azure Monitor / Application Insights |
-| Testing | xUnit · Moq · FluentAssertions (621 tests) | Unchanged |
+| Testing | xUnit · Moq · FluentAssertions (631 tests) | Unchanged |
 
 ---
 
@@ -200,7 +200,7 @@ git clone https://github.com/seesathish/AntKart.git
 cd AntKart
 dotnet restore   # run from the repository root so nuget.config is applied
 dotnet build
-dotnet test      # 621 tests
+dotnet test      # 631 tests
 ```
 
 **Provision the cloud-native platform.** Follow the [Infrastructure Guide](docs/guides/infrastructure-guide.md) to provision the managed Azure resources as code — Terraform modules and Terragrunt live units, with a reviewed `plan` before each `apply` — and the [Development Guide](DevelopmentGuide.md) for the delivery phases. With the managed services in place, each service runs locally against live cloud services, directly or via cloud port-forwarding. Service endpoints and ports are **(to be updated)** as the deployment topology is finalized.
