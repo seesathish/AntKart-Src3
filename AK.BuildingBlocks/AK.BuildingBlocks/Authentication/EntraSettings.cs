@@ -11,9 +11,17 @@ public sealed class EntraSettings
     // The directory (tenant) id that issues the tokens this API trusts.
     public string TenantId { get; init; } = string.Empty;
 
-    // The API app registration this service validates tokens for — its Application ID URI
-    // (api://<name>) or client id. Tokens carry this as their `aud` claim.
+    // The API app registration's Application ID URI (api://<name>). A token carries this as its
+    // `aud` when a SEPARATE client app requests a token for this API.
     public string Audience { get; init; } = string.Empty;
+
+    // The same app registration's client/application id (a GUID). A token carries THIS as its `aud`
+    // when the client and the resource are the SAME app (the API app requesting a token for itself).
+    //
+    // A valid `aud` may be EITHER form, so both are accepted (see ResolveValidAudiences). Tokens
+    // validate whether the caller is a separate client (aud = App ID URI) or the API itself
+    // (aud = client-id GUID). Both are non-secret identifiers, committed in appsettings.
+    public string ClientId { get; init; } = string.Empty;
 
     // Optional explicit authority override. When empty it is derived as
     // {Instance}/{TenantId}/v2.0 (the Entra v2 endpoint).
@@ -31,4 +39,12 @@ public sealed class EntraSettings
     // The exact issuer (`iss`) an Entra v2 token carries for this tenant.
     public string ResolveIssuer() =>
         $"{Instance.TrimEnd('/')}/{TenantId}/v2.0";
+
+    // The set of `aud` values this API accepts: the App ID URI and the client-id GUID. Empty
+    // values are filtered out, so a service that configures only one still validates correctly.
+    public string[] ResolveValidAudiences() =>
+        new[] { Audience, ClientId }
+            .Where(a => !string.IsNullOrWhiteSpace(a))
+            .Distinct()
+            .ToArray();
 }

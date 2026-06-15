@@ -33,7 +33,6 @@ public static class AuthenticationExtensions
                 // automatically — and refreshes them as Entra rotates keys — so signature
                 // validation never needs a stored key or secret.
                 options.Authority = settings.ResolveAuthority();
-                options.Audience = settings.Audience;
                 options.RequireHttpsMetadata = settings.RequireHttpsMetadata;
 
                 // Keep the original JWT claim names (e.g. "sub", "roles", "email") instead of
@@ -47,11 +46,16 @@ public static class AuthenticationExtensions
                     ValidateIssuer = true,
                     ValidIssuer = settings.ResolveIssuer(),
 
-                    // 2. Audience — the token must be intended for THIS API's app registration
-                    //    (its identifier URI / client id). This is what stops a token minted for
-                    //    another API being replayed against this one.
+                    // 2. Audience — the token must be intended for THIS API's app registration.
+                    //    Its `aud` may take EITHER valid form, so BOTH are accepted:
+                    //      • the App ID URI (api://<name>) — when a SEPARATE client app requests a
+                    //        token for this API;
+                    //      • the client-id GUID — when the client and the resource are the SAME app
+                    //        (the API requesting a token for itself).
+                    //    Accepting both still stops a token minted for ANOTHER API being replayed
+                    //    here (neither of its audiences would match). Empty values are filtered out.
                     ValidateAudience = true,
-                    ValidAudience = settings.Audience,
+                    ValidAudiences = settings.ResolveValidAudiences(),
 
                     // 3. Lifetime — not expired and not used before its valid-from time.
                     ValidateLifetime = true,
