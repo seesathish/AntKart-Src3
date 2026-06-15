@@ -78,7 +78,7 @@ Significant design and infrastructure decisions are recorded as [Architecture De
 | Identity | Keycloak (OIDC / JWT) | Microsoft Entra ID |
 | Messaging | RabbitMQ + MassTransit | Azure Service Bus + MassTransit |
 | Product store | MongoDB | Azure Cosmos DB (MongoDB API) |
-| Relational / cache | PostgreSQL · Redis · SQLite | Managed Azure data services |
+| Relational / cache | PostgreSQL · Redis | Managed Azure data services |
 | Email | MailKit · SMTP / Mailhog | SMTP / managed email |
 | Payments | Razorpay (sandbox) | Razorpay |
 | Resilience | Polly v8 (retry · circuit breaker · timeout) | Unchanged |
@@ -133,7 +133,7 @@ The relationship between the repositories is **Phase 1 (AntKart — microservice
 ```
 AntKart/
 ├── AK.Products/          REST Minimal API — product catalogue (MongoDB / Cosmos DB)
-├── AK.Discount/          gRPC service — discount coupons (SQLite)
+├── AK.Discount/          gRPC service — discount coupons (PostgreSQL)
 ├── AK.ShoppingCart/      REST Minimal API — shopping cart (Redis)
 ├── AK.Order/             REST Minimal API — order management (PostgreSQL + SAGA)
 ├── AK.Gateway/           API Gateway — Ocelot single entry point
@@ -160,7 +160,7 @@ AntKart/
 | Service | Transport | Data store | Design Doc |
 |---------|-----------|------------|------------|
 | [AK.Products](AK.Products/AK.Products.API) | REST Minimal API | MongoDB / Cosmos DB | [Products Design](AK.Products/PRODUCTS_TECHNICAL_DESIGN.md) |
-| [AK.Discount](AK.Discount/AK.Discount.Grpc) | gRPC | SQLite | [Discount Design](AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md) |
+| [AK.Discount](AK.Discount/AK.Discount.Grpc) | gRPC | PostgreSQL | [Discount Design](AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md) |
 | [AK.ShoppingCart](AK.ShoppingCart/AK.ShoppingCart.API) | REST Minimal API | Redis | [ShoppingCart Design](AK.ShoppingCart/SHOPPING_CART_TECHNICAL_DESIGN.md) |
 | [AK.Order](AK.Order/AK.Order.API) | REST Minimal API | PostgreSQL | [Order Design](AK.Order/ORDER_TECHNICAL_DESIGN.md) |
 | [AK.Payments](AK.Payments/AK.Payments.API) | REST Minimal API | PostgreSQL + Razorpay | [Payments Design](AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md) |

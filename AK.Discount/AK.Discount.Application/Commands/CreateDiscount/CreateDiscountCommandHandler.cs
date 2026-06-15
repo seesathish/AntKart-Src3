@@ -6,7 +6,7 @@ using AK.Discount.Domain.Enums;
 using MediatR;
 namespace AK.Discount.Application.Commands.CreateDiscount;
 
-// Creates a new coupon in SQLite via the CouponRepository.
+// Creates a new coupon in PostgreSQL via the CouponRepository.
 // Coupon codes are normalised to uppercase before saving so lookups are case-insensitive.
 // DiscountType is parsed from the string in the DTO (from gRPC proto int → mapped to enum name in the mapper).
 public sealed class CreateDiscountCommandHandler(ICouponRepository repo) : IRequestHandler<CreateDiscountCommand, CouponDto>

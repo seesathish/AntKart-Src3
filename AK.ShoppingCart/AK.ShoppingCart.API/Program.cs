@@ -1,4 +1,5 @@
 using AK.BuildingBlocks.Authentication;
+using AK.BuildingBlocks.Configuration;
 using AK.BuildingBlocks.HealthChecks;
 using AK.BuildingBlocks.Logging;
 using AK.BuildingBlocks.Swagger;
@@ -9,6 +10,12 @@ using AK.ShoppingCart.Infrastructure.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
+
+// Load configuration/secrets from Azure Key Vault (when KeyVault:Uri is set), using this
+// service's own Entra identity, before anything reads configuration. This is how the vaulted
+// RedisSettings--ConnectionString secret flows into IConfiguration as RedisSettings:ConnectionString
+// and binds to RedisSettings — no secret is committed to the repo.
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 builder.AddSerilogLogging();
 

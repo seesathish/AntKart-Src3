@@ -15,7 +15,7 @@ AntKart is a cloud-native e-commerce platform built as independently deployable 
 ```
 AntKart/
 ├── AK.Products/          REST Minimal API — product catalogue (Cosmos DB, MongoDB API)
-├── AK.Discount/          gRPC service — discount coupons (SQLite)
+├── AK.Discount/          gRPC service — discount coupons (PostgreSQL)
 ├── AK.ShoppingCart/      REST Minimal API — shopping cart (Redis)
 ├── AK.Order/             REST Minimal API — order management (PostgreSQL + SAGA)
 ├── AK.Gateway/           API Gateway — Ocelot single entry point
@@ -82,7 +82,7 @@ AK.<Service>/
 
 ### ✅ AK.Discount  (gRPC)
 - **Transport:** gRPC, port 5001 (dev) / 8081 (Docker)
-- **Database:** SQLite (`discount.db`) via EF Core 9, code-first migrations
+- **Database:** PostgreSQL — `AKDiscountDb` via EF Core 9 + Npgsql, code-first migrations. Connection string read from configuration (`DiscountDb`): a localhost default in `appsettings`, overridden at runtime by the vaulted `ConnectionStrings--DiscountDb` secret (Key Vault → `ConnectionStrings:DiscountDb`). The gRPC host loads Key Vault via `AddAzureKeyVaultConfiguration`; a `DiscountContextFactory` (design-time) lets `dotnet ef` run without the host.
 - **Architecture:** Clean Architecture (lighter — no DDD events)
 - **Patterns:** CQRS (MediatR 12.4.1), FluentValidation pipeline, Repository
 - **Proto:** `AK.Discount/AK.Discount.Grpc/Protos/discount.proto`
@@ -323,7 +323,7 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | FluentValidation | 11.x | Application |
 | FluentValidation.DependencyInjectionExtensions | 11.x | Application |
 | MongoDB.Driver | 3.3.0 | Products Infrastructure |
-| Microsoft.EntityFrameworkCore.Sqlite | 9.x | Discount Infrastructure |
+| Npgsql.EntityFrameworkCore.PostgreSQL | 9.0.4 | Order / Payments / Discount Infrastructure |
 | Grpc.AspNetCore | 2.x | Discount Grpc |
 | Swashbuckle.AspNetCore | 7.x | Products API |
 | Serilog.AspNetCore | 7.x | BuildingBlocks |

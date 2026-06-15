@@ -4,7 +4,7 @@ namespace AK.Discount.Domain.Entities;
 
 // Coupon entity for AK.Discount — a lighter domain model than the other services.
 // No private setters or factory method because AK.Discount uses a simpler CRUD design
-// without domain events. EF Core maps this directly via code-first to SQLite.
+// without domain events. EF Core maps this directly via code-first to PostgreSQL.
 //
 // Each coupon is linked to a single product via ProductId (the 32-char hex MongoDB Id).
 // DiscountType determines how Amount is applied at query time in AK.Products:
@@ -12,7 +12,7 @@ namespace AK.Discount.Domain.Entities;
 //   Fixed      → Price - Amount
 public class Coupon
 {
-    // Integer primary key (auto-incremented by SQLite — simpler than Guid for this service).
+    // Integer primary key (auto-incremented by the database — simpler than Guid for this service).
     public int Id { get; set; }
 
     // The MongoDB product ID this coupon applies to (matches Product.Id in AK.Products).
