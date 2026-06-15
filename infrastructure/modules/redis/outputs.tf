@@ -18,12 +18,12 @@ output "ssl_port" {
 
 output "primary_access_key" {
   description = "The primary access key used to authenticate to the cache. Sensitive — consumed only to seed Key Vault in a later step; never commit or print it."
-  value       = azurerm_managed_redis.this.primary_access_key
+  value       = azurerm_managed_redis.this.default_database[0].primary_access_key
   sensitive   = true
 }
 
 output "connection_string" {
   description = "Ready-to-use StackExchange.Redis connection string (TLS, key auth). Sensitive — copied into Key Vault in a later step; never commit or print it."
-  value       = "${azurerm_managed_redis.this.hostname}:10000,password=${azurerm_managed_redis.this.primary_access_key},ssl=True,abortConnect=False"
+  value       = "${azurerm_managed_redis.this.hostname}:10000,password=${azurerm_managed_redis.this.default_database[0].primary_access_key},ssl=True,abortConnect=False"
   sensitive   = true
 }

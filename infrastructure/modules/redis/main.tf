@@ -46,6 +46,13 @@ resource "azurerm_managed_redis" "this" {
   default_database {
     clustering_policy = var.clustering_policy
     eviction_policy   = var.eviction_policy
+
+    # access_keys_authentication_enabled = true is REQUIRED for the primary
+    # access key to be exported (it is only generated when key auth is on). This
+    # is the Option-1 key-based / vaulted model — the key is copied into Key
+    # Vault and the service reads it from there. Entra-only auth (disabling
+    # access keys) is the M5 hardening step.
+    access_keys_authentication_enabled = true
   }
 
   tags = var.tags
