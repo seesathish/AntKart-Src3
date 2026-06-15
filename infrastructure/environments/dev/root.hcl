@@ -98,12 +98,13 @@ generate "provider" {
 # different units (or the same unit on different days) can pull different provider
 # versions, so a plan that was clean yesterday can change for no code reason.
 #
-# BOTH providers are declared here so there is a SINGLE SOURCE OF TRUTH for
-# provider versions. azuread is only used by the app-registration unit, but
-# declaring it globally avoids a second, hand-written versions.tf in that unit
-# colliding with this generated one (Terragrunt will not overwrite a
-# non-generated file). Units that don't use azuread simply don't reference it —
-# declaring a provider it never uses is harmless.
+# ALL providers are declared here so there is a SINGLE SOURCE OF TRUTH for
+# provider versions. azuread is only used by the app-registration unit and random
+# only by the postgresql unit (to generate the DB admin password), but declaring
+# them globally avoids a second, hand-written versions.tf in those units colliding
+# with this generated one (Terragrunt will not overwrite a non-generated file).
+# Units that don't use a given provider simply don't reference it — declaring a
+# provider it never uses is harmless.
 #
 # After changing these constraints, run `terragrunt init -upgrade` in each unit
 # to align its .terraform.lock.hcl, then re-commit the updated lock files.
@@ -120,6 +121,10 @@ generate "versions" {
         azuread = {
           source  = "hashicorp/azuread"
           version = "~> 3.0"
+        }
+        random = {
+          source  = "hashicorp/random"
+          version = "~> 3.6"
         }
       }
     }
