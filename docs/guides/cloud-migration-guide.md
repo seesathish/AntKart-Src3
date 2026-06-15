@@ -518,15 +518,17 @@ Existing Payments tests mock `IConfiguration` / `RazorpaySettings`, so they are 
 
 ### Notification — reusable core for the serverless model
 
-Notifications are moving to a pure serverless model (Event Grid + Azure Functions; see Step 5 and [ADR-019](../adr/ADR-019-serverless-notification-functions-eventgrid.md)). This sub-step builds the **reusable core the Functions will call** — without yet wiring the Functions or removing the existing AK.Notification host (both later steps).
+Notifications run on a pure serverless model (Event Grid + Azure Functions; see Step 5 and [ADR-019](../adr/ADR-019-serverless-notification-functions-eventgrid.md)). The reusable core (`AK.Notification.Core`) and the serverless Functions are now both in place. The old AK.Notification host + its Service Bus consumers remain building and untouched (removed in a later step); Order/Payments are updated to publish these events in the next step.
 
-- **Library:** `AK.Notification.Core` — framework-agnostic, registered with a single `AddNotificationCore(configuration)`.
-- **Channel abstraction (the extension point):** `NotificationChannelType` (Email now; WhatsApp/Sms placeholders) + `INotificationChannel` returning a `NotificationSendResult`. `EmailNotificationChannel` wraps the shared ACS `IEmailSender`. Adding a channel is an Open/Closed change — implement `INotificationChannel`, register it; no dispatcher/template/caller changes.
-- **Templates:** one per `NotificationType` (OrderCreated, OrderConfirmed, OrderCancelled, PaymentSucceeded, PaymentFailed), resolved by type, composing subject + HTML + plain-text from the loose event data.
-- **Dispatcher:** `INotificationDispatcher` resolves the template → composes the message → sends on each target channel (default Email) → writes one **history audit row per attempt** (Sent/Failed). It **never throws** for a delivery failure — it records the failure and returns the result, so notification stays a best-effort side-effect that can't fault the originating transaction.
-- **History:** an EF Core `NotificationHistory` audit trail (id, notificationType, recipient, channelType, status, timestamp, correlationId, error), secret-less connection (`ConnectionStrings:Notifications`, Key-Vault-sourced in the cloud) — the same pattern as the other services.
+- **Reusable core:** `AK.Notification.Core` — framework-agnostic, one call: `AddNotificationCore(configuration)`.
+  - **Channel abstraction (extension point):** `NotificationChannelType` (Email now; WhatsApp/Sms placeholders) + `INotificationChannel` returning a `NotificationSendResult`; `EmailNotificationChannel` wraps the shared ACS `IEmailSender`. Adding a channel is Open/Closed — implement + register; no dispatcher/template/caller changes.
+  - **Templates:** one per `NotificationType`, resolved by type, composing subject + HTML + plain-text.
+  - **Dispatcher:** `INotificationDispatcher` resolves the template → composes the message → sends on each target channel (default Email) → writes one **history audit row per attempt** (Sent/Failed). It **never throws** for a delivery failure — it records it, so notification stays a best-effort side-effect.
+  - **History (EF adapter, surviving):** `NotificationHistory` audit trail (id, notificationType, recipient, channelType, status, timestamp, correlationId, error) with an EF Core `NotificationHistoryDbContext` + `InitialCreate` migration in Core — secret-less connection (`ConnectionStrings:Notifications`, Key-Vault-sourced), same pattern as the other services. It lives in Core (a surviving project), not the old Infrastructure.
+- **Shared event contracts (single definition):** `AK.BuildingBlocks.Messaging.Notifications` — `NotificationEventTypes` (Event Grid `eventType` constants, e.g. `AntKart.Order.Confirmed`) + five payload records. Referenced by both the Functions (consume) and Order/Payments (publish, next step), so they never drift.
+- **Functions (`AK.NotificationFunctions`):** one thin `[EventGridTrigger]` per event (`OnOrderCreated` … `OnPaymentFailed`). Each only deserializes the contract → builds a `NotificationRequest` → calls the dispatcher; all logic stays in the core. `Program.cs` folds in Key Vault (secret-less) and calls `AddNotificationCore`. A malformed payload is logged and skipped.
 
-The core is unit-tested with EF InMemory + mocks (templates, email channel, dispatcher send/persist/failure) — **no live Azure or database required**.
+Everything is unit-tested with EF InMemory + mocks (templates, email channel, dispatcher send/persist/failure, EF history persist, and each Function's deserialize→dispatch) — **no live Azure or database required**.
 
 ---
 

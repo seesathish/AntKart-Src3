@@ -5,6 +5,7 @@
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
     "Acs__Endpoint": "https://acs-antkart-dev.unitedstates.communication.azure.com",
     "Acs__SenderAddress": "DoNotReply@4e900fb5-fd18-45cb-9b9a-1acf49abb06c.azurecomm.net",
-    "Acs__SenderDisplayName": "AntKart"
+    "Acs__SenderDisplayName": "AntKart",
+    "ConnectionStrings__Notifications": "Host=localhost;Port=5432;Database=AKNotificationsDb;Username=postgres;Password=postgres"
   }
 }
