@@ -8,7 +8,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
-namespace AK.Notification.Functions.Tests;
+namespace AK.Notification.Tests.Functions;
 
 public sealed class NotificationFunctionsTests
 {

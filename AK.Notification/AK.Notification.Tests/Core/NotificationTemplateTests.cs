@@ -2,7 +2,7 @@ using AK.Notification.Core.Channels;
 using AK.Notification.Core.Templates;
 using FluentAssertions;
 
-namespace AK.Notification.Core.Tests;
+namespace AK.Notification.Tests.Core;
 
 public sealed class NotificationTemplateTests
 {

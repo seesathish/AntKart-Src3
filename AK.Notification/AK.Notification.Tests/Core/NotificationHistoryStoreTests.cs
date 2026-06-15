@@ -3,7 +3,7 @@ using AK.Notification.Core.Persistence;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 
-namespace AK.Notification.Core.Tests;
+namespace AK.Notification.Tests.Core;
 
 public sealed class NotificationHistoryStoreTests
 {

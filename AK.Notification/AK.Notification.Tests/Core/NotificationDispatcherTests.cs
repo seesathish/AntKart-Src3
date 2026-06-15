@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
-namespace AK.Notification.Core.Tests;
+namespace AK.Notification.Tests.Core;
 
 public sealed class NotificationDispatcherTests
 {

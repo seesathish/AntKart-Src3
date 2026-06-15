@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="AK.Notification.Core.Tests" />
+    <InternalsVisibleTo Include="AK.Notification.Tests" />
   </ItemGroup>
 
   <ItemGroup>

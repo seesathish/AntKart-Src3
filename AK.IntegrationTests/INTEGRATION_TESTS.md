@@ -4,7 +4,7 @@
 
 `AK.IntegrationTests` exercises the SAGA choreography, event bus flows, and payment event routing using **MassTransit's in-memory test harness** — no broker, no database, no running host. All 28 tests run in ~12 seconds.
 
-> Notifications are no longer covered here. The notification capability is serverless (Event Grid-triggered Azure Functions dispatching through `AK.Notification.Core`); its tests live in `AK.Notification.Functions.Tests` and `AK.Notification.Core.Tests`, so the old in-harness notification-consumer tests were removed with the retired notification microservice.
+> Notifications are no longer covered here. The notification capability is serverless (Event Grid-triggered Azure Functions dispatching through `AK.Notification.Core`); its tests live in the `AK.Notification.Tests` project (Core/ + Functions/ subfolders), so the old in-harness notification-consumer tests were removed with the retired notification microservice.
 
 ---
 
