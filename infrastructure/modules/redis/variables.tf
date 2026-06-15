@@ -1,11 +1,11 @@
 # =============================================================================
-# Azure Cache for Redis module — inputs
+# Azure Managed Redis module — inputs
 # =============================================================================
-# This module defines HOW the Redis cache is built. The environment supplies
-# WHAT values to use. No environment values are baked in here.
+# This module defines HOW the Managed Redis cache is built. The environment
+# supplies WHAT values to use. No environment values are baked in here.
 #
 # The cache backs the ShoppingCart service (cart state with a TTL). It is a
-# single managed node — see main.tf for the Basic C0 rationale.
+# single managed node by default — see main.tf for the Balanced_B0 rationale.
 
 variable "resource_group_name" {
   description = "Name of the resource group the cache is created in (supplied from the Resource Group module's output)."
@@ -13,31 +13,37 @@ variable "resource_group_name" {
 }
 
 variable "location" {
-  description = "Azure region for the Redis cache (supplied by the environment)."
+  description = "Azure region for the Managed Redis cache (supplied by the environment)."
   type        = string
 }
 
 variable "name" {
-  description = "Name of the Redis cache. NOTE: cache names are GLOBALLY UNIQUE — they become part of the <name>.redis.cache.windows.net hostname (lowercase letters, numbers, hyphens)."
+  description = "Name of the Managed Redis cache. NOTE: cache names are GLOBALLY UNIQUE — they become part of the <name>.<region>.redis.azure.net hostname (lowercase letters, numbers, hyphens)."
   type        = string
-}
-
-variable "capacity" {
-  description = "Cache size within the family. For the Basic/Standard C family, 0 = C0 (~250 MB), the smallest node."
-  type        = number
-  default     = 0
-}
-
-variable "family" {
-  description = "SKU family. 'C' is the Basic/Standard (non-clustered) family; 'P' is Premium."
-  type        = string
-  default     = "C"
 }
 
 variable "sku_name" {
-  description = "Pricing tier. 'Basic' is a single node with no SLA (dev/test). 'Standard' adds replication/SLA; 'Premium' adds VNet/clustering/persistence."
+  description = "Managed Redis SKU. Balanced_B0 is the smallest/cheapest (~1 GB, single node) — ideal for dev/test. Larger Balanced_*, MemoryOptimized_*, or ComputeOptimized_* SKUs scale up for production."
   type        = string
-  default     = "Basic"
+  default     = "Balanced_B0"
+}
+
+variable "high_availability_enabled" {
+  description = "Whether to run a replica for automatic failover. Disabled in dev/test to halve cost (single node, no SLA); PRODUCTION should enable HA."
+  type        = bool
+  default     = false
+}
+
+variable "clustering_policy" {
+  description = "How the cache exposes itself to clients. 'EnterpriseCluster' presents a SINGLE proxied endpoint — most compatible with a standard StackExchange.Redis client, which needs no cluster awareness. ('OSSCluster' exposes the native Redis Cluster protocol.)"
+  type        = string
+  default     = "EnterpriseCluster"
+}
+
+variable "eviction_policy" {
+  description = "What the cache evicts when memory is full. 'AllKeysLRU' evicts the least-recently-used key regardless of TTL — the cache-appropriate choice for cart data."
+  type        = string
+  default     = "AllKeysLRU"
 }
 
 variable "tags" {

@@ -39,6 +39,10 @@ inputs = {
   # location is HARDCODED (not taken from the resource-group output) to keep the
   # cache in the same region as Postgres: eastus is offer-restricted on this
   # subscription, so the data services are provisioned in the paired region.
+  #
+  # CAPACITY NOTE: Azure Managed Redis can fail to allocate in a region that is
+  # temporarily at capacity (apply error: "AllocationFailed"). If that happens,
+  # this region may need to change (try another nearby region) and re-apply.
   location = "eastus2"
 
   # NOTE: cache names are GLOBALLY UNIQUE (part of the hostname). If this one is

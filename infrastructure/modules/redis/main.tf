@@ -1,40 +1,52 @@
 # =============================================================================
-# Azure Cache for Redis module — cache
+# Azure Managed Redis module — cache
 # =============================================================================
 # Provisions a managed Redis cache for the ShoppingCart service, which stores
 # cart state keyed per user with a TTL.
 #
-# WHY BASIC C0: Basic is the cheapest tier — a SINGLE node (~250 MB) with NO
-# replication and NO SLA. That is exactly right for dev/test, where a brief cache
-# outage just means carts are rebuilt, not lost business. Standard would add a
-# replica + SLA, and Premium would add clustering, persistence, and VNet
-# injection — none of which a dev workload needs.
+# WHY azurerm_managed_redis (NOT azurerm_redis_cache): Azure has RETIRED the
+# classic "Azure Cache for Redis" for new creation. The current offering is
+# AZURE MANAGED REDIS (the Redis Enterprise-based service), provisioned via the
+# azurerm_managed_redis resource. The connection model is the same from the
+# application's point of view: hostname + access key over TLS.
 #
-# ACCESS MODEL: connections are KEY-BASED over TLS. enable_non_ssl_port = false
-# leaves ONLY the TLS port (6380) open, so the plaintext port (6379) is never
-# exposed; clients authenticate with an access key (see outputs.tf). The key is a
-# secret retrieved and stored in Key Vault in a later step — never committed.
+# WHY Balanced_B0 + HA DISABLED: Balanced_B0 is the smallest/cheapest Managed
+# Redis SKU (~1 GB, single node) — right for dev/test, where a brief cache
+# outage just means carts are rebuilt, not lost business. high_availability is
+# left off so there is no replica to pay for; PRODUCTION should enable HA for
+# automatic failover and an SLA.
 #
-# M5 HARDENING (deferred): private networking. VNet injection / private endpoints
-# for Redis require the PREMIUM tier, so locking the cache to a virtual network
-# is part of the M5 security-hardening step, not this dev provisioning.
+# ACCESS MODEL: connections are KEY-BASED over TLS. Managed Redis listens on TLS
+# port 10000 (NOT the classic 6380); clients authenticate with an access key
+# (see outputs.tf). The key is a secret retrieved and stored in Key Vault in a
+# later step — never committed. TLS 1.2 is the floor: Managed Redis ENFORCES it
+# by default, so there is no minimum_tls_version attribute on this resource
+# (unlike the classic azurerm_redis_cache).
+#
+# M5 HARDENING (deferred): private networking via private endpoints is a later
+# security-hardening step, not this dev provisioning.
 
-resource "azurerm_redis_cache" "this" {
+resource "azurerm_managed_redis" "this" {
   name                = var.name
   resource_group_name = var.resource_group_name
   location            = var.location
 
-  # Basic C0: capacity 0, family "C", sku "Basic" — single ~250 MB node.
-  capacity = var.capacity
-  family   = var.family
+  # Balanced_B0: smallest/cheapest single-node SKU — see variables.tf.
   sku_name = var.sku_name
 
-  # TLS-only: keep the non-SSL port (6379) CLOSED so traffic can only use the
-  # encrypted port (6380).
-  non_ssl_port_enabled = false
+  # No replica in dev/test (cost); production should enable HA.
+  high_availability_enabled = var.high_availability_enabled
 
-  # Reject anything older than TLS 1.2.
-  minimum_tls_version = "1.2"
+  # default_database: the cache's data endpoint configuration.
+  #   * EnterpriseCluster clustering presents a SINGLE proxied endpoint, so a
+  #     standard StackExchange.Redis client connects without any cluster
+  #     awareness.
+  #   * AllKeysLRU eviction discards the least-recently-used key when memory is
+  #     full — the right policy for a cache.
+  default_database {
+    clustering_policy = var.clustering_policy
+    eviction_policy   = var.eviction_policy
+  }
 
   tags = var.tags
 }
