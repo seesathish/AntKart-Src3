@@ -40,11 +40,14 @@ terraform {
 # the dependency's outputs; the rest are dev's choices.
 inputs = {
   resource_group_name = dependency.resource_group.outputs.name
-  location            = dependency.resource_group.outputs.location
+  #location            = dependency.resource_group.outputs.location
+  # location = dependency.resource_group.outputs.location   
+  # eastus — RESTRICTED for Postgres on this subscription
+  location = "eastus2"   # Postgres provisioned in the paired region (eastus is offer-restricted here)
 
   # NOTE: server names are GLOBALLY UNIQUE (part of the hostname). If this one is
   # taken, choose another and update the verification commands.
-  server_name = "psql-antkart-dev"
+  server_name = "psql-antkart-dev-eus2"
 
   # One database per relational service. Kept explicit here (rather than relying
   # on the module default) so the environment's data footprint is visible.
@@ -58,7 +61,7 @@ inputs = {
   # The value below is an RFC 5737 DOCUMENTATION address (203.0.113.0/24) — it
   # is a deliberate, obviously-fake placeholder, NOT a real or reachable IP.
   # ===========================================================================
-  allowed_client_ip = "203.0.113.10" # <-- TODO: paste your public IP here
+  allowed_client_ip = "106.51.172.225" # your machine's public IP
 
   tags = {
     environment = "dev"
