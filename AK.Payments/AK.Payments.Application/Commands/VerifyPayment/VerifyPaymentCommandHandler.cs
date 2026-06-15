@@ -1,4 +1,6 @@
+using AK.BuildingBlocks.Messaging.EventGrid;
 using AK.BuildingBlocks.Messaging.IntegrationEvents;
+using AK.BuildingBlocks.Messaging.Notifications;
 using AK.Payments.Application.Common.Interfaces;
 using AK.Payments.Application.DTOs;
 using AK.Payments.Application.Mapping;
@@ -22,7 +24,11 @@ namespace AK.Payments.Application.Commands.VerifyPayment;
 //           → AK.Notification consumer sends payment receipt email
 // Failure → mark payment Failed → publish PaymentFailedIntegrationEvent
 //           → AK.Order consumer updates order to PaymentFailed
-public sealed class VerifyPaymentCommandHandler(IUnitOfWork uow, IRazorpayClient razorpay, IPublishEndpoint publisher)
+public sealed class VerifyPaymentCommandHandler(
+    IUnitOfWork uow,
+    IRazorpayClient razorpay,
+    IPublishEndpoint publisher,
+    IEventGridSideEffectPublisher sideEffects)
     : IRequestHandler<VerifyPaymentCommand, PaymentDto>
 {
     public async Task<PaymentDto> Handle(VerifyPaymentCommand request, CancellationToken ct)
@@ -54,8 +60,31 @@ public sealed class VerifyPaymentCommandHandler(IUnitOfWork uow, IRazorpayClient
             await publisher.Publish(failedEvt, ct);
         }
 
+        // Durable commit: persists the payment outcome AND the outbox integration event atomically.
         await uow.SaveChangesAsync(ct);
         payment.ClearDomainEvents();
+
+        // COMMIT-THEN-NOTIFY. The payment outcome is now durably committed. Only now do we emit the
+        // customer notification as a FIRE-AND-FORGET Event Grid side-effect — strictly AFTER the
+        // commit, never inside the transaction. TryPublishAsync NEVER throws, so a notification
+        // failure cannot fail this handler or roll back the payment. customerEmail is already a field
+        // on the Payment entity (captured at InitiatePayment), so it is available here directly.
+        if (isValid)
+            await sideEffects.TryPublishAsync(
+                NotificationEventTypes.PaymentSucceeded,
+                $"payments/{payment.Id}",
+                new PaymentSucceededNotification(
+                    payment.CustomerEmail, payment.CustomerName, payment.OrderNumber,
+                    payment.Amount, payment.Currency, request.RazorpayPaymentId, DateTimeOffset.UtcNow),
+                ct);
+        else
+            await sideEffects.TryPublishAsync(
+                NotificationEventTypes.PaymentFailed,
+                $"payments/{payment.Id}",
+                new PaymentFailedNotification(
+                    payment.CustomerEmail, payment.CustomerName, payment.OrderNumber,
+                    "Signature verification failed.", DateTimeOffset.UtcNow),
+                ct);
 
         return PaymentMapper.ToDto(payment);
     }

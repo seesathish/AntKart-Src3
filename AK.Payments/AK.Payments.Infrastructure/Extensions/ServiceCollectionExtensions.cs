@@ -1,4 +1,5 @@
 using AK.BuildingBlocks.Messaging;
+using AK.BuildingBlocks.Messaging.EventGrid;
 using AK.Payments.Application.Common.Interfaces;
 using AK.Payments.Application.Consumers;
 using AK.Payments.Infrastructure.External;
@@ -25,6 +26,11 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient("razorpay");
         services.AddScoped<IRazorpayClient, RazorpayGatewayClient>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        // Fire-and-forget Event Grid publisher for the payment notification side-effects
+        // (PaymentSucceeded / PaymentFailed). Reads the non-secret EventGrid:TopicEndpoint and
+        // authenticates with DefaultAzureCredential (managed identity) — never-throws TryPublishAsync.
+        services.AddEventGridSideEffectPublisher();
 
         services.AddAzureServiceBusMassTransit(
             configuration,

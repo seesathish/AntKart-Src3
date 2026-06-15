@@ -1,4 +1,6 @@
+using AK.BuildingBlocks.Messaging.EventGrid;
 using AK.BuildingBlocks.Messaging.IntegrationEvents;
+using AK.BuildingBlocks.Messaging.Notifications;
 using AK.Payments.Application.Commands.VerifyPayment;
 using AK.Payments.Application.Common.Interfaces;
 using AK.Payments.Domain.Enums;
@@ -15,14 +17,18 @@ public sealed class VerifyPaymentCommandHandlerTests
     private readonly Mock<IPaymentRepository> _payments = new();
     private readonly Mock<IRazorpayClient> _razorpay = new();
     private readonly Mock<IPublishEndpoint> _publisher = new();
+    private readonly Mock<IEventGridSideEffectPublisher> _sideEffects = new();
 
     public VerifyPaymentCommandHandlerTests()
     {
         _uow.Setup(u => u.Payments).Returns(_payments.Object);
+        _sideEffects.Setup(s => s.TryPublishAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
     }
 
     private VerifyPaymentCommandHandler CreateHandler()
-        => new(_uow.Object, _razorpay.Object, _publisher.Object);
+        => new(_uow.Object, _razorpay.Object, _publisher.Object, _sideEffects.Object);
 
     [Fact]
     public async Task Handle_WithValidSignature_MarksPaymentSucceeded()
@@ -114,5 +120,64 @@ public sealed class VerifyPaymentCommandHandlerTests
                 e.CustomerEmail == "buyer@antkart.com" &&
                 e.Reason.Contains("Signature")),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_AfterCommit_PublishesPaymentSucceededNotification_OnSuccess()
+    {
+        var payment = PaymentTestDataFactory.CreatePayment(
+            customerEmail: "buyer@antkart.com", orderNumber: "ORD-1");
+        payment.AssignRazorpayOrder("order_123");
+        _payments.Setup(r => r.GetByIdAsync(payment.Id, It.IsAny<CancellationToken>())).ReturnsAsync(payment);
+        _razorpay.Setup(r => r.VerifyPaymentSignature(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>())).Returns(true);
+
+        PaymentSucceededNotification? published = null;
+        _sideEffects.Setup(s => s.TryPublishAsync(
+                NotificationEventTypes.PaymentSucceeded, It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .Callback<string, string, object, CancellationToken>((_, _, data, _) => published = (PaymentSucceededNotification)data)
+            .ReturnsAsync(true);
+
+        await CreateHandler().Handle(new VerifyPaymentCommand(payment.Id, "order_123", "pay_abc", "sig_abc"), CancellationToken.None);
+
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        published.Should().NotBeNull();
+        published!.CustomerEmail.Should().Be("buyer@antkart.com");
+        published.OrderNumber.Should().Be("ORD-1");
+        published.PaymentId.Should().Be("pay_abc");
+    }
+
+    [Fact]
+    public async Task Handle_AfterCommit_PublishesPaymentFailedNotification_OnInvalidSignature()
+    {
+        var payment = PaymentTestDataFactory.CreatePayment(customerEmail: "buyer@antkart.com");
+        payment.AssignRazorpayOrder("order_123");
+        _payments.Setup(r => r.GetByIdAsync(payment.Id, It.IsAny<CancellationToken>())).ReturnsAsync(payment);
+        _razorpay.Setup(r => r.VerifyPaymentSignature(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>())).Returns(false);
+
+        await CreateHandler().Handle(new VerifyPaymentCommand(payment.Id, "order_123", "pay_abc", "bad_sig"), CancellationToken.None);
+
+        _sideEffects.Verify(s => s.TryPublishAsync(
+            NotificationEventTypes.PaymentFailed, It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()), Times.Once);
+        _sideEffects.Verify(s => s.TryPublishAsync(
+            NotificationEventTypes.PaymentSucceeded, It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_WhenNotificationPublishFails_DoesNotFailThePayment()
+    {
+        var payment = PaymentTestDataFactory.CreatePayment();
+        payment.AssignRazorpayOrder("order_123");
+        _payments.Setup(r => r.GetByIdAsync(payment.Id, It.IsAny<CancellationToken>())).ReturnsAsync(payment);
+        _razorpay.Setup(r => r.VerifyPaymentSignature(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>())).Returns(true);
+        _sideEffects.Setup(s => s.TryPublishAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var act = async () => await CreateHandler().Handle(
+            new VerifyPaymentCommand(payment.Id, "order_123", "pay_abc", "sig_abc"), CancellationToken.None);
+
+        var result = await act.Should().NotThrowAsync();
+        result.Subject.Status.Should().Be(PaymentStatus.Succeeded.ToString());
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 }

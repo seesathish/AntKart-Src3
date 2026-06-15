@@ -1,5 +1,6 @@
 using AK.BuildingBlocks.Messaging.EventGrid;
 using AK.BuildingBlocks.Messaging.IntegrationEvents;
+using AK.BuildingBlocks.Messaging.Notifications;
 using AK.Order.Application.Common.Interfaces;
 using AK.Order.Domain.Enums;
 using MassTransit;
@@ -29,16 +30,18 @@ public sealed class OrderConfirmedConsumer(
 
         // Fire-and-forget notification side-effect (Event Grid + Function). Runs AFTER the durable
         // commit and cannot affect it: TryPublishAsync swallows any failure and returns false.
+        // Uses the SHARED NotificationEvents.OrderConfirmed contract (no ad-hoc event shape), so the
+        // publisher and the consuming Function agree on one definition.
         await sideEffects.TryPublishAsync(
-            eventType: "AntKart.Order.Confirmed",
-            subject: $"orders/{context.Message.OrderId}",
-            data: new
-            {
-                orderId = context.Message.OrderId,
-                orderNumber = context.Message.OrderNumber,
-                customerEmail = context.Message.CustomerEmail,
-                customerName = context.Message.CustomerName
-            },
+            NotificationEventTypes.OrderConfirmed,
+            $"orders/{context.Message.OrderId}",
+            new OrderConfirmedNotification(
+                context.Message.CustomerEmail,
+                context.Message.CustomerName,
+                context.Message.OrderNumber,
+                context.Message.TotalAmount,
+                "USD",
+                DateTimeOffset.UtcNow),
             context.CancellationToken);
     }
 }

@@ -1,4 +1,6 @@
+using AK.BuildingBlocks.Messaging.EventGrid;
 using AK.BuildingBlocks.Messaging.IntegrationEvents;
+using AK.BuildingBlocks.Messaging.Notifications;
 using AK.Order.Application.Common.Interfaces;
 using AK.Order.Application.Common.Mapping;
 using AK.Order.Application.Common.DTOs;
@@ -18,9 +20,15 @@ namespace AK.Order.Application.Features.CreateOrder;
 //
 // SAGA trigger: publishing OrderCreatedIntegrationEvent starts the OrderSaga in AK.Order,
 // which waits for AK.Products to confirm stock reservation before confirming or cancelling.
-public sealed class CreateOrderCommandHandler(IUnitOfWork uow, IPublishEndpoint publisher)
+public sealed class CreateOrderCommandHandler(
+    IUnitOfWork uow,
+    IPublishEndpoint publisher,
+    IEventGridSideEffectPublisher sideEffects)
     : IRequestHandler<CreateOrderCommand, OrderDto>
 {
+    // Order totals are in the catalogue currency (USD); the Order aggregate doesn't store a currency.
+    private const string OrderCurrency = "USD";
+
     public async Task<OrderDto> Handle(CreateOrderCommand request, CancellationToken ct)
     {
         var addr = request.Order.ShippingAddress;
@@ -54,6 +62,19 @@ public sealed class CreateOrderCommandHandler(IUnitOfWork uow, IPublishEndpoint 
         // SaveChangesAsync commits both the order row and the outbox message in one transaction.
         await uow.SaveChangesAsync(ct);
         order.ClearDomainEvents();
+
+        // COMMIT-THEN-NOTIFY. The order + outbox are now durably committed. Only now do we emit the
+        // customer notification as a FIRE-AND-FORGET Event Grid side-effect — strictly AFTER the
+        // commit, never inside the business transaction. TryPublishAsync NEVER throws, so a
+        // notification failure cannot fail this handler or roll back the created order. (A serverless
+        // Function consumes the event and sends the email; that path is fully decoupled from here.)
+        await sideEffects.TryPublishAsync(
+            NotificationEventTypes.OrderCreated,
+            $"orders/{order.Id}",
+            new OrderCreatedNotification(
+                order.CustomerEmail, order.CustomerName, order.OrderNumber,
+                order.TotalAmount, OrderCurrency, DateTimeOffset.UtcNow),
+            ct);
 
         return OrderMapper.ToDto(order);
     }

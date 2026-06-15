@@ -518,7 +518,11 @@ Existing Payments tests mock `IConfiguration` / `RazorpaySettings`, so they are 
 
 ### Notification — reusable core for the serverless model
 
-Notifications run on a pure serverless model (Event Grid + Azure Functions; see Step 5 and [ADR-019](../adr/ADR-019-serverless-notification-functions-eventgrid.md)). The reusable core (`AK.Notification.Core`) and the serverless Functions are now both in place. The old AK.Notification host + its Service Bus consumers remain building and untouched (removed in a later step); Order/Payments are updated to publish these events in the next step.
+Notifications run on a pure serverless model (Event Grid + Azure Functions; see Step 5 and [ADR-019](../adr/ADR-019-serverless-notification-functions-eventgrid.md)). The reusable core (`AK.Notification.Core`), the serverless Functions, and the **owning-service publishers** are all in place. The old AK.Notification host + its Service Bus consumers remain building and untouched (removed in a later step).
+
+**Owning services publish the events (commit-then-notify).** Order and Payments emit the shared `NotificationEvents` contracts to Event Grid as **fire-and-forget side-effects via `IEventGridSideEffectPublisher.TryPublishAsync` (never-throws), strictly AFTER the durable business commit** — never inside the transaction. A notification publish failure can never roll back or fail the business operation.
+- **Order:** `OrderCreated` (CreateOrderCommandHandler, after the order+outbox commit); `OrderConfirmed` (OrderConfirmedConsumer, now using the shared contract instead of an ad-hoc shape); `OrderCancelled` (OrderCancelledConsumer — the single sink for both the customer-initiated and saga-driven cancel paths, so exactly one notification per cancellation).
+- **Payments:** `PaymentSucceeded` / `PaymentFailed` (VerifyPaymentCommandHandler, after the payment-outcome commit). `customerEmail` is already a field on the `Payment` entity (captured at InitiatePayment from the order context), so it is available at the publish point with no new lookup.
 
 - **Reusable core:** `AK.Notification.Core` — framework-agnostic, one call: `AddNotificationCore(configuration)`.
   - **Channel abstraction (extension point):** `NotificationChannelType` (Email now; WhatsApp/Sms placeholders) + `INotificationChannel` returning a `NotificationSendResult`; `EmailNotificationChannel` wraps the shared ACS `IEmailSender`. Adding a channel is Open/Closed — implement + register; no dispatcher/template/caller changes.
