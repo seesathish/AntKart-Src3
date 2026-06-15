@@ -27,7 +27,7 @@ The platform deliberately runs **two** eventing transports, each for a different
 >
 > **Event Grid carries discrete "something happened" side-effects that must _not_ fail or delay the core transaction.** Use it when the reaction is optional to correctness, may fan out to multiple evolving consumers, and benefits from scale-to-zero serverless hosting.
 
-**The decoupling guarantee (side-effect path).** A side-effect is published only **after** the durable commit, through `IEventGridSideEffectPublisher.TryPublishAsync` in `AK.BuildingBlocks.Messaging.EventGrid` — a helper whose contract is that **it never throws**: any publish failure is swallowed and logged, returning `false`. The `OrderConfirmedConsumer` updates the order to `Confirmed`, saves, and only then attempts the publish; a failure (or an unreachable topic) leaves the order confirmed and the saga unaffected. The Function (`AK.NotificationFunctions`, .NET 9 isolated, `[EventGridTrigger]`) runs in a separate process — if it throws, only that one notification is lost. This is the structural opposite of the saga's at-least-once guarantee, and intentionally so.
+**The decoupling guarantee (side-effect path).** A side-effect is published only **after** the durable commit, through `IEventGridSideEffectPublisher.TryPublishAsync` in `AK.BuildingBlocks.Messaging.EventGrid` — a helper whose contract is that **it never throws**: any publish failure is swallowed and logged, returning `false`. The `OrderConfirmedConsumer` updates the order to `Confirmed`, saves, and only then attempts the publish; a failure (or an unreachable topic) leaves the order confirmed and the saga unaffected. The Function (`AK.Notification.Functions`, .NET 9 isolated, `[EventGridTrigger]`) runs in a separate process — if it throws, only that one notification is lost. This is the structural opposite of the saga's at-least-once guarantee, and intentionally so.
 
 ---
 
@@ -219,7 +219,7 @@ The application **conforms to** this topology — it never creates or manages it
 
 Each consuming service receives events through its own subscription on the `integration-events` topic, so the same event reaches every interested service independently.
 
-> **Notifications are not on this topic.** Customer notifications are not a Service Bus consumer. AK.Order and AK.Payments publish discrete **Event Grid** events (`AntKart.Order.Created/Confirmed/Cancelled`, `AntKart.Payment.Succeeded/Failed`) as fire-and-forget side-effects **after** each durable commit; the serverless `AK.NotificationFunctions` consume those and dispatch through `AK.Notification.Core` (channel-extensible — Email/ACS now, WhatsApp/SMS later — with history persisted to `AKNotificationsDb`). See [Two Eventing Mechanisms](#two-eventing-mechanisms).
+> **Notifications are not on this topic.** Customer notifications are not a Service Bus consumer. AK.Order and AK.Payments publish discrete **Event Grid** events (`AntKart.Order.Created/Confirmed/Cancelled`, `AntKart.Payment.Succeeded/Failed`) as fire-and-forget side-effects **after** each durable commit; the serverless `AK.Notification.Functions` consume those and dispatch through `AK.Notification.Core` (channel-extensible — Email/ACS now, WhatsApp/SMS later — with history persisted to `AKNotificationsDb`). See [Two Eventing Mechanisms](#two-eventing-mechanisms).
 
 ### Observing the flow
 

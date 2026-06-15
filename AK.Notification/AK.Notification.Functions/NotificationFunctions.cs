@@ -8,7 +8,7 @@ using Azure.Messaging.EventGrid;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
-namespace AK.NotificationFunctions;
+namespace AK.Notification.Functions;
 
 // Event Grid-triggered notification Functions (.NET 9 isolated worker) — the serverless half of the
 // platform's eventing model. There is ONE Function per customer notification event.

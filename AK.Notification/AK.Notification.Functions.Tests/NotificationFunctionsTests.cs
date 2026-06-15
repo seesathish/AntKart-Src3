@@ -2,13 +2,13 @@ using AK.BuildingBlocks.Messaging.Notifications;
 using AK.Notification.Core.Channels;
 using AK.Notification.Core.Dispatch;
 using AK.Notification.Core.Templates;
-using AK.NotificationFunctions;
+using AK.Notification.Functions;
 using Azure.Messaging.EventGrid;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
-namespace AK.NotificationFunctions.Tests;
+namespace AK.Notification.Functions.Tests;
 
 public sealed class NotificationFunctionsTests
 {

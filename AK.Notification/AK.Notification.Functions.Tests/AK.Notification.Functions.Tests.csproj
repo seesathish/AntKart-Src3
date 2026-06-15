@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\AK.NotificationFunctions\AK.NotificationFunctions.csproj" />
+    <ProjectReference Include="..\AK.Notification.Functions\AK.Notification.Functions.csproj" />
   </ItemGroup>
 
 </Project>

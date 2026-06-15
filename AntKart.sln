@@ -96,11 +96,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AK.Notification.Core.Tests"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AK.Notification.Core", "AK.Notification\AK.Notification.Core\AK.Notification.Core.csproj", "{2D2CFE89-EEE0-4366-BCA9-78F35153179E}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "AK.NotificationFunctions", "AK.NotificationFunctions", "{E3A5026F-CF44-0E2A-191D-9AA5DB0CBC8B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AK.Notification.Functions.Tests", "AK.Notification\AK.Notification.Functions.Tests\AK.Notification.Functions.Tests.csproj", "{7B28476F-92C1-42C0-9978-D7F86627D1CE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AK.NotificationFunctions.Tests", "AK.NotificationFunctions\AK.NotificationFunctions.Tests\AK.NotificationFunctions.Tests.csproj", "{7B28476F-92C1-42C0-9978-D7F86627D1CE}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AK.NotificationFunctions", "AK.NotificationFunctions\AK.NotificationFunctions\AK.NotificationFunctions.csproj", "{0B9BB4BB-DD77-426C-94AF-4F5428396A81}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AK.Notification.Functions", "AK.Notification\AK.Notification.Functions\AK.Notification.Functions.csproj", "{0B9BB4BB-DD77-426C-94AF-4F5428396A81}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -583,8 +581,8 @@ Global
 		{F29CB71D-C342-4009-9D44-EE872B99F4D2} = {C9DCCF5A-28DE-4124-9FF5-16010EB3D717}
 		{0A2719D3-3668-4DBC-827D-BDCFF232E2CF} = {FE150226-47A6-0301-158C-F1CB39FD71E5}
 		{2D2CFE89-EEE0-4366-BCA9-78F35153179E} = {FE150226-47A6-0301-158C-F1CB39FD71E5}
-		{7B28476F-92C1-42C0-9978-D7F86627D1CE} = {E3A5026F-CF44-0E2A-191D-9AA5DB0CBC8B}
-		{0B9BB4BB-DD77-426C-94AF-4F5428396A81} = {E3A5026F-CF44-0E2A-191D-9AA5DB0CBC8B}
+		{7B28476F-92C1-42C0-9978-D7F86627D1CE} = {FE150226-47A6-0301-158C-F1CB39FD71E5}
+		{0B9BB4BB-DD77-426C-94AF-4F5428396A81} = {FE150226-47A6-0301-158C-F1CB39FD71E5}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {A6BEA109-1FFB-45F6-AA0E-DC0901DA233A}

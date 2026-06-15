@@ -138,8 +138,7 @@ AntKart/
 ├── AK.Order/             REST Minimal API — order management (PostgreSQL + SAGA)
 ├── AK.Gateway/           API Gateway — Ocelot single entry point
 ├── AK.Payments/          REST Minimal API — payment processing (PostgreSQL + Razorpay)
-├── AK.Notification/      AK.Notification.Core — reusable notification library (channels, templates, ACS Email, history)
-├── AK.NotificationFunctions/  Serverless notifications — .NET 9 isolated Azure Functions (Event Grid-triggered)
+├── AK.Notification/      Serverless notifications — AK.Notification.Core (reusable library) + AK.Notification.Functions (.NET 9 isolated Azure Functions, Event Grid-triggered)
 ├── AK.BuildingBlocks/    Shared library (messaging, resilience, logging, auth)
 ├── AK.IntegrationTests/  SAGA + event bus tests (MassTransit in-memory harness)
 ├── AntKart.postman_collection.json
@@ -183,7 +182,7 @@ Identity is **Entra-native**: Microsoft Entra ID issues tokens and each service 
 | AK.ShoppingCart | Authenticated | Authenticated |
 | AK.Order | Authenticated (`/me` = own orders) | Authenticated; status update = Admin only |
 | AK.Payments | Authenticated (`/me` = own payments) | Authenticated |
-| AK.NotificationFunctions | No HTTP surface (Event Grid-triggered) | Serverless side-effect — no client-facing endpoints |
+| AK.Notification.Functions | No HTTP surface (Event Grid-triggered) | Serverless side-effect — no client-facing endpoints |
 | AK.Gateway | Proxied from downstream | JWT validated at gateway and downstream |
 
 **Roles:** `user` (standard), `admin` (full access).

@@ -16,7 +16,7 @@
     <!-- The Functions are thin: they trigger on Event Grid and dispatch through AK.Notification.Core
          (which brings the dispatcher, ACS email channel, templates, and the EF history store).
          The shared event contracts live in AK.BuildingBlocks. -->
-    <ProjectReference Include="..\..\AK.Notification\AK.Notification.Core\AK.Notification.Core.csproj" />
+    <ProjectReference Include="..\AK.Notification.Core\AK.Notification.Core.csproj" />
     <ProjectReference Include="..\..\AK.BuildingBlocks\AK.BuildingBlocks\AK.BuildingBlocks.csproj" />
   </ItemGroup>
   <ItemGroup>

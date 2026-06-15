@@ -20,11 +20,13 @@ AntKart/
 ├── AK.Order/             REST Minimal API — order management (PostgreSQL + SAGA)
 ├── AK.Gateway/           API Gateway — Ocelot single entry point
 ├── AK.Payments/          REST Minimal API — payment processing (PostgreSQL + Razorpay)
-├── AK.Notification/      Serverless notifications — AK.Notification.Core (reusable library) + AK.Notification.Core.Tests (no microservice host; consumed by AK.NotificationFunctions)
+├── AK.Notification/      Serverless notifications (single service folder — no microservice host)
+│   ├── AK.Notification.Core/             Reusable notification library (channels, templates, ACS Email, EF history)
+│   ├── AK.Notification.Core.Tests/       Unit tests for the core
+│   ├── AK.Notification.Functions/        .NET 9 isolated Azure Functions app — Event Grid-triggered, dispatches through AK.Notification.Core
+│   └── AK.Notification.Functions.Tests/  Unit tests for the notification Functions (mock dispatcher)
 ├── AK.BuildingBlocks/    Shared cross-cutting library (no business logic)
 ├── AK.IntegrationTests/  SAGA + event bus tests (no API/Grpc dependency)
-├── AK.NotificationFunctions/  .NET 9 isolated Azure Functions app — Event Grid-triggered notifications, dispatched through AK.Notification.Core
-├── AK.NotificationFunctions.Tests/  Unit tests for the notification Functions (mock dispatcher)
 ├── AK.Tools/             Developer tools
 │   ├── AK.Tools.ProductsSeedGenerator/  Console tool — deterministically generates AK.Seed-Data/products.csv (3,000 products)
 │   ├── AK.Tools.ProductsSeedLoader/      Console tool — idempotent, secret-less upsert of products.csv into Cosmos (keyed on SKU-derived id)
@@ -159,7 +161,7 @@ The dedicated identity microservice was removed in the Entra migration. Microsof
 - **Tests:** 28 passing — order saga, order event bus, payment event bus, payment happy-path, payment sad-path (notification consumer tests were removed with the old microservice — notifications are serverless)
 - **Design doc:** [AK.IntegrationTests/INTEGRATION_TESTS.md](AK.IntegrationTests/INTEGRATION_TESTS.md)
 
-### ✅ AK.NotificationFunctions  (Azure Functions — .NET 9 isolated)
+### ✅ AK.Notification.Functions  (Azure Functions — .NET 9 isolated)
 - **Runtime:** Azure Functions v4, **.NET 9 isolated worker** (`OutputType=Exe`, `HostBuilder().ConfigureFunctionsWorkerDefaults()`)
 - **Triggers:** one `[EventGridTrigger]` Function per customer notification event in `NotificationFunctions` — `OnOrderCreated`, `OnOrderConfirmed`, `OnOrderCancelled`, `OnPaymentSucceeded`, `OnPaymentFailed` (Event Grid topic `evgt-antkart-dev`); deployed to the provisioned Function App `func-antkart-notifications-dev`
 - **Role in the platform:** the push-based, scale-to-zero half of the **two-mechanism eventing model** — discrete fire-and-forget notifications, deliberately separate from the durable Service Bus saga
@@ -167,7 +169,8 @@ The dedicated identity microservice was removed in the Entra migration. Microsof
 - **Behaviour (thin):** each Function only (1) deserializes the shared event contract (`AK.BuildingBlocks.Messaging.Notifications`) and (2) builds a `NotificationRequest` and calls `INotificationDispatcher.DispatchAsync`. ALL logic (templates, ACS email channel, history persistence, failure handling) lives in **`AK.Notification.Core`** behind the dispatcher (which never throws on a delivery failure — it records it). A malformed payload is logged and skipped, not crash-looped.
 - **Program.cs:** `ConfigureAppConfiguration` folds in Key Vault (secret-less, `DefaultAzureCredential`, no-op locally) + `AddNotificationCore(configuration)` (the single call that wires dispatcher + Email channel + templates + EF history store/DbContext)
 - **Packages:** `Microsoft.Azure.Functions.Worker` 2.0.0, `Microsoft.Azure.Functions.Worker.Sdk` 2.0.0, `Microsoft.Azure.Functions.Worker.Extensions.EventGrid` 3.4.3; references `AK.Notification.Core` + `AK.BuildingBlocks`
-- **Tests:** `AK.NotificationFunctions.Tests` (6) — each Function deserializes its event and dispatches the correct `NotificationRequest` (mock `INotificationDispatcher`); malformed payload → no dispatch. Design recorded in [ADR-019](docs/adr/ADR-019-serverless-notification-functions-eventgrid.md)
+- **Location:** lives in the `AK.Notification/` service folder (`AK.Notification.Functions` + `AK.Notification.Functions.Tests`, siblings of `AK.Notification.Core`); it remains its own separate deployable
+- **Tests:** `AK.Notification.Functions.Tests` (6) — each Function deserializes its event and dispatches the correct `NotificationRequest` (mock `INotificationDispatcher`); malformed payload → no dispatch. Design recorded in [ADR-019](docs/adr/ADR-019-serverless-notification-functions-eventgrid.md)
 
 ### ✅ AK.Payments  (REST Minimal API)
 - **Transport:** HTTP REST, port 5086 (dev) / 8085 (Docker)
@@ -189,7 +192,7 @@ The dedicated identity microservice was removed in the Entra migration. Microsof
 ### ✅ AK.Notification — serverless (Event Grid + Functions)
 Notifications are a **pure serverless** capability: there is no notification microservice host or Service Bus subscription. The old REST microservice (`AK.Notification.API`/`.Application`/`.Infrastructure`/`.Domain` + their tests) and the Service Bus `notification` subscription were **removed** once the serverless path fully replaced them. The capability is now:
 - **`AK.Notification.Core`** (reusable library) — the channel abstraction (`NotificationChannelType` Email/WhatsApp/Sms, `INotificationChannel` → `NotificationSendResult`, `EmailNotificationChannel` wrapping the shared ACS `IEmailSender`), message/request models, one template per `NotificationType` (OrderCreated/OrderConfirmed/OrderCancelled/PaymentSucceeded/PaymentFailed) resolved by type, `INotificationDispatcher` (resolve template → compose → send per channel → write one `NotificationHistory` audit row per attempt; never throws on a delivery failure — records it), an EF Core `NotificationHistoryDbContext` + `InitialCreate` migration (secret-less Npgsql; design-time factory), and `AddNotificationCore(configuration)`. Adding a channel = implement `INotificationChannel` + register it (Open/Closed). **17 tests** (templates, email channel, dispatcher send/persist/failure, EF history persist — EF InMemory + mocks).
-- **`AK.NotificationFunctions`** (Azure Functions, see its own section) — Event Grid-triggered, dispatch through the Core.
+- **`AK.Notification.Functions`** (Azure Functions, see its own section) — Event Grid-triggered, dispatch through the Core.
 - **Publishers** — AK.Order and AK.Payments emit the five `AK.BuildingBlocks.Messaging.Notifications` events to Event Grid as fire-and-forget side-effects after each durable commit.
 
 ---
@@ -334,9 +337,9 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | Azure.Messaging.EventGrid | 4.30.0 | BuildingBlocks (fire-and-forget side-effect publisher) |
 | Azure.Communication.Email | 1.0.1 | BuildingBlocks (ACS email sender) |
 | CsvHelper | 33.0.1 | AK.Tools.ProductsSeedGenerator / ProductsSeedLoader (seed CSV) |
-| Microsoft.Azure.Functions.Worker | 2.0.0 | AK.NotificationFunctions |
-| Microsoft.Azure.Functions.Worker.Sdk | 2.0.0 | AK.NotificationFunctions |
-| Microsoft.Azure.Functions.Worker.Extensions.EventGrid | 3.4.3 | AK.NotificationFunctions |
+| Microsoft.Azure.Functions.Worker | 2.0.0 | AK.Notification.Functions |
+| Microsoft.Azure.Functions.Worker.Sdk | 2.0.0 | AK.Notification.Functions |
+| Microsoft.Azure.Functions.Worker.Extensions.EventGrid | 3.4.3 | AK.Notification.Functions |
 | Microsoft.Extensions.Http.Resilience | 9.0.0 | BuildingBlocks, Products Infrastructure |
 | Microsoft.Extensions.Resilience | 9.0.0 | BuildingBlocks, Order/ShoppingCart/Products Infrastructure |
 | Ocelot | 23.4.2 | Gateway API |

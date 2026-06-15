@@ -27,7 +27,7 @@ The cloud telemetry path is provided by **Application Insights** (wired via its 
 | AK.Order | AK.Order.API | PostgreSQL + SAGA |
 | AK.Payments | AK.Payments.API | PostgreSQL + Razorpay |
 | AK.Discount | AK.Discount.Grpc | SQLite gRPC |
-| AK.NotificationFunctions | AK.NotificationFunctions | Serverless notifications (Event Grid-triggered) |
+| AK.Notification.Functions | AK.Notification.Functions | Serverless notifications (Event Grid-triggered) |
 
 ---
 
@@ -89,7 +89,7 @@ Locally, the Console sink prints the same structured entries (and the rolling fi
 | AK.ShoppingCart | Cart read/write, cart cleared on order confirmed |
 | AK.Order | Order created, SAGA state transitions, status updates, notification side-effect published |
 | AK.Payments | Payment initiated, signature verified/failed, events published |
-| AK.NotificationFunctions | Event received, dispatch result, email send outcome |
+| AK.Notification.Functions | Event received, dispatch result, email send outcome |
 
 ---
 
