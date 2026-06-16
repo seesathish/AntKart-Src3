@@ -64,6 +64,6 @@ var loader = scope.ServiceProvider.GetRequiredService<DiscountSeedLoader>();
 Console.WriteLine("Seeding discount coupons correlated to Cosmos products ...");
 var summary = await loader.RunAsync();
 Console.WriteLine(
-    $"Done. {summary.TotalCoupons} coupons upserted into AKDiscountDb (idempotent by ProductId) " +
-    $"from {summary.ProductsRead} products.");
+    $"Done. Cleared {summary.CouponsCleared} existing coupons, then seeded {summary.TotalCoupons} " +
+    $"into AKDiscountDb from {summary.ProductsRead} products (re-running converges to the same set).");
 return 0;

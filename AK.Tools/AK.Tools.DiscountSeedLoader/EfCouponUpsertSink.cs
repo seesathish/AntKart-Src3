@@ -15,6 +15,12 @@ public sealed class EfCouponUpsertSink : ICouponUpsertSink
 
     public EfCouponUpsertSink(DiscountContext context) => _context = context;
 
+    // Bulk-deletes every coupon in a single server-side DELETE (no entities loaded into memory),
+    // returning the number of rows removed. Run before seeding so each run yields the same clean set
+    // and any legacy/orphaned rows are cleared.
+    public Task<int> ClearAsync(CancellationToken ct = default) =>
+        _context.Coupons.ExecuteDeleteAsync(ct);
+
     public async Task UpsertAsync(Coupon coupon, CancellationToken ct = default)
     {
         var existing = await _context.Coupons.FirstOrDefaultAsync(c => c.ProductId == coupon.ProductId, ct);

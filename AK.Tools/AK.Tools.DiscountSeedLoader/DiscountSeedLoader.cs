@@ -5,8 +5,9 @@ namespace AK.Tools.DiscountSeedLoader;
 // One concrete example surfaced in the summary so it can be used as a known E2E test case.
 public sealed record SeedExample(string Sku, string ProductId, string Discount, SelectionRule Rule);
 
-// The run summary: totals by rule plus a handful of concrete examples.
+// The run summary: how many existing rows were cleared, totals by rule, plus concrete examples.
 public sealed record SeedSummary(
+    int CouponsCleared,
     int ProductsRead,
     int KidsCoupons,
     int MenShirtsCoupons,
@@ -33,6 +34,11 @@ public sealed class DiscountSeedLoader
 
     public async Task<SeedSummary> RunAsync(CancellationToken ct = default)
     {
+        // RESET FIRST: wipe the table so each run yields the same clean, correct dataset and any
+        // legacy/orphaned coupons (e.g. from the old built-in seeder) are removed.
+        var cleared = await _sink.ClearAsync(ct);
+        _logger.LogInformation("Cleared {Count} existing coupons.", cleared);
+
         var products = await _products.GetProductsAsync(ct);
         _logger.LogInformation("Read {Count} products from Cosmos.", products.Count);
 
@@ -47,14 +53,14 @@ public sealed class DiscountSeedLoader
                 _logger.LogInformation("Upserted {Count} coupons...", written);
         }
 
-        var summary = BuildSummary(products.Count, selected);
+        var summary = BuildSummary(cleared, products.Count, selected);
         LogSummary(summary);
         return summary;
     }
 
     // Picks a deterministic, representative set of examples (across both rules) — ordered by SKU so
     // the same products surface on every run.
-    private static SeedSummary BuildSummary(int productsRead, IReadOnlyList<SelectedCoupon> selected)
+    private static SeedSummary BuildSummary(int couponsCleared, int productsRead, IReadOnlyList<SelectedCoupon> selected)
     {
         var ordered = selected.OrderBy(x => x.Product.Sku, StringComparer.Ordinal).ToList();
 
@@ -64,6 +70,7 @@ public sealed class DiscountSeedLoader
         examples.AddRange(Pick(ordered, SelectionRule.DeterministicSpread, 2));
 
         return new SeedSummary(
+            couponsCleared,
             productsRead,
             KidsCoupons: selected.Count(x => x.Rule == SelectionRule.KidsCategory),
             MenShirtsCoupons: selected.Count(x => x.Rule == SelectionRule.MenShirts),
@@ -81,8 +88,8 @@ public sealed class DiscountSeedLoader
     private void LogSummary(SeedSummary s)
     {
         _logger.LogInformation(
-            "Seed summary: {Products} products read, {Total} coupons upserted (Kids={Kids}, Men/Shirts={MenShirts}, deterministic spread={Spread}).",
-            s.ProductsRead, s.TotalCoupons, s.KidsCoupons, s.MenShirtsCoupons, s.SpreadCoupons);
+            "Seed summary: {Cleared} existing coupons cleared; {Products} products read, {Total} coupons seeded (Kids={Kids}, Men/Shirts={MenShirts}, deterministic spread={Spread}).",
+            s.CouponsCleared, s.ProductsRead, s.TotalCoupons, s.KidsCoupons, s.MenShirtsCoupons, s.SpreadCoupons);
 
         _logger.LogInformation("Example coupons (SKU -> ProductId -> discount) — usable as E2E test cases:");
         foreach (var e in s.Examples)
