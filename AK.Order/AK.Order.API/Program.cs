@@ -1,4 +1,5 @@
 using AK.BuildingBlocks.Authentication;
+using AK.BuildingBlocks.Configuration;
 using AK.BuildingBlocks.HealthChecks;
 using AK.BuildingBlocks.Logging;
 using AK.BuildingBlocks.Swagger;
@@ -12,6 +13,13 @@ using AK.Order.Infrastructure.Extensions;
 // The order of registration and middleware matters — comments explain why each step is here.
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Load configuration/secrets from Azure Key Vault (when KeyVault:Uri is set), using this service's
+// own Entra identity, before anything reads configuration. This is how the vaulted
+// ConnectionStrings--Postgres secret flows into IConfiguration as ConnectionStrings:Postgres and
+// overrides the appsettings localhost default — no secret is committed to the repo.
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
+
 builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 
 // Replaces the default Microsoft.Extensions.Logging with Serilog.
