@@ -89,7 +89,7 @@ AK.<Service>/
 - **Patterns:** CQRS (MediatR 12.4.1), FluentValidation pipeline, Repository
 - **Proto:** `AK.Discount/AK.Discount.Grpc/Protos/discount.proto`
 - **RPCs:** GetDiscount, CreateDiscount, UpdateDiscount, DeleteDiscount, GetAllDiscounts
-- **Seed data:** the in-process `DiscountSeeder` writes 300 SKU-keyed sample coupons on startup. For real, queryable discounts, `AK.Tools.DiscountSeedLoader` seeds coupons whose `ProductId` is a **real Cosmos product `_id`** (so `GetDiscount(product_id)` resolves and `discountPrice` is computed) — category rules (Kids 15%, Men/Shirts 10%) plus a deterministic ~20% spread, idempotent by `ProductId`
+- **Seed data:** seeding is out-of-band via `AK.Tools.DiscountSeedLoader` (no boot-time seeding — startup only applies migrations). It seeds coupons whose `ProductId` is a **real Cosmos product `_id`** (so `GetDiscount(product_id)` resolves and `discountPrice` is computed) — category rules (Kids 15%, Men/Shirts 10%) plus a deterministic ~20% spread, idempotent by `ProductId`. (The old in-process `DiscountSeeder`, which wrote SKU-keyed sample rows that never matched a Cosmos id, was removed.)
 - **Tests:** 53 passing (domain, commands, queries, validators, DTO mapping)
 - **Design doc:** [AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md](AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md)
 

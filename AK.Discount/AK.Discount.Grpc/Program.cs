@@ -35,6 +35,6 @@ if (app.Environment.IsDevelopment())
     app.MapGrpcReflectionService();
 app.MapDefaultHealthChecks();
 app.MapGet("/", () => "AK.Discount gRPC service. Use a gRPC client.");
-await app.MigrateAndSeedAsync();
+await app.MigrateAsync();
 app.Run();
 public partial class Program { }

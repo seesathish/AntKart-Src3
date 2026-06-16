@@ -1,7 +1,6 @@
 using AK.Discount.Application.Interfaces;
 using AK.Discount.Infrastructure.Persistence;
 using AK.Discount.Infrastructure.Persistence.Repositories;
-using AK.Discount.Infrastructure.Seeders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,7 +15,6 @@ public static class ServiceCollectionExtensions
         var connectionString = configuration.GetConnectionString("DiscountDb");
         services.AddDbContext<DiscountContext>(opts => opts.UseNpgsql(connectionString));
         services.AddScoped<ICouponRepository, CouponRepository>();
-        services.AddScoped<DiscountSeeder>();
         return services;
     }
 }
