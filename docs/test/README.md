@@ -40,6 +40,8 @@ Detail: [AK.IntegrationTests/INTEGRATION_TESTS.md](../../AK.IntegrationTests/INT
 
 The [Developer Testing Guide](DevTestGuide.md) walks every service end-to-end through its public surface — positive flows, negative flows, SAGA compensation scenarios, event-flow monitoring, log/correlation tracing, and notification delivery.
 
+To call the APIs you need a token. For the interactive sign-in that obtains a delegated user token from Entra ID via Postman (OAuth2 Authorization Code + PKCE), and the most common pitfalls (the audience claim and 401s), see [OAuth2 Authorization Code + PKCE Concepts](../guides/oauth2-pkce-concepts.md).
+
 - **Local-to-code verification (available now).** The guide validates the codebase end-to-end against its backing services.
 - **Full-cloud verification via ingress / API Management (to be added).** End-to-end validation through the cloud ingress and Azure API Management endpoints will be added after the Kubernetes phase, once the deployment topology is finalized.
 
