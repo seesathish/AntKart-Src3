@@ -111,12 +111,13 @@ resource "azuread_application" "test_client" {
   # accepts the Authorization Code + PKCE token exchange without a client credential.
   fallback_public_client_enabled = true
 
-  # PLATFORM CHOICE — the https reply URL is registered under the WEB platform, NOT
-  # single_page_application. Postman redeems the auth code from its app / cloud agent, which does
-  # NOT send an Origin header; the SPA platform requires one and would reject the exchange with
-  # AADSTS9002327. The web platform combined with fallback_public_client_enabled + PKCE works for
-  # a public client with no secret — the standard Postman + Entra recipe.
-  web {
+  # PLATFORM CHOICE — the reply URL is registered under the PUBLIC CLIENT (mobile & desktop /
+  # native) platform. This is a TRUE public client: Entra accepts the Authorization Code + PKCE
+  # token exchange with NO secret (the web platform instead treats the app as CONFIDENTIAL and
+  # demands a client_secret/client_assertion → AADSTS7000218). It also needs NO Origin header,
+  # unlike single_page_application, which requires one that Postman's server-side callback does not
+  # send → AADSTS9002327. Native + PKCE is the combination that works for Postman.
+  public_client {
     redirect_uris = [var.test_client_redirect_uri]
   }
 
