@@ -26,5 +26,11 @@ terraform {
 inputs = {
   display_name = "antkart-api-dev"
 
+  # Also provision the public client for interactive (Postman) testing: a no-secret
+  # PKCE app pre-authorized on the API's access_as_user scope, plus its service principal.
+  create_test_client       = true
+  test_client_display_name = "ak-postman-test"
+  test_client_redirect_uri = "https://oauth.pstmn.io/v1/callback"
+
   tags = ["antkart", "dev"]
 }

@@ -50,3 +50,22 @@ variable "tags" {
   type        = list(string)
   default     = []
 }
+
+# --- Optional public client (interactive testing, e.g. Postman) --------------
+variable "create_test_client" {
+  description = "Whether to also create a public-client application (no secret, PKCE) for interactive testing, plus its service principal and pre-authorization on the API's access_as_user scope."
+  type        = bool
+  default     = false
+}
+
+variable "test_client_display_name" {
+  description = "Display name of the public test client application (used only when create_test_client = true)."
+  type        = string
+  default     = "ak-postman-test"
+}
+
+variable "test_client_redirect_uri" {
+  description = "Redirect (reply) URI for the public test client. Registered under the web platform; default is Postman's hosted OAuth2 callback."
+  type        = string
+  default     = "https://oauth.pstmn.io/v1/callback"
+}
