@@ -4,6 +4,7 @@ using AK.BuildingBlocks.Resilience;
 using AK.Order.Application.Consumers;
 using AK.Order.Application.Common.Interfaces;
 using AK.Order.Application.Sagas;
+using AK.Order.Infrastructure.Catalog;
 using AK.Order.Infrastructure.Persistence;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,22 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddNpgsqlResilience();
+
+        // Typed HttpClient to AK.Products for authoritative price verification at order creation.
+        // The Products read endpoint is AllowAnonymous, so no token handler is needed. Pricing is a
+        // CRITICAL dependency here (we fail closed if it's down), so it uses the patient
+        // retry → circuit-breaker → timeout pipeline. HttpClient.Timeout is set to InfiniteTimeSpan
+        // so the message-handler timeout does not fight the resilience pipeline's own total-timeout
+        // (the resilience handler governs per-attempt and overall timing).
+        var productsBaseUrl = configuration["ProductsApi:BaseUrl"]
+            ?? throw new InvalidOperationException("Configuration 'ProductsApi:BaseUrl' is missing.");
+
+        services.AddHttpClient<ICatalogPriceProvider, HttpCatalogPriceProvider>(client =>
+        {
+            client.BaseAddress = new Uri(productsBaseUrl);
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        })
+        .AddHttpResilienceWithCircuitBreaker();
 
         // Fire-and-forget Event Grid side-effect publisher (notifications), decoupled from the
         // durable Service Bus saga. Authenticates via DefaultAzureCredential (no key); reads the

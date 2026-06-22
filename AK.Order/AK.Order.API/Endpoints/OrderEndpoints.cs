@@ -71,8 +71,24 @@ public static class OrderEndpoints
             var userId = http.GetUserId();
             var customerEmail = http.GetUserEmail();
             var customerName = http.GetUserDisplayName();
-            var order = await mediator.Send(new CreateOrderCommand(userId, customerEmail, customerName, orderDto));
-            return Results.Created($"/api/orders/{order.Id}", order);
+            var result = await mediator.Send(new CreateOrderCommand(userId, customerEmail, customerName, orderDto));
+
+            // The order is priced server-authoritatively from the catalogue. Map the outcome:
+            //   Success            → 201 Created (happy path; charged at the catalogue effective price)
+            //   ProductUnavailable → 422 (a product is not found / not active)
+            //   PriceChanged       → 409 (price INCREASED — ask the customer to review and confirm)
+            //   PricingUnavailable → 503 (catalogue unreachable — failed closed, nothing persisted)
+            return result.Status switch
+            {
+                CreateOrderStatus.Success =>
+                    Results.Created($"/api/orders/{result.Order!.Id}", result.Order),
+                CreateOrderStatus.ProductUnavailable =>
+                    Results.UnprocessableEntity(new { error = "One or more products are unavailable.", lines = result.Problems }),
+                CreateOrderStatus.PriceChanged =>
+                    Results.Conflict(new { error = "Price has increased since you added these items. Please review and confirm.", lines = result.Problems }),
+                _ =>
+                    Results.Json(new { error = "Pricing could not be verified, please retry." }, statusCode: 503)
+            };
         })
         .WithName("CreateOrder");
 
