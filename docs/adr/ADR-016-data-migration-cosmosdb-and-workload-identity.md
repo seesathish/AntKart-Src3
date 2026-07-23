@@ -149,6 +149,8 @@ The shard key would be set in the Cosmos collection creation step (Terraform) an
 
 ## Decision 5 — Workload Identity foundation: create the User-Assigned Managed Identity now, federate when AKS exists
 
+> **Amendment note (2026-07-23).** The workload-identity foundation described in this decision was **superseded in implementation** by [ADR-018](ADR-018-aks-workload-identity-base-image.md), now the authoritative record. In the delivered platform: the module is **`infrastructure/modules/workload-identity/`** (not `modules/identity/`); there is **one identity per service, `id-ak-<service>-dev`, for all six services** (not a single Products-only `mi-ak-products-dev`); and Service Bus access is granted as **`Azure Service Bus Data Sender` + `Azure Service Bus Data Receiver`** (`Azure Service Bus Data Owner` was never implemented). The federated-credential subject is `system:serviceaccount:antkart:ak-<service>`. The original decision narrative below is preserved as the point-in-time record.
+
 ### Decision
 
 A Terraform identity module (`infrastructure/modules/identity/`) is created now. It provisions:
@@ -230,5 +232,7 @@ After these two steps, a pod in the `ak-products` namespace running as `ak-produ
 | `infrastructure/modules/identity/outputs.tf` | **New** — `products_client_id`, `products_principal_id`, `products_identity_id` |
 | `infrastructure/modules/identity/README.md` | **New** |
 | `infrastructure/environments/dev/identity/terragrunt.hcl` | **New** — wires identity module to dev, depends on resource-group, key-vault, servicebus |
+
+> **Amendment note (2026-07-23):** these `infrastructure/modules/identity/` and `infrastructure/environments/dev/identity/` paths reflect the original plan. The delivered module is **`infrastructure/modules/workload-identity/`** with a per-service identity for all six services — see the amendment note under Decision 5 and [ADR-018](ADR-018-aks-workload-identity-base-image.md).
 
 **Zero changes to:** ProductRepository, ProductClassMap, ProductSeeder, UnitOfWork, all domain entities, all other services, all integration events, consumers, SAGA, outbox. Test count: 618 → 620 (2 net added).
