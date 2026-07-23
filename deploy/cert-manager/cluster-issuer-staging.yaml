@@ -14,7 +14,7 @@ spec:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
     # REQUIRED: replace with a monitored email — Let's Encrypt sends expiry/abuse
     # notices here. Do not commit a personal address to a public repo.
-    email: admin@example.com
+    email: antkartadmin@gmail.com
     # Where the ACME account private key is stored (created on first use).
     privateKeySecretRef:
       name: letsencrypt-staging-account-key
