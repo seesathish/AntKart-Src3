@@ -28,19 +28,20 @@ All cloud resources are provisioned as code with Terraform and Terragrunt — ne
 - **Concepts to read first:** [IaC fundamentals](docs/guides/iac-concepts.md) → [Networking & Kubernetes](docs/guides/networking-concepts.md) → [Identity](docs/guides/identity-concepts.md) (plus [Cosmos DB](docs/guides/cosmosdb-concepts.md), [Messaging](docs/guides/messaging-concepts.md), [Serverless & Eventing](docs/guides/serverless-eventing-concepts.md) for the resources it provisions)
 - **Decisions:** [ADR-012](docs/adr/ADR-012-iac-with-terraform-terragrunt.md) (IaC with Terraform/Terragrunt) · [ADR-013](docs/adr/ADR-013-key-vault-rbac-and-observability-foundation.md) (Key Vault RBAC + observability) · [ADR-014](docs/adr/ADR-014-cosmosdb-and-servicebus.md) (Cosmos DB + Service Bus)
 
-### 3. Cloud-Native Code · _Status: in progress_
+### 3. Cloud-Native Code · _Status: complete (dev environment)_
 
-The application is migrated from local infrastructure to managed cloud services — managed databases, messaging, identity, and secret storage — adopting token-based authentication and the patterns that make the services genuinely cloud-native.
+The application is migrated from local infrastructure to managed cloud services — managed databases, messaging, identity, and secret storage — adopting token-based authentication and the patterns that make the services genuinely cloud-native. In the dev environment this is complete: secret-less configuration from Key Vault, messaging on Service Bus, the product catalogue on Cosmos DB, resilience and health hardening, Entra ID authentication (including OAuth2 Authorization Code + PKCE for interactive clients, delegated user tokens, and app roles), and the serverless Event Grid → Functions → Azure Communication Services notification path proven end to end.
 
-- **Build guide:** [Cloud Migration Guide](docs/guides/cloud-migration-guide.md) _(in progress)_
-- **Concepts to read first:** [Cosmos DB](docs/guides/cosmosdb-concepts.md) · [Messaging](docs/guides/messaging-concepts.md) · [Serverless & Eventing](docs/guides/serverless-eventing-concepts.md) · [Identity](docs/guides/identity-concepts.md)
-- **Decisions:** [ADR-015](docs/adr/ADR-015-messaging-migration-to-service-bus.md) (messaging → Service Bus) · [ADR-016](docs/adr/ADR-016-data-migration-cosmosdb-and-workload-identity.md) (Cosmos data migration + workload identity) · [ADR-017](docs/adr/ADR-017-entra-id-functions-eventgrid.md) (Entra ID + Functions + Event Grid) · [ADR-019](docs/adr/ADR-019-serverless-notification-functions-eventgrid.md) (serverless notification) · [ADR-020](docs/adr/ADR-020-api-management-managed-edge-gateway.md) (API Management edge)
+- **Build guide:** [Cloud Migration Guide](docs/guides/cloud-migration-guide.md)
+- **Concepts to read first:** [Cosmos DB](docs/guides/cosmosdb-concepts.md) · [Messaging](docs/guides/messaging-concepts.md) · [Serverless & Eventing](docs/guides/serverless-eventing-concepts.md) · [Identity](docs/guides/identity-concepts.md) · [OAuth2 Authorization Code + PKCE](docs/guides/oauth2-pkce-concepts.md)
+- **Decisions:** [ADR-015](docs/adr/ADR-015-messaging-migration-to-service-bus.md) (messaging → Service Bus) · [ADR-016](docs/adr/ADR-016-data-migration-cosmosdb-and-workload-identity.md) (Cosmos data migration + workload identity) · [ADR-017](docs/adr/ADR-017-entra-id-functions-eventgrid.md) (Entra ID + Functions + Event Grid) · [ADR-019](docs/adr/ADR-019-serverless-notification-functions-eventgrid.md) (serverless notification) · [ADR-020](docs/adr/ADR-020-api-management-managed-edge-gateway.md) (API Management edge) · [ADR-021](docs/adr/ADR-021-retire-identity-service-for-entra.md) (retire the identity service for Entra)
 
-### 4. Kubernetes Platform · _Status: in progress_
+### 4. Kubernetes Platform · _Status: in progress (containerization complete; cluster pending)_
 
-The services are containerized and run on a managed Kubernetes (AKS) cluster, with ingress, autoscaling, health management, and workload identity.
+The services are containerized and run on a managed Kubernetes (AKS) cluster, with ingress, autoscaling, health management, and workload identity. **Containerization is complete:** all six deployable services have multi-stage, non-root Dockerfiles serving on port 8080, a repository-root `.dockerignore`, and images built and published to the Azure Container Registry; the runtime configuration each service expects is catalogued for the cluster rollout. The AKS cluster, Helm packaging, ingress/TLS, in-cluster workload identity, and GitOps delivery are **still to come**.
 
-- **Build guide:** [AKS Guide](docs/guides/aks-guide.md) _(in progress)_
+- **Build guide:** [AKS Guide](docs/guides/aks-guide.md) — container strategy, build-and-push workflow, and the naming conventions (cluster/Helm/GitOps sections are placeholders until delivered)
+- **Reference:** [Container Configuration](docs/guides/container-configuration.md) — the runtime configuration keys each service requires (the source for the later Helm values)
 - **Concepts to read first:** [Networking & Kubernetes](docs/guides/networking-concepts.md) · [Identity](docs/guides/identity-concepts.md) (workload identity)
 - **Decisions:** [ADR-018](docs/adr/ADR-018-aks-workload-identity-base-image.md) (AKS cluster, workload identity, hardened base image)
 
@@ -50,7 +51,7 @@ Continuous integration and delivery, security and compliance gates, and end-to-e
 
 - **Build guide:** [DevOps Guide](docs/guides/devops-guide.md) _(in progress)_
 - **Concepts to read first:** [Observability design](docs/design/OBSERVABILITY.md)
-- **Decisions:** recorded as the phase is built
+- **Decisions:** [ADR-022](docs/adr/ADR-022-cicd-github-actions-oidc.md) (CI/CD on GitHub Actions with OIDC federated credentials to Azure)
 
 ---
 

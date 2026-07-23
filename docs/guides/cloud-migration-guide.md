@@ -216,6 +216,38 @@ The notification "welcome" consumer is **retained** as a forward-compatible seam
 
 ---
 
+## Step 2c — Interactive Sign-in with OAuth2 Authorization Code + PKCE
+
+Step 2a made every service a token **validator**. This step covers the other side: how an **interactive client** obtains the token in the first place, and the two pieces of Entra app-registration configuration the platform depends on — **app roles** (for authorization) and the **`email` optional claim** (for user-derived notification recipients). The first-principles walkthrough of the flow is in the [OAuth2 Authorization Code + PKCE concepts guide](oauth2-pkce-concepts.md).
+
+### Understand
+
+**Delegated user tokens.** A client acquires a **delegated** access token — one that represents a **signed-in user**, not the application acting alone. The token carries the user's identity (`sub`, `name`, and — once configured — `email`) and the **app roles** assigned to that user. Every user-scoped operation derives the caller from this token, never from a request path or body (the platform's "never trust the client" rule).
+
+**Authorization Code + PKCE, no stored secret.** Interactive clients here are **public clients** (Postman, a single-page or desktop app) that cannot hold a secret. They use the **Authorization Code flow with PKCE** (Proof Key for Code Exchange): the client invents a one-time secret per sign-in and proves possession of it at the token exchange, so a stolen authorization code is useless on its own. No client secret is stored anywhere. See the [concepts guide](oauth2-pkce-concepts.md) for the mechanics.
+
+**App roles drive authorization.** App roles are declared on the API's Entra app registration and assigned to users or groups. Entra emits them in the **flat `roles` claim** that Step 2a authorizes on, so the same `RequireRole("admin")` works across every service. A token for a caller with no role assignment authenticates but carries no `roles` claim.
+
+**The `email` optional claim.** Entra does **not** include the user's email in an access token by default. The platform configures the **`email` optional claim** on the app registration so delegated tokens carry it. This is what lets the notification path address a message to the signed-in user: the recipient is **derived from the token's `email` claim**, not supplied by the client. Without this claim, user-derived notification recipients would be unavailable.
+
+### Build
+
+- **API app registration** exposes the API (application ID URI `api://antkart-api-dev`), declares the **app roles**, and adds **`email`** to the access-token **optional claims**.
+- **Public client registration** for the interactive client, with its redirect URI registered as a **public/native** client and the Authorization Code + PKCE grant — **no client secret**.
+- **Reading the identity in code** uses the existing building-blocks helpers (`HttpContextExtensions`): `GetUserId()` (the `sub` claim), `GetUserEmail()` (the `email` claim), and `GetUserDisplayName()` — so every service reads the caller's identity the same way.
+
+### Execute
+
+Acquire a delegated token for the API through the interactive client using Authorization Code + PKCE (the concepts guide lists the exact authorize/token fields). Ensure the signed-in user holds the relevant **app-role assignment** on the API app registration for any role-gated operation.
+
+### Verify
+
+- The delegated token's `aud` is `api://antkart-api-dev`, its `iss` ends in `/v2.0`, and it carries `sub`, the assigned `roles`, and — with the optional claim configured — `email`.
+- A protected endpoint accepts the token; a **user-scoped** operation resolves the caller from the token (`sub` / `email`), never from the request body.
+- An admin-only operation succeeds only when `roles` contains the required role.
+
+---
+
 ## Step 3 — Messaging on Azure Service Bus
 
 This step moves the messaging transport from the self-hosted broker to **Azure Service Bus**, authenticated with **Microsoft Entra** (no SAS key or connection string) and using the topology **provisioned by infrastructure-as-code**. The decision is recorded in [ADR-015](../adr/ADR-015-messaging-migration-to-service-bus.md).
@@ -474,7 +506,7 @@ A correct result: `terragrunt apply` ends with `4 added, 0 changed, 0 destroyed`
 
 **Entra-first authentication (secret-less), with a Key-Vault fallback.** The `EmailClient` is constructed once and selected as follows:
 
-- **Default path — managed identity:** `new EmailClient(new Uri(Acs:Endpoint), new DefaultAzureCredential())`. This is the SDK's Entra constructor (verified against the current `Azure.Communication.Email` docs). It authenticates with the app's **managed identity** in the cloud (and the developer's `az login` locally) — no secret. For this to work, the identity must hold an Azure RBAC role on the Communication Services resource: ACS does not yet expose a granular "email sender" data role, so the documented grant is the **Contributor** role **scoped to that single ACS resource** (assigned in the role-assignment step) — tighten it if a narrower built-in role becomes available.
+- **Default path — managed identity:** `new EmailClient(new Uri(Acs:Endpoint), new DefaultAzureCredential())`. This is the SDK's Entra constructor. It authenticates with the app's **managed identity** in the cloud (and the developer's `az login` locally) — no secret. For this to work, the identity must hold the **Communication and Email Service Owner** role **scoped to that single ACS resource** (assigned in the role-assignment step) — the data-plane role that authorizes sending email, granted at the narrowest scope.
 - **Fallback — connection string:** if `Acs:ConnectionString` is present, `new EmailClient(connectionString)` is used instead. The connection string is a **secret**; it is **never committed** and, if ever needed (an environment where Entra-based send is unavailable), is supplied from **Key Vault**. Only `Acs:Endpoint` and `Acs:SenderAddress` live in committed config.
 - If neither is configured (e.g. local dev), the sender is a **safe no-op** (logs and returns) — it never faults the caller.
 
@@ -533,6 +565,63 @@ Notifications run on a pure serverless model (Event Grid + Azure Functions; see 
 - **Functions (`AK.Notification.Functions`):** one thin `[EventGridTrigger]` per event (`OnOrderCreated` … `OnPaymentFailed`). Each only deserializes the contract → builds a `NotificationRequest` → calls the dispatcher; all logic stays in the core. `Program.cs` folds in Key Vault (secret-less) and calls `AddNotificationCore`. A malformed payload is logged and skipped.
 
 Everything is unit-tested with EF InMemory + mocks (templates, email channel, dispatcher send/persist/failure, EF history persist, and each Function's deserialize→dispatch) — **no live Azure or database required**.
+
+---
+
+## Step 8 — Serverless Notification Proven End to End
+
+The pieces built in Steps 5 and 7 — the Event Grid publisher, the Functions, the ACS email sender — are now proven **working together against live Azure**: an order raises a domain event that travels through Event Grid to a Function and out as a real email via Azure Communication Services. This step records the exact runtime configuration and the two managed-identity role assignments that path depends on, so it can be reproduced.
+
+### Understand
+
+**The path.** `Order → Event Grid custom topic → Azure Functions (Event Grid trigger) → Azure Communication Services email`. The Order service publishes a notification event as a fire-and-forget side-effect **after** its durable commit; Event Grid **pushes** the event to the subscribed Function; the Function dispatches through `AK.Notification.Core`, which sends the email via ACS. Each hop authenticates with a **managed identity** — there is no key or connection string anywhere on the path.
+
+**Two identities, two grants.** The path crosses two resource boundaries, so exactly two data-plane role assignments are required:
+
+- The **publisher** (the Order/Payments service identity) needs **EventGrid Data Sender** on the custom topic — permission to publish events.
+- The **sender** (the Function App's identity) needs **Communication and Email Service Owner** on the ACS resource — permission to send email.
+
+### Build / Configure
+
+The Function reads two non-secret ACS settings (the same `Acs` section the reusable sender binds, from Step 7):
+
+- **`Acs:Endpoint`** — the Communication Service endpoint (`https://<hostname>`), the resource the Function authenticates to with its managed identity.
+- **`Acs:SenderAddress`** — the MailFrom address the email is sent from. This value **must exactly match a provisioned MailFrom address on the linked Azure Managed Domain** (the `DoNotReply@<managed-subdomain>.azurecomm.net` sender created in Step 7). A mismatch is rejected by ACS at send time — the address must be one the domain is authorised to send from.
+
+The recipient is **derived from the signed-in user's `email` claim** (configured in Step 2c), not supplied by the client.
+
+### Execute
+
+Grant the two roles (replace the resource group with the dev value), then exercise the flow by placing an order whose signed-in user has a deliverable email:
+
+```bash
+RG=rg-antkart-dev-eastus
+
+# 1. Publisher identity → EventGrid Data Sender on the topic
+TOPIC_ID=$(az eventgrid topic show --name evgt-antkart-dev --resource-group $RG --query id -o tsv)
+az role assignment create --assignee-object-id "<publisher-identity-object-id>" --assignee-principal-type ServicePrincipal \
+  --role "EventGrid Data Sender" --scope "$TOPIC_ID"
+
+# 2. Function App identity → Communication and Email Service Owner on the ACS resource
+ACS_ID=$(az communication show --name acs-antkart-dev --resource-group $RG --query id -o tsv)
+az role assignment create --assignee-object-id "<function-app-identity-object-id>" --assignee-principal-type ServicePrincipal \
+  --role "Communication and Email Service Owner" --scope "$ACS_ID"
+```
+
+The Function's ACS settings are non-secret and set in its application configuration:
+
+```json
+"Acs": {
+  "Endpoint": "https://acs-antkart-dev.<region>.communication.azure.com",
+  "SenderAddress": "DoNotReply@<managed-subdomain>.azurecomm.net"
+}
+```
+
+### Verify
+
+- Placing an order results in a **received email** at the user's address — the event was published to Event Grid, pushed to the Function, and delivered through ACS.
+- A `NotificationHistory` audit row records the attempt (Sent / Failed).
+- **Decoupling holds:** if the email cannot be sent, the Function records a failed send rather than throwing, and the order remains committed — a notification failure never affects the order.
 
 ---
 
