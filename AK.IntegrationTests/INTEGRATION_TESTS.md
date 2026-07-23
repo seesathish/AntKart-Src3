@@ -2,7 +2,7 @@
 
 ## Overview
 
-`AK.IntegrationTests` exercises the SAGA choreography, event bus flows, and payment event routing using **MassTransit's in-memory test harness** — no broker, no database, no running host. All 28 tests run in ~12 seconds.
+`AK.IntegrationTests` exercises the orchestrated SAGA, event bus flows, and payment event routing using **MassTransit's in-memory test harness** — no broker, no database, no running host. All 28 tests run in ~12 seconds.
 
 > Notifications are no longer covered here. The notification capability is serverless (Event Grid-triggered Azure Functions dispatching through `AK.Notification.Core`); its tests live in the `AK.Notification.Tests` project (Core/ + Functions/ subfolders), so the old in-harness notification-consumer tests were removed with the retired notification microservice.
 
@@ -159,6 +159,8 @@ dotnet test
 ---
 
 ## Manual E2E Testing (Docker Compose)
+
+> **Note (2026-07-23): this section describes the Phase-1 local stack, not the current cloud-native platform.** The container names and services below (`antkart-rabbitmq`, `antkart-elasticsearch`, `antkart-keycloak`, MongoDB) belong to the docker-compose-based Phase-1 environment, preserved in the public AntKart reference repository. In the current platform, messaging is **Azure Service Bus**, identity is **Microsoft Entra ID**, the product store is **Azure Cosmos DB**, and observability is **Azure Monitor / Application Insights**. For end-to-end verification of the current platform, see the [Developer Test Guide](../docs/test/DevTestGuide.md).
 
 The automated tests above use an in-memory harness. The steps below walk the **full live async flow** — real RabbitMQ, real PostgreSQL, real MongoDB, real Razorpay sandbox.
 

@@ -2,6 +2,8 @@
 
 `AK.BuildingBlocks` is the single shared library consumed by every microservice in AntKart. It holds the cross-cutting contracts, base classes, and infrastructure helpers that would otherwise be copy-pasted across services. No business logic lives here — only mechanics.
 
+> **Note (2026-07-23): parts of this reference predate the cloud-native migration.** It documents the Phase-1 baseline helper names — `AddKeycloakAuthentication` / `UseKeycloakAuth` (identity) and `AddRabbitMqMassTransit` (messaging), with Keycloak and RabbitMQ configuration examples. In the current cloud-native platform the equivalents are **`AddEntraAuthentication` / `UseEntraAuth`** (Microsoft Entra ID) and **`AddAzureServiceBusMassTransit`** (Azure Service Bus, Entra token auth), and there is no Elasticsearch/Kibana sink (telemetry goes to Azure Monitor / Application Insights). For the authoritative current-state design, see the [Event Bus design](../docs/design/EVENTBUS.md), the [Cloud Migration Guide](../docs/guides/cloud-migration-guide.md), and the [ADRs](../docs/adr/README.md). This reference is scheduled for a cloud-native revision.
+
 ---
 
 ## Contents

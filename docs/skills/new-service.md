@@ -1,6 +1,6 @@
 # Skill: Add a New Microservice
 
-**Purpose:** Scaffold a complete new `AK.<Name>` microservice — folder structure, all four layers, `Program.cs`, Dockerfile, Docker Compose entry, design doc, and all registration steps. Follow every step in order; skipping any step causes build or runtime failures.
+**Purpose:** Scaffold a complete new `AK.<Name>` microservice — folder structure, all four layers, `Program.cs`, Dockerfile, cloud deployment entry, design doc, and all registration steps. Follow every step in order; skipping any step causes build or runtime failures.
 
 ---
 
@@ -9,7 +9,7 @@ When the team decides a new bounded context needs its own deployable service —
 
 ## Prerequisites
 - Solution builds clean: `dotnet build` → 0 errors
-- Docker stack is down or you are prepared to rebuild it
+- Signed in with `az login` if the service will read configuration from Key Vault or reach Azure services locally
 
 ---
 
@@ -118,7 +118,7 @@ public static IServiceCollection AddApplication(this IServiceCollection services
 }
 ```
 
-**Infrastructure third:** DbContext / repository implementations, EF Core fluent configuration in `OnModelCreating`, seed data, MassTransit consumers.
+**Infrastructure third:** DbContext / repository implementations, EF Core fluent configuration in `OnModelCreating`, seed data, and any MassTransit consumers — registered via `AddAzureServiceBusMassTransit(configuration, "<name>", cfg => { ... })` (Azure Service Bus transport, Entra token auth; the `"<name>"` prefix gives the service its own uniquely-named subscriptions).
 
 **API last:** `Program.cs`, endpoint classes, Dockerfile.
 
@@ -130,8 +130,12 @@ public static IServiceCollection AddApplication(this IServiceCollection services
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 
+// Load secrets from Azure Key Vault before anything reads configuration.
+// Secret-less (DefaultAzureCredential); a no-op locally when KeyVault:Uri is unset.
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
+
 builder.AddSerilogLogging();
-builder.Services.AddKeycloakAuthentication(builder.Configuration);
+builder.Services.AddEntraAuthentication(builder.Configuration);
 builder.Services.AddDefaultHealthChecks();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -142,7 +146,7 @@ var app = builder.Build();
 app.UseMiddleware<ExceptionHandlerMiddleware>();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSwaggerInDevelopment("<Name> API");
-app.UseKeycloakAuth();
+app.UseEntraAuth();
 app.MapDefaultHealthChecks();
 app.Map<Name>Endpoints();
 
@@ -193,7 +197,8 @@ This repository targets cloud deployment — there is no local docker-compose st
 
 - Image `antkart-<name>-api`, built from `AK.<Name>/AK.<Name>.API/Dockerfile` (build context = repo root)
 - `ASPNETCORE_ENVIRONMENT=Production`
-- `Keycloak__Authority`, `Keycloak__Audience=antkart-client`, `Keycloak__AdminUrl`
+- `Entra__Instance`, `Entra__TenantId`, `Entra__Audience`, `Entra__ClientId` (Microsoft Entra ID JWT validation, bound to `EntraSettings`)
+- `KeyVault__Uri` for secret-less configuration, and `ServiceBus__FullyQualifiedNamespace` if the service uses messaging
 - Backing services (PostgreSQL / Redis / etc.) as appropriate
 
 Add the corresponding route in `ocelot.json` — see [add-gateway-route.md](add-gateway-route.md).

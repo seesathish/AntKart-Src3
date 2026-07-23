@@ -33,7 +33,7 @@
 | Architecture     | Clean Architecture                                     |
 | Database         | SQLite (via EF Core 9, code-first with migrations)    |
 | Communication    | gRPC (Protocol Buffers v3)                             |
-| Pattern Stack    | CQRS, MediatR, FluentValidation, Repository — see [ADR-007](../docs/adr/ADR-007-CQRS-and-MediatR.md), [ADR-008](../docs/adr/ADR-008-Repository-Specification-and-Unit-of-Work.md) |
+| Pattern Stack    | CQRS, MediatR, FluentValidation, Repository — see [ADR-010](../docs/adr/ADR-010-CQRS-and-MediatR.md), [ADR-011](../docs/adr/ADR-011-Repository-Specification-and-Unit-of-Work.md) |
 | Cross-Cutting    | AK.BuildingBlocks (Serilog, health checks, middleware) |
 | Namespace Root   | `AK.Discount`                                          |
 | Default Port     | HTTP `5001` / HTTPS `7001` (dev); `8080` in container |

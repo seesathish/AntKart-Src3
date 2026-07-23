@@ -38,8 +38,8 @@
 
 | ADR | Decision |
 |-----|----------|
-| [ADR-007 — CQRS and MediatR](../docs/adr/ADR-007-CQRS-and-MediatR.md) | Why all commands and queries are dispatched via MediatR; pipeline behaviour for validation |
-| [ADR-008 — Repository, Specification, and Unit of Work](../docs/adr/ADR-008-Repository-Specification-and-Unit-of-Work.md) | `IProductRepository`, `IUnitOfWork`, and `ProductsByCategorySpec` / `ProductByIdSpec` |
+| [ADR-010 — CQRS and MediatR](../docs/adr/ADR-010-CQRS-and-MediatR.md) | Why all commands and queries are dispatched via MediatR; pipeline behaviour for validation |
+| [ADR-011 — Repository, Specification, and Unit of Work](../docs/adr/ADR-011-Repository-Specification-and-Unit-of-Work.md) | `IProductRepository`, `IUnitOfWork`, and `ProductsByCategorySpec` / `ProductByIdSpec` |
 
 ---
 
@@ -86,7 +86,7 @@
 - Discount price must be strictly less than the original price
 - Status is automatically set to `OutOfStock` when stock quantity = 0
 - Domain events are raised on create and update for downstream consumers
-- `ReserveStockConsumer` listens on RabbitMQ queue `products-reserve-stock` (registered via `AddRabbitMqMassTransit(configuration, "products", ...)`) and decrements stock when an order reserves it
+- `ReserveStockConsumer` listens on the Service Bus subscription `products-reserve-stock` (registered via `AddAzureServiceBusMassTransit(configuration, "products", ...)`) and decrements stock when an order reserves it
 - Seeder auto-populates 300 products driven by a `CategoryDefinition` record array — adding a new category is a data change, not a code change
 - Categories are data-driven: `GET /api/v1/products/categories` returns all distinct category names currently in the catalogue
 

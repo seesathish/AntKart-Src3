@@ -1,6 +1,8 @@
 # Skill: Run Security Checks
 
-**Purpose:** Execute the full 15-category ethical security test suite from `docs/test/SECURITY_TESTS.md` against the live Docker stack. Reports each test as PASS/FAIL/WARN and flags any regressions from the last known-good baseline.
+**Purpose:** Execute the full 15-category ethical security test suite from `docs/test/SECURITY_TESTS.md` against the running platform. Reports each test as PASS/FAIL/WARN and flags any regressions from the last known-good baseline.
+
+> **Identity is Microsoft Entra ID.** There is no application `/api/auth/register` or `/api/auth/login` endpoint — Entra issues tokens directly through standard OAuth flows. Acquire test tokens for the API (`api://antkart-api-dev`) via the OAuth2 Authorization Code + PKCE flow (see [oauth2-pkce-concepts](../guides/oauth2-pkce-concepts.md)); user and app-role administration is done in Entra / Microsoft Graph, and account lockout is enforced by **Entra Smart Lockout**, not an application setting.
 
 ---
 
@@ -8,41 +10,28 @@
 - Before any release or deployment to a shared environment
 - After adding new endpoints, changing auth policies, or modifying middleware
 - After changes to `ocelot.json` (routing or rate limits)
-- After any change to Keycloak realm settings
+- After any change to Entra ID app registration settings (app roles, optional claims, exposed scopes)
 - Periodically as a scheduled security health check
 
 ## Prerequisites
 - The AntKart services running and reachable — cloud-deployed, or run locally against live cloud services / via cloud port-forwarding
-- All services healthy
-- Two test accounts registered: `sectest_user` and `sectest_user2` (see Setup in `docs/test/SECURITY_TESTS.md`)
+- All services healthy (`GET /health/ready` on each, or `GET /gateway/health/*` through the gateway)
+- Two Entra ID test users, `USER1` and `USER2`, both **without** the `admin` app role (the privilege-escalation tests confirm non-admins are rejected). Provision them and assign app roles in Entra / Microsoft Graph.
 
 ---
 
 ## Setup
 
+Acquire an access token for each test user through the Entra OAuth2 Authorization Code + PKCE flow (see [oauth2-pkce-concepts](../guides/oauth2-pkce-concepts.md)), then export them. Tokens expire, so re-acquire at the start of each session.
+
 ```bash
-# Confirm stack is up
-docker ps --format "table {{.Names}}\t{{.Status}}" | grep -v NAMES
+# Confirm the services are reachable (through the gateway).
+curl -s -o/dev/null -w "gateway: %{http_code}\n" http://localhost:8000/gateway/health/products
 
-# Register test accounts (skip if already registered)
-curl -s -X POST http://localhost:5085/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"sectest_user","email":"sectest@example.com","password":"SecTest@123","firstName":"Sec","lastName":"Test"}'
-
-curl -s -X POST http://localhost:5085/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"sectest_user2","email":"sectest2@example.com","password":"SecTest@123","firstName":"Sec2","lastName":"Test2"}'
-
-# Fetch fresh tokens (tokens expire — always re-fetch at start of session)
-USER1_TOKEN=$(curl -s -X POST http://localhost:5085/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"sectest_user","password":"SecTest@123"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")
-
-USER2_TOKEN=$(curl -s -X POST http://localhost:5085/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"sectest_user2","password":"SecTest@123"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")
+# Paste tokens obtained for each test user via the Entra Authorization Code + PKCE flow.
+# Each token's audience must be api://antkart-api-dev. Both users are standard (non-admin).
+USER1_TOKEN="<access token for test user 1>"
+USER2_TOKEN="<access token for test user 2>"
 
 echo "Tokens ready. USER1: ${USER1_TOKEN:0:30}..."
 ```
@@ -109,13 +98,9 @@ else
   warn "IDOR-Order" "No existing orders for User1 — create one and re-run"
 fi
 
-# ── Test 5: Body injection ───────────────────────────────────────────────────
-echo "── Test 5: Body injection (register)"
-REG=$(curl -s -X POST http://localhost:5085/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"injtest99","email":"injtest99@example.com","password":"Test@1234","firstName":"Inj","lastName":"Test","role":"admin","isAdmin":true}')
-echo "$REG" | grep -qi "success" && echo "✅ PASS | Body injection — extra fields ignored" && PASS=$((PASS+1)) \
-  || { echo "❌ FAIL | Body injection — unexpected response: $REG"; FAIL=$((FAIL+1)); }
+# ── Test 5: Body injection (registration) — N/A under Entra ──────────────────
+echo "── Test 5: Body injection (registration)"
+warn "Body injection (register)" "N/A — there is no application registration endpoint under Entra ID; user provisioning and role assignment are done in Entra / Microsoft Graph. Mass-assignment / extra-field injection is still covered by Test 6 (cart) and Test 14 (payments)."
 
 # ── Test 6: Cart userId spoofing ─────────────────────────────────────────────
 echo "── Test 6: Cart userId spoofing"
@@ -163,37 +148,9 @@ echo "── Test 10: HTTP verb tampering"
 check "DELETE /gateway/products" \
   "$(curl -s -o/dev/null -w "%{http_code}" -X DELETE http://localhost:8000/gateway/products -H "Authorization: Bearer $USER1_TOKEN")" "405"
 
-# ── Test 11: Brute force protection ──────────────────────────────────────────
-echo "── Test 11: Brute force login protection"
-for i in $(seq 1 5); do
-  curl -s -o/dev/null -X POST http://localhost:5085/api/auth/login \
-    -H "Content-Type: application/json" \
-    -d '{"username":"sectest_user","password":"WrongPassword!!"}'
-done
-LOCKED=$(curl -s -X POST http://localhost:5085/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"sectest_user","password":"SecTest@123"}')
-echo "$LOCKED" | grep -qiE "lock|invalid_grant|temporar" \
-  && { echo "✅ PASS | Account locked after 5 failures"; PASS=$((PASS+1)); } \
-  || { echo "⚠️  WARN | Account may not be locked (check Keycloak failureFactor)"; WARN=$((WARN+1)); }
-
-# Unlock test user
-KC_ADMIN_TOKEN=$(curl -s -X POST "http://localhost:8090/realms/master/protocol/openid-connect/token" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=password&client_id=admin-cli&username=admin&password=admin" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))")
-USER_KC_ID=$(curl -s "http://localhost:8090/admin/realms/antkart/users?username=sectest_user" \
-  -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
-  | python3 -c "import sys,json; u=json.load(sys.stdin); print(u[0]['id'] if u else '')")
-[ -n "$USER_KC_ID" ] && curl -s -X DELETE \
-  "http://localhost:8090/admin/realms/antkart/attack-detection/brute-force/users/$USER_KC_ID" \
-  -H "Authorization: Bearer $KC_ADMIN_TOKEN" > /dev/null
-
-# Refresh token after unlock
-USER1_TOKEN=$(curl -s -X POST http://localhost:5085/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"sectest_user","password":"SecTest@123"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin).get('accessToken',''))")
+# ── Test 11: Brute force protection — verified in Entra, not the application ──
+echo "── Test 11: Brute force / account-lockout protection"
+warn "Brute force protection" "Handled by Entra ID Smart Lockout at the identity provider — sign-in and password validation never reach the application, so there is no application login endpoint to script against. Verify Smart Lockout is enabled and review the lockout events in the Entra sign-in logs (Microsoft Entra admin center → Monitoring → Sign-in logs). No application-side unlock is required; Smart Lockout resets automatically."
 
 # ── Test 12: Server header ────────────────────────────────────────────────────
 echo "── Test 12: Server header exposure"
@@ -243,20 +200,16 @@ After all current fixes are applied, the expected baseline is:
 
 | Test | Expected |
 |------|----------|
-| 1–3, 5–10, 12–15 | PASS |
-| 11 (Brute force) | PASS (failureFactor=5) |
+| 1–4, 6–10, 12–15 | PASS |
+| 5 (Body injection / register) | WARN (N/A — no application registration endpoint under Entra) |
+| 11 (Brute force) | WARN (verified via Entra Smart Lockout / sign-in logs) |
 | FAIL count | 0 |
-| WARN count | 0 |
+| WARN count | 2 (Tests 5 and 11 are informational under Entra) |
 
 If any test drops from PASS to FAIL after a code change, treat it as a regression and do not merge until fixed.
 
 ---
 
-## After Test 11 — Re-enable Test User
+## Account lockout under Entra
 
-Test 11 locks `sectest_user`. The script above auto-unlocks it via Keycloak Admin API. If the script was interrupted, unlock manually:
-
-```bash
-# In Keycloak Admin Portal: http://localhost:8090
-# Realm: antkart → Users → sectest_user → Sessions → Clear sessions / credentials
-```
+Account-lockout and brute-force protection are enforced by **Entra ID Smart Lockout** at the identity provider — the application has no login endpoint to lock or unlock, so there is nothing to re-enable after a run. Confirm Smart Lockout configuration and review lockout events in the Microsoft Entra admin center (Monitoring → Sign-in logs).

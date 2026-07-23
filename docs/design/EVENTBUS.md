@@ -2,7 +2,7 @@
 
 ## Overview
 
-Async communication between microservices uses **MassTransit 8.3.6** over **Azure Service Bus** as the transport. The order flow implements a **SAGA choreography pattern** with an **EF Core Outbox** to guarantee at-least-once delivery and prevent dual-write problems.
+Async communication between microservices uses **MassTransit 8.3.6** over **Azure Service Bus** as the transport. The order flow implements an **orchestrated SAGA** (a MassTransit state machine) with an **EF Core Outbox** to guarantee at-least-once delivery and prevent dual-write problems.
 
 MassTransit keeps the consumers and saga **transport-agnostic** — they are written against MassTransit's API, so the move from a self-hosted broker to Service Bus changed only the bus configuration. The service connects to Service Bus with **Microsoft Entra authentication** (`DefaultAzureCredential`) against the namespace's fully-qualified hostname — there is no connection string or SAS key. The Service Bus **topology is owned by infrastructure-as-code** (see [Service Bus Topology & Observability](#service-bus-topology--observability)).
 

@@ -96,7 +96,7 @@ JWT is validated **twice** (defence in depth):
 1. **At Gateway** — Ocelot checks `AuthenticationProviderKey: "Bearer"` and rejects unauthenticated requests with 401 before forwarding.
 2. **At downstream** — each service independently validates the same JWT, so they remain secure if accessed directly (bypassing the gateway).
 
-The `Authorization` header is forwarded verbatim; Keycloak tokens flow through unchanged.
+The `Authorization` header is forwarded verbatim; Microsoft Entra ID tokens flow through unchanged.
 
 ---
 
@@ -104,14 +104,14 @@ The `Authorization` header is forwarded verbatim; Keycloak tokens flow through u
 
 ```csharp
 builder.AddSerilogLogging();
-builder.Services.AddKeycloakAuthentication(builder.Configuration);
+builder.Services.AddEntraAuthentication(builder.Configuration);
 builder.Services.AddDefaultHealthChecks();
 builder.Services.AddOcelot()
     .AddDelegatingHandler<...>();
 
 // ocelot.Development.json merged in Development environment
 app.UseCorrelationIdMiddleware();
-app.UseKeycloakAuth();
+app.UseEntraAuth();
 app.MapDefaultHealthChecks();
 await app.UseOcelot();
 ```
@@ -123,7 +123,7 @@ await app.UseOcelot();
 - **Port:** 9090 (host) → 8000 (container)
 - **Dockerfile:** `AK.Gateway/AK.Gateway.API/Dockerfile`
 - **Build context:** repo root
-- **Depends on:** keycloak, ak-products-api, ak-shoppingcart-api, ak-order-api, ak-useridentity-api
+- **Downstream routes:** ak-products-api, ak-shoppingcart-api, ak-order-api, ak-payments-api. Identity is Microsoft Entra ID (an external managed service, validated at the gateway and each downstream service), not a routed container.
 
 ---
 

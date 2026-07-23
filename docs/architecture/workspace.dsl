@@ -12,6 +12,18 @@
  *   - Auto-layout that doesn't overlap
  *   - Clickable zoom: Context → Container → Component
  *   - Multiple views from ONE model (no duplication)
+ *
+ * ============================================================================
+ * OUT OF DATE — scheduled for regeneration (noted 2026-07-23).
+ * This model reflects the PRE-MIGRATION topology and does NOT match the platform
+ * as built. It still shows a standalone AK.UserIdentity service (retired, ADR-021),
+ * AK.Notification as a REST/MailKit service (now a serverless Azure Functions app,
+ * ADR-019), Keycloak (now Microsoft Entra ID), RabbitMQ (now Azure Service Bus),
+ * ELK (now Azure Monitor / Application Insights), and stores that differ from the
+ * managed Azure services now used. The current platform has SIX deployable services
+ * plus the serverless notifications app. Until this DSL is updated and re-exported,
+ * the README, docs/ROADMAP.md, and the ADRs are the authoritative current-state source.
+ * ============================================================================
  */
 
 workspace "AntKart" "Cloud-native .NET 9 microservices e-commerce platform" {

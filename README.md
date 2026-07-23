@@ -1,6 +1,6 @@
 # AntKart
 
-AntKart is a cloud-native e-commerce platform implemented as eight independently deployable .NET 9 microservices. It is engineered as a reference implementation: each service applies Clean Architecture and Domain-Driven Design, services coordinate through an event-driven SAGA rather than synchronous service-to-service calls, and the platform is provisioned for the cloud entirely as code.
+AntKart is a cloud-native e-commerce platform implemented as six independently deployable .NET 9 microservices (Products, ShoppingCart, Order, Payments, Gateway, and the Discount gRPC service) plus a serverless notifications application (Azure Functions). It is engineered as a reference implementation: each service applies Clean Architecture and Domain-Driven Design, services coordinate through an event-driven SAGA rather than synchronous service-to-service calls, and the platform is provisioned for the cloud entirely as code.
 
 The system is defined at two layers. The **application baseline** runs the services against self-hosted backing infrastructure — Keycloak, RabbitMQ, per-service databases, and ELK — and builds and runs locally. The **cloud-native target** maps the same services onto managed Azure services — Microsoft Entra ID, Azure Service Bus, and Azure Cosmos DB — under a secret-less, identity-based security posture. Application code is largely identical across both layers; only the infrastructure it binds to changes.
 
@@ -87,7 +87,7 @@ Significant design and infrastructure decisions are recorded as [Architecture De
 | Serverless / eventing | — | Azure Functions + Event Grid (target) |
 | Secrets / access | Connection strings | Key Vault + managed identities (no secrets) |
 | Observability | Serilog → Elasticsearch → Kibana | Azure Monitor / Application Insights |
-| Testing | xUnit · Moq · FluentAssertions (631 tests) | Unchanged |
+| Testing | xUnit · Moq · FluentAssertions (641 tests) | Unchanged |
 
 ---
 
@@ -201,7 +201,7 @@ git clone https://github.com/seesathish/AntKart.git
 cd AntKart
 dotnet restore   # run from the repository root so nuget.config is applied
 dotnet build
-dotnet test      # 631 tests
+dotnet test      # run the full test suite
 ```
 
 **Provision the cloud-native platform.** Follow the [Infrastructure Guide](docs/guides/infrastructure-guide.md) to provision the managed Azure resources as code — Terraform modules and Terragrunt live units, with a reviewed `plan` before each `apply` — and the [Development Guide](DevelopmentGuide.md) for the delivery phases. With the managed services in place, each service runs locally against live cloud services, directly or via cloud port-forwarding. Service endpoints and ports are **(to be updated)** as the deployment topology is finalized.

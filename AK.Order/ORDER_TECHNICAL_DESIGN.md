@@ -32,7 +32,7 @@
 | Database | PostgreSQL 16 (`AKOrdersDb`) |
 | EF Core | 9.0.4 via Npgsql |
 | Architecture | Vertical Slice Clean Architecture |
-| Patterns | CQRS (MediatR 12.4.1), FluentValidation, Specification, Repository, Unit of Work — see [ADR-007](../docs/adr/ADR-007-CQRS-and-MediatR.md), [ADR-008](../docs/adr/ADR-008-Repository-Specification-and-Unit-of-Work.md) |
+| Patterns | CQRS (MediatR 12.4.1), FluentValidation, Specification, Repository, Unit of Work — see [ADR-010](../docs/adr/ADR-010-CQRS-and-MediatR.md), [ADR-011](../docs/adr/ADR-011-Repository-Specification-and-Unit-of-Work.md) |
 
 ---
 
@@ -75,7 +75,7 @@ graph TB
     DOMAIN["🏛️ AK.Order.Domain\nOrder Aggregate · OrderItem\nOrderStatus · Domain Events"]:::domain
     INFRA["🔧 AK.Order.Infrastructure\nEF Core + Npgsql\nMassTransit Outbox + SAGA State"]:::infra
     DB[("🐘 PostgreSQL\nAKOrdersDb")]:::db
-    MQ["🐰 RabbitMQ\nSAGA + consumers"]:::infra
+    MQ["Azure Service Bus\nSAGA + consumers"]:::infra
     API --> APP --> DOMAIN
     INFRA --> APP
     INFRA --> DB
@@ -281,7 +281,7 @@ stateDiagram-v2
     Cancelled --> [*]
 ```
 
-**SAGA Choreography (AK.Order ↔ AK.Products ↔ AK.Payments):**
+**Orchestrated SAGA (AK.Order ↔ AK.Products ↔ AK.Payments):**
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#888888', 'edgeLabelBackground': '#00000000'}}}%%
@@ -486,9 +486,9 @@ All events include `CustomerEmail` and `CustomerName` so downstream consumers (e
 
 ### Consumed by AK.Order
 
-Registered via `AddRabbitMqMassTransit(configuration, "order", cfg => { ... })`. The `"order"` prefix ensures unique RabbitMQ queue names so AK.Notification's consumers for the same events receive their own copy (fan-out, not competing consumers).
+Registered via `AddAzureServiceBusMassTransit(configuration, "order", cfg => { ... })`. The `"order"` prefix ensures uniquely-named Service Bus subscriptions per consumer, so each subscribing service receives its own copy of an event (fan-out, not competing consumers).
 
-| Event | Consumer | RabbitMQ Queue | Action |
+| Event | Consumer | Service Bus Subscription | Action |
 |-------|----------|---------------|--------|
 | `StockReservedIntegrationEvent` | `OrderSaga` | `order-order-saga-state` | Transition to Confirmed |
 | `StockReservationFailedIntegrationEvent` | `OrderSaga` | `order-order-saga-state` | Transition to Cancelled |

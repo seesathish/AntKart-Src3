@@ -37,8 +37,8 @@
 
 | ADR | Decision |
 |-----|----------|
-| [ADR-007 — CQRS and MediatR](../docs/adr/ADR-007-CQRS-and-MediatR.md) | Why all commands and queries are dispatched via MediatR; pipeline behaviour for validation |
-| [ADR-008 — Repository, Specification, and Unit of Work](../docs/adr/ADR-008-Repository-Specification-and-Unit-of-Work.md) | `ICartRepository` and `IUnitOfWork` — single Redis transaction boundary per cart operation |
+| [ADR-010 — CQRS and MediatR](../docs/adr/ADR-010-CQRS-and-MediatR.md) | Why all commands and queries are dispatched via MediatR; pipeline behaviour for validation |
+| [ADR-011 — Repository, Specification, and Unit of Work](../docs/adr/ADR-011-Repository-Specification-and-Unit-of-Work.md) | `ICartRepository` and `IUnitOfWork` — single Redis transaction boundary per cart operation |
 
 ---
 
@@ -117,7 +117,7 @@ graph TB
     DOMAIN["AK.ShoppingCart.Domain\nCart Aggregate · CartItem\nDomain Events"]:::domain
     INFRA["AK.ShoppingCart.Infrastructure\nRedisContext · CartRepository\nUnitOfWork · RedisSettings"]:::infra
     REDIS[("Redis\nAKCart:cart:{userId}\nTTL: 30 days sliding")]:::db
-    MQ["RabbitMQ\nConsumes: OrderConfirmedIntegrationEvent\nQueue: cart-clear-cart-on-order-confirmed"]:::infra
+    MQ["Azure Service Bus\nConsumes: OrderConfirmedIntegrationEvent\nSubscription: cart-clear-cart-on-order-confirmed"]:::infra
 
     CLIENT -->|HTTP/REST| API
     API -->|IMediator.Send| APP
@@ -376,7 +376,7 @@ classDiagram
 
 Domain events are raised in-memory and stored on the aggregate root. They are designed for future pub/sub wiring (e.g., service bus integration).
 
-**RabbitMQ consumer (active):** `ClearCartOnOrderConfirmedConsumer` listens on `cart-clear-cart-on-order-confirmed` and clears the user's cart when an order is confirmed. Registered via `AddRabbitMqMassTransit(configuration, "cart", ...)` — the `"cart"` prefix ensures this queue is uniquely named and does not compete with consumers in other services.
+**Service Bus consumer (active):** `ClearCartOnOrderConfirmedConsumer` listens on `cart-clear-cart-on-order-confirmed` and clears the user's cart when an order is confirmed. Registered via `AddAzureServiceBusMassTransit(configuration, "cart", ...)` — the `"cart"` prefix ensures this subscription is uniquely named and does not compete with consumers in other services.
 
 | Event | Constructor | Raised When |
 |-------|-------------|-------------|
@@ -1016,6 +1016,8 @@ _uow.Setup(u => u.SaveChangesAsync(default)).ReturnsAsync(1);
 ```
 
 ### Docker Compose
+
+> **Note (2026-07-23):** the Docker Compose definition below is the **Phase-1 local stack** (self-hosted RabbitMQ, Redis, and identity), preserved in the public AntKart reference repository. The current platform runs on AKS against managed Azure services (Azure Managed Redis, Azure Service Bus, Microsoft Entra ID); see the [AKS Guide](../docs/guides/aks-guide.md) and [Container Configuration](../docs/guides/container-configuration.md).
 
 ```yaml
 redis:

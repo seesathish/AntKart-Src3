@@ -10,7 +10,7 @@
 - Changing a **shared interface** (`IRepository<T>`, `IUnitOfWork`, `IDomainEvent`)
 - Changing **ocelot.json** routing, rate limits, or auth policy
 - Renaming or moving a shared DTO or base class
-- Changing **Keycloak realm settings** that affect JWT claims
+- Changing **Microsoft Entra ID app registration settings** that affect JWT claims (app roles, optional claims)
 
 ---
 
@@ -20,21 +20,21 @@ Use this matrix to determine what to check based on what you are changing:
 
 | What You Are Changing | Check These |
 |-----------------------|-------------|
-| `Entity` or `StringEntity` base class | All domain entities in all services (7 services) |
+| `Entity` or `StringEntity` base class | All domain entities across every service that has a domain model |
 | `ValueObject` base class | `ShippingAddress` in AK.Order; any future value objects |
 | `IIntegrationEvent` or event record | All publishers (grep `Publish<TEvent>`), all consumers (`IConsumer<TEvent>`), all integration tests |
 | `IRepository<T>` interface | All repository interfaces and implementations (5 services) |
 | `IUnitOfWork` interface | All UoW implementations, all handlers that call `SaveChangesAsync` |
-| `ValidationBehavior<TRequest, TResponse>` | All services using it (all except UserIdentity) |
-| `ExceptionHandlerMiddleware` (shared) | All services using it (all except UserIdentity which has its own) |
+| `ValidationBehavior<TRequest, TResponse>` | All services using it |
+| `ExceptionHandlerMiddleware` (shared) | All REST services using it (AK.Discount gRPC uses an interceptor instead) |
 | `HttpContextExtensions.GetUserId()` | Every endpoint and handler that calls `http.GetUserId()` |
-| `AuthenticationExtensions` / `KeycloakSettings` | All services calling `AddKeycloakAuthentication` |
-| `MassTransitExtensions.AddAzureServiceBusMassTransit` | All services using MassTransit (Order, Payments, Notification, Cart, Products) |
+| `AuthenticationExtensions` / `EntraSettings` | All services calling `AddEntraAuthentication` |
+| `MassTransitExtensions.AddAzureServiceBusMassTransit` | All services using MassTransit (Order, Payments, Cart, Products) — notification is a separate serverless Azure Functions app, not a MassTransit consumer |
 | `PagedResult<T>` or `Result<T>` | All handlers and endpoints returning these types |
 | `ocelot.json` route change | Gateway, affected downstream service, ocelot.Development.json, docs/design/EVENTBUS.md if routing changes |
 | Integration event field added (non-breaking) | All consumers — verify they compile; new optional field with default is safe |
 | Integration event field removed or renamed (breaking) | All publishers + all consumers must update simultaneously |
-| Keycloak realm change | `antkart-realm.json`, all services using JWT claims, `docs/test/SECURITY_TESTS.md` |
+| Entra ID app registration change (app roles, optional claims) | All services using JWT claims, `docs/test/SECURITY_TESTS.md` |
 
 ---
 
@@ -111,8 +111,7 @@ Before making the change, write a brief impact report (inline comment or PR desc
 - AK.Order/AK.Order.API/Endpoints/OrderEndpoints.cs (4 calls)
 - AK.Payments/AK.Payments.API/Endpoints/PaymentEndpoints.cs (2 calls)
 - AK.Payments/AK.Payments.API/Endpoints/SavedCardEndpoints.cs (1 call)
-- AK.Notification/AK.Notification.API/Endpoints/NotificationEndpoints.cs (2 calls)
-- TOTAL: 12 call sites across 5 services
+- TOTAL: 10 call sites across 4 services
 
 **Tests affected:**
 - None directly (extension method is mocked via HttpContext mock)

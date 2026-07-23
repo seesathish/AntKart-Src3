@@ -2,7 +2,7 @@
 
 This is the single entry point for AntKart's verification strategy. It indexes every test type, from code-level checks to end-to-end and security validation, so a reviewer can assess coverage from one place.
 
-The platform is verified at every layer. **Unit tests** confirm domain logic, validators, and handlers in isolation. **Integration tests** verify the SAGA choreography and event-bus flows on an in-memory transport. **End-to-end tests** exercise the running services through their public surface. **Security tests** probe authentication, authorization, and input handling. **Load and performance tests** confirm behaviour under high-volume transaction throughput against cloud services. The unit and integration suites are layer-agnostic — they run identically regardless of where the services are deployed — while the end-to-end, security, and performance tests run against running services and grow with the deployment topology.
+The platform is verified at every layer. **Unit tests** confirm domain logic, validators, and handlers in isolation. **Integration tests** verify the orchestrated SAGA and event-bus flows on an in-memory transport. **End-to-end tests** exercise the running services through their public surface. **Security tests** probe authentication, authorization, and input handling. **Load and performance tests** confirm behaviour under high-volume transaction throughput against cloud services. The unit and integration suites are layer-agnostic — they run identically regardless of where the services are deployed — while the end-to-end, security, and performance tests run against running services and grow with the deployment topology.
 
 ---
 
@@ -16,21 +16,24 @@ dotnet test
 
 | Project | Tests |
 |---------|-------|
-| AK.Products.Tests | 202 |
-| AK.Discount.Tests | 53 |
+| AK.Products.Tests | 218 |
+| AK.Order.Tests | 133 |
 | AK.ShoppingCart.Tests | 88 |
-| AK.Order.Tests | 113 |
-| AK.UserIdentity.Tests | 20 |
-| AK.IntegrationTests | 35 |
-| AK.Payments.Tests | 70 |
-| AK.Notification.Tests | 37 |
-| **Total** | **618** |
+| AK.Payments.Tests | 73 |
+| AK.Discount.Tests | 49 |
+| AK.Notification.Tests | 23 |
+| AK.BuildingBlocks.Tests | 6 |
+| AK.Tools.ProductsSeedLoader.Tests | 11 |
+| AK.Tools.DiscountSeedLoader.Tests | 12 |
+| **Unit subtotal** | **613** |
+
+With the **28** integration tests below, the full automated suite is **641 tests** (all passing).
 
 ---
 
 ## Integration Tests
 
-The `AK.IntegrationTests` suite exercises the SAGA choreography, event-bus flows, payment event routing, and notification consumer dispatch using **MassTransit's in-memory test harness** — no broker, no database, and no running host. It validates the messaging contracts and orchestration logic deterministically and in isolation.
+The `AK.IntegrationTests` suite (**28 tests**) exercises the orchestrated SAGA, event-bus flows, and payment event routing using **MassTransit's in-memory test harness** — no broker, no database, and no running host. It validates the messaging contracts and orchestration logic deterministically and in isolation.
 
 Detail: [AK.IntegrationTests/INTEGRATION_TESTS.md](../../AK.IntegrationTests/INTEGRATION_TESTS.md).
 

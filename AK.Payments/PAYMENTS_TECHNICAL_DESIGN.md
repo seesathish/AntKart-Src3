@@ -1,5 +1,7 @@
 # AK.Payments — Technical Design
 
+> **Note (2026-07-23): parts of this document reference the Phase-1 baseline infrastructure.** Diagrams, configuration snippets, and data-field notes that mention **RabbitMQ** or a **Keycloak** user id describe the Phase-1 local stack. In the current cloud-native platform, messaging is **Azure Service Bus** (registered via `AddAzureServiceBusMassTransit`, Entra token auth) and identity is **Microsoft Entra ID** (the user id is the Entra `sub` claim); notification delivery is a serverless Azure Functions app, not a MassTransit consumer. For the authoritative current-state design, see the [Event Bus design](../docs/design/EVENTBUS.md), the [Cloud Migration Guide](../docs/guides/cloud-migration-guide.md), and the [ADRs](../docs/adr/README.md).
+
 ## Overview
 
 AK.Payments is the payment processing microservice for AntKart. It integrates with **Razorpay** (sandbox) to process card payments, verify payment signatures, and manage saved cards for returning users.
@@ -8,7 +10,7 @@ AK.Payments is the payment processing microservice for AntKart. It integrates wi
 - **Database:** PostgreSQL — `AKPaymentsDb` via EF Core 9 + Npgsql
 - **External:** Razorpay API (sandbox/production)
 - **Architecture:** DDD + Clean Architecture
-- **Patterns:** CQRS (MediatR 12.4.1), FluentValidation pipeline, Repository, Unit of Work, EF Core Outbox (MassTransit) — see [ADR-007](../docs/adr/ADR-007-CQRS-and-MediatR.md), [ADR-008](../docs/adr/ADR-008-Repository-Specification-and-Unit-of-Work.md)
+- **Patterns:** CQRS (MediatR 12.4.1), FluentValidation pipeline, Repository, Unit of Work, EF Core Outbox (MassTransit) — see [ADR-010](../docs/adr/ADR-010-CQRS-and-MediatR.md), [ADR-011](../docs/adr/ADR-011-Repository-Specification-and-Unit-of-Work.md)
 
 ---
 
