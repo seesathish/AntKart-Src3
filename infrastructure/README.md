@@ -15,7 +15,7 @@ infrastructure/
         └── <unit>/terragrunt.hcl
 ```
 
-- **`modules/`** — reusable, parameterised Terraform modules (resource group, networking, container registry, key vault, cosmosdb, servicebus, eventgrid, function-app, app-registration, role-assignments, governance). A module describes *how* a resource is built — it takes inputs and exposes outputs, with **no environment-specific values baked in**.
+- **`modules/`** — reusable, parameterised Terraform modules (resource group, networking, container registry, key vault, observability, cosmosdb, postgresql, redis, servicebus, eventgrid, communication-services, function-app, app-registration, role-assignments, governance, **aks**, **workload-identity**). A module describes *how* a resource is built — it takes inputs and exposes outputs, with **no environment-specific values baked in**.
 - **`environments/dev/`** — the Terragrunt **live units** that wire the modules together for the `dev` environment, supply their inputs, and inherit the shared remote-state backend and provider/version config from `environments/dev/root.hcl`. Additional environments are added as sibling folders under `environments/`.
 
 ## Running a unit
@@ -41,9 +41,11 @@ Two bootstrap steps run **with the Azure CLI before any Terraform** (the identit
 Then the units apply in dependency order (Terragrunt enforces this via `dependency` blocks):
 
 - **`resource-group`** — first; almost everything else depends on it.
-- **`networking`, `container-registry`, `key-vault`, `observability`, `cosmosdb`, `servicebus`, `eventgrid`** — each depends on `resource-group`.
+- **`networking`, `container-registry`, `key-vault`, `observability`, `cosmosdb`, `postgresql`, `redis`, `servicebus`, `eventgrid`, `communication-services`** — each depends on `resource-group`.
 - **`function-app`** — depends on `resource-group` **and** `observability` (for the App Insights connection string).
 - **`role-assignments`** — depends on `function-app`, `key-vault`, `servicebus`, and `eventgrid` (grants the Function App's managed identity scoped data-plane roles).
+- **`aks`** — depends on `resource-group`, `networking` (the `aks` subnet), `container-registry` (to scope the kubelet AcrPull grant), and `observability` (the Log Analytics workspace for the OMS agent).
+- **`workload-identity`** — depends on `resource-group`, `aks` (the OIDC issuer URL the federated credentials trust), `key-vault`, `servicebus`, and `eventgrid` (the scopes for each service identity's least-privilege roles).
 - **`app-registration`** — independent of the resource group (a directory object, not a resource-group resource).
 - **`governance`** — depends on `resource-group` (a budget scoped to it).
 

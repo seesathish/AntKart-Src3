@@ -2,7 +2,7 @@
 
 **Purpose:** How the services are containerized and run on a managed Kubernetes (AKS) cluster — packaging, image delivery, ingress, health management, and workload-identity-based access to cloud resources with no stored secrets.
 
-This guide is built one area at a time, following the same rhythm as the other build guides. **Containerization is complete and is documented below.** The cluster, Helm packaging, ingress/TLS, in-cluster workload identity, and GitOps delivery are marked as placeholders and are written as they are delivered. For where this fits in the overall build, see the [Development Guide](../../DevelopmentGuide.md); for the decisions behind the cluster shape, see [ADR-018](../adr/ADR-018-aks-workload-identity-base-image.md).
+This guide is built one area at a time, following the same rhythm as the other build guides. **Containerization, the AKS cluster, and per-service workload identity are complete and are documented below.** Helm packaging, ingress/TLS, and GitOps delivery are marked as placeholders and are written as they are delivered. For where this fits in the overall build, see the [Development Guide](../../DevelopmentGuide.md); for the decisions behind the cluster shape, see [ADR-018](../adr/ADR-018-aks-workload-identity-base-image.md).
 
 ---
 
@@ -83,29 +83,155 @@ The runtime configuration each of these services requires — connection strings
 
 ---
 
+## The AKS Cluster
+
+The cluster `aks-antkart-dev` is provisioned by the `aks` Terraform module and its dev unit (see the [Infrastructure map](../../infrastructure/README.md)). Its shape is a deliberate set of dev-appropriate choices; the reasoning for each is recorded in [ADR-018](../adr/ADR-018-aks-workload-identity-base-image.md).
+
+| Aspect | As-built | Why |
+|--------|----------|-----|
+| Kubernetes version | `1.35`, pinned | A pinned version makes provisioning reproducible. AKS retires versions over time, so the value is chosen from those marked `KubernetesOfficial` (see [Troubleshooting](#troubleshooting)). |
+| Control-plane SKU tier | `Free` | No uptime SLA but no control-plane cost — right for a disposable dev cluster. Production selects `Standard` for the financially-backed SLA. |
+| Node pool | A single **system** pool, `2 × Standard_D2s_v3`, **autoscaling disabled** | One fixed-size pool keeps dev cost predictable and the setup simple. Production splits system/user pools and enables autoscaling. |
+| Node subnet | The `aks` subnet, `10.0.0.0/22` | The large subnet the networking module sized for the cluster's nodes. |
+| Networking | **Azure CNI Overlay** — plugin `azure`, mode `overlay`, policy `azure` | Overlay draws pod IPs from an overlay CIDR so pods do **not** consume VNet address space; network policy is enforced by the Azure CNI itself (no separate Calico add-on). |
+| Pod / service CIDRs | pod `10.244.0.0/16`, service `10.245.0.0/16`, DNS `10.245.0.10` | Chosen not to overlap the VNet (`10.0.0.0/16`) or each other. |
+| Control-plane identity | `SystemAssigned` | Azure manages its lifecycle with the cluster. The nodes get a separate kubelet identity. |
+| Image pulls | Kubelet identity granted **AcrPull** on the registry | Nodes pull images with **no `imagePullSecret`** — verified by a successful pull with no registry credentials. |
+| OIDC issuer + workload identity | **Enabled at creation** | Both are required for federated workload identity. Enabling them after creation forces a cluster update, so they are set at creation time. |
+| Authorization | **Azure RBAC** for Kubernetes enabled; local accounts left enabled | `kubectl` access is granted with an Azure role (see [Operator Access](#operator-access)). Local accounts are intentionally left enabled for now so we cannot lock ourselves out. |
+| Monitoring | OMS agent → existing Log Analytics workspace | Reuses the platform's existing workspace, with managed-identity auth. |
+
+---
+
+## Operator Access
+
+Because the cluster uses **Azure RBAC for Kubernetes authorization**, being able to reach the API server is not enough — an **Azure role** is required to run `kubectl`, and the Entra-enabled cluster needs `kubelogin` to convert the kubeconfig to a token-based login.
+
+**1. Grant yourself a cluster RBAC role** (scoped to the cluster, not the subscription):
+
+```bash
+CLUSTER_ID=$(az aks show -g rg-antkart-dev-eastus -n aks-antkart-dev --query id -o tsv)
+
+az role assignment create \
+  --assignee "<your-entra-object-id>" \
+  --role "Azure Kubernetes Service RBAC Cluster Admin" \
+  --scope "$CLUSTER_ID"
+```
+
+**2. Fetch credentials and convert them for Entra login:**
+
+```bash
+az aks get-credentials -g rg-antkart-dev-eastus -n aks-antkart-dev
+
+az aks install-cli                          # installs kubectl and kubelogin
+kubelogin convert-kubeconfig -l azurecli    # REQUIRED for an Entra-enabled cluster
+
+kubectl get nodes                           # first call triggers an Entra sign-in
+```
+
+`kubelogin` is **required** here: without converting the kubeconfig, `kubectl` cannot obtain an Entra token for the cluster and every call fails to authenticate. Note that `az aks install-cli` updates your `PATH` — **open a new shell** so `kubectl` and `kubelogin` resolve.
+
+---
+
+## Workload Identity
+
+Pods reach Azure resources (Key Vault, Service Bus, Event Grid) with **no stored secret**, using the same `DefaultAzureCredential` line the services already run locally. This is delivered by the `workload-identity` module and its dev unit (see the [Infrastructure map](../../infrastructure/README.md)).
+
+**The model.** For each service there is a **user-assigned managed identity** (`id-ak-<service>-dev`) with a **federated identity credential** that trusts the cluster's OIDC issuer for exactly one Kubernetes ServiceAccount:
+
+- **Subject:** `system:serviceaccount:antkart:ak-<service>` — this is **exact-match and case-sensitive**. A mismatch (wrong namespace, wrong ServiceAccount name, wrong case) fails as `AADSTS70021` / "workload options are not fully configured", not as a permission error.
+- **Audience:** `api://AzureADTokenExchange` — the fixed Entra token-exchange audience the workload-identity webhook expects.
+
+### Least-privilege role matrix
+
+Each identity receives only the data-plane roles its service needs. Cosmos DB, PostgreSQL, and Redis are reached via **connection strings stored in Key Vault**, so access to them is granted transitively through **Key Vault Secrets User** rather than a data-plane role on those stores.
+
+| Service (ServiceAccount) | Managed identity | Roles granted → scope |
+|--------------------------|------------------|-----------------------|
+| `ak-products` | `id-ak-products-dev` | Key Vault Secrets User → vault · Azure Service Bus Data Sender + Data Receiver → namespace |
+| `ak-cart` | `id-ak-cart-dev` | Key Vault Secrets User → vault · Azure Service Bus Data Sender + Data Receiver → namespace |
+| `ak-order` | `id-ak-order-dev` | Key Vault Secrets User → vault · Azure Service Bus Data Sender + Data Receiver → namespace · EventGrid Data Sender → topic |
+| `ak-payments` | `id-ak-payments-dev` | Key Vault Secrets User → vault · Azure Service Bus Data Sender + Data Receiver → namespace · EventGrid Data Sender → topic |
+| `ak-discount` | `id-ak-discount-dev` | Key Vault Secrets User → vault |
+| `ak-gateway` | `id-ak-gateway-dev` | Key Vault Secrets User → vault |
+
+### Pod wiring
+
+Two pieces connect a pod to its identity — an **annotation on the ServiceAccount** carrying the identity's client id, and a **label on the pod template** opting the pod into the webhook:
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ak-products                     # matches the federated-credential subject
+  namespace: antkart
+  annotations:
+    azure.workload.identity/client-id: "<client_id of id-ak-products-dev>"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ak-products
+  namespace: antkart
+spec:
+  template:
+    metadata:
+      labels:
+        azure.workload.identity/use: "true"    # MUST be on the pod template, not only the Deployment
+    spec:
+      serviceAccountName: ak-products
+      containers:
+        - name: ak-products
+          image: acrantkartdev.azurecr.io/antkart/products:<tag>
+```
+
+With the annotation and label present, the webhook injects `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_FEDERATED_TOKEN_FILE`, and `AZURE_AUTHORITY_HOST` into the pod, and `DefaultAzureCredential` resolves to `WorkloadIdentityCredential`. **Application code is unchanged.** The client id for each service comes from the `workload-identity` module's `identities` output.
+
+**Verified behaviour.** A pod deployed **without** this wiring crashed: `DefaultAzureCredential` fell back to IMDS and failed with "Multiple user assigned identities exist" (the node carries several identities, and IMDS cannot pick one). The **same image with the annotation and label** reached `Running` and read Key Vault successfully — deterministically selecting the one federated identity for that service, with no secret involved.
+
+---
+
+## Cost and Idle Management
+
+The node pool bills **hourly** whenever the cluster is running. For idle periods, stop and start the cluster rather than destroying it:
+
+```bash
+az aks stop  -g rg-antkart-dev-eastus -n aks-antkart-dev   # stops node billing
+az aks start -g rg-antkart-dev-eastus -n aks-antkart-dev
+```
+
+---
+
+## Troubleshooting
+
+Issues encountered provisioning and operating this cluster, and how to resolve them:
+
+- **Kubernetes version unavailable / LTS-only.** AKS continually retires versions. A version offered **only** under `AKSLongTermSupport` requires an LTS-tier subscription and will otherwise be rejected. List what a region actually offers and pick one marked `KubernetesOfficial`:
+  ```bash
+  az aks get-versions --location eastus -o table
+  ```
+- **VM size unavailable, or the wrong CPU architecture.** Subscription SKU allow-lists vary by region, so the intended VM size may be unavailable. Watch the **architecture**, not just availability: the available `b*ps_v2` sizes are **ARM64**, which will **not** run amd64-built images. Confirm both availability and architecture before choosing a size.
+- **Provider lock drift across Terragrunt units.** Each Terragrunt unit pins its providers in its **own** `.terraform.lock.hcl`. Adding a provider to the shared root config does not update the units automatically — run `terragrunt init -upgrade` in each affected unit and commit the refreshed lock files.
+- **`kubectl` cannot authenticate after `install-cli`.** `az aks install-cli` changes `PATH`; open a **new shell** so `kubectl`/`kubelogin` resolve, and ensure `kubelogin convert-kubeconfig -l azurecli` has been run for this Entra-enabled cluster.
+- **Federated token rejected (`AADSTS70021`).** The ServiceAccount subject does not match the federated credential. The subject `system:serviceaccount:antkart:ak-<service>` is exact-match and case-sensitive — check the namespace, the ServiceAccount name, and the pod-template label.
+
+---
+
 ## Still to Come
 
-The sections below cover work that is **not yet delivered**. They are placeholders describing scope only; they will be written as each area is built, and nothing here should be treated as done.
-
-### 🚧 The AKS cluster _(placeholder — not yet provisioned)_
-
-Provisioning the managed Kubernetes cluster: node pools, networking plugin, SKU tier, health/observability integration, and the kubelet AcrPull grant. The decisions are recorded in [ADR-018](../adr/ADR-018-aks-workload-identity-base-image.md); the cluster itself is not yet provisioned.
+The sections below cover work that is **not yet delivered**. They are placeholders describing scope only; nothing here should be treated as done.
 
 ### 🚧 Base-image hardening _(placeholder)_
 
-Moving the runtime image to a hardened, minimal base and publishing an organisation-owned base image, per the intent in [ADR-018](../adr/ADR-018-aks-workload-identity-base-image.md).
+Moving the runtime image from the standard ASP.NET runtime to a hardened, minimal base and publishing an organisation-owned base image, per the intent in [ADR-018](../adr/ADR-018-aks-workload-identity-base-image.md).
 
 ### 🚧 Helm packaging _(placeholder)_
 
-Packaging the services as Helm charts — Deployments, Services, probes wired to `/health/live` and `/health/ready`, resource requests/limits, and per-environment values sourced from [Container Configuration](container-configuration.md).
+Packaging the services as Helm charts — Deployments, Services, probes wired to `/health/live` and `/health/ready`, resource requests/limits, the ServiceAccount annotations/labels above, and per-environment values sourced from [Container Configuration](container-configuration.md).
 
 ### 🚧 Ingress and TLS _(placeholder)_
 
 External access to the cluster: the ingress controller, routing to the gateway, and TLS termination.
-
-### 🚧 Workload identity _(placeholder)_
-
-Secret-less access to Azure resources from inside the cluster: federating each service's Kubernetes ServiceAccount to an Entra identity so pods obtain Entra tokens with no stored secret, using the same `DefaultAzureCredential` code path the services already run locally.
 
 ### 🚧 GitOps delivery _(placeholder)_
 
