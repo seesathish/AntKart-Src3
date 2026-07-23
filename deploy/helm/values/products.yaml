@@ -1,0 +1,13 @@
+# AK.Products.API — REST catalogue (Cosmos DB via MongoDB API).
+name: ak-products
+serviceName: products
+workloadIdentityClientId: "c2f1d5e5-fe15-48bd-b75f-d7e820e9c687"
+
+env:
+  # CRITICAL: override the localhost:5001 default with the in-cluster Discount DNS.
+  # No trailing slash, matching the appsettings default form (http://localhost:5001).
+  DiscountGrpc__Address: "http://ak-discount:8080"
+  ServiceBus__FullyQualifiedNamespace: "sb-antkart-dev.servicebus.windows.net"
+  MongoDbSettings__DatabaseName: "antkart-products"
+  MongoDbSettings__ProductsCollection: "products"
+  Seeding__RunOnStartup: "false"

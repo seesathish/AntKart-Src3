@@ -1,0 +1,12 @@
+# AK.Order.API — REST order service (PostgreSQL + SAGA). Calls AK.Products.
+name: ak-order
+serviceName: order
+workloadIdentityClientId: "4073b3dc-ca1e-4788-a58d-c2b4393ee7b9"
+
+env:
+  # CRITICAL: override the localhost:5077 default with the in-cluster Products DNS.
+  # Trailing slash retained, matching the appsettings default (http://localhost:5077/).
+  ProductsApi__BaseUrl: "http://ak-products:8080/"
+  ServiceBus__FullyQualifiedNamespace: "sb-antkart-dev.servicebus.windows.net"
+  EventGrid__TopicEndpoint: "https://evgt-antkart-dev.eastus-1.eventgrid.azure.net/api/events"
+  # ConnectionStrings:Postgres is a secret, resolved from Key Vault at runtime.

@@ -1,0 +1,10 @@
+# AK.Payments.API — REST payment service (PostgreSQL + Razorpay).
+name: ak-payments
+serviceName: payments
+workloadIdentityClientId: "31c739a1-51f3-4e4d-b322-5df23dc66177"
+
+env:
+  ServiceBus__FullyQualifiedNamespace: "sb-antkart-dev.servicebus.windows.net"
+  EventGrid__TopicEndpoint: "https://evgt-antkart-dev.eastus-1.eventgrid.azure.net/api/events"
+  # ConnectionStrings:PaymentsDb (mandatory — no committed default) and the
+  # Razorpay KeyId/KeySecret are secrets, resolved from Key Vault at runtime.

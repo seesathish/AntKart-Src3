@@ -1,0 +1,11 @@
+# AK.ShoppingCart.API — REST cart (Redis).
+name: ak-cart
+serviceName: cart
+workloadIdentityClientId: "53d89789-5bfa-4bd8-b0ee-9ca382834a22"
+
+env:
+  ServiceBus__FullyQualifiedNamespace: "sb-antkart-dev.servicebus.windows.net"
+  RedisSettings__InstanceName: "AKCart:"
+  RedisSettings__CartExpiryDays: "30"
+  # RedisSettings:ConnectionString is a secret (carries the access key) and is
+  # resolved from Key Vault at runtime — it is NOT set here.
