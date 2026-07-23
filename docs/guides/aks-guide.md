@@ -2,7 +2,7 @@
 
 **Purpose:** How the services are containerized and run on a managed Kubernetes (AKS) cluster — packaging, image delivery, ingress, health management, and workload-identity-based access to cloud resources with no stored secrets.
 
-This guide is built one area at a time, following the same rhythm as the other build guides. **Containerization, the AKS cluster, and per-service workload identity are complete and are documented below.** Helm packaging, ingress/TLS, and GitOps delivery are marked as placeholders and are written as they are delivered. For where this fits in the overall build, see the [Development Guide](../../DevelopmentGuide.md); for the decisions behind the cluster shape, see [ADR-018](../adr/ADR-018-aks-workload-identity-base-image.md).
+This guide is built one area at a time, following the same rhythm as the other build guides. **Containerization, the AKS cluster, per-service workload identity, and ingress/TLS are complete and documented below**; Helm packaging is delivered (charts under [deploy/helm](../../deploy/helm/README.md)). Only GitOps delivery remains a placeholder. For where this fits in the overall build, see the [Development Guide](../../DevelopmentGuide.md); for the decisions behind the cluster shape, see [ADR-018](../adr/ADR-018-aks-workload-identity-base-image.md).
 
 ---
 
@@ -217,6 +217,113 @@ Issues encountered provisioning and operating this cluster, and how to resolve t
 
 ---
 
+## Ingress and TLS
+
+External traffic reaches the platform through a single HTTPS entry point: an NGINX ingress controller terminates TLS and forwards to the **gateway only**. The five other services stay `ClusterIP` and are reached through the gateway's Ocelot routes.
+
+### Gateway-only exposure (the API-gateway pattern)
+
+Only **`ak-gateway`** has an Ingress. Products, ShoppingCart, Order, Payments, and Discount remain internal `ClusterIP` services with no Ingress (the chart's `ingress.enabled` defaults to `false`, so they never render one). All external calls enter through the gateway, whose Ocelot routes fan out to the internal services over cluster DNS. This keeps one auditable, rate-limited, JWT-validating front door and a minimal attack surface — the internal services are never directly reachable from outside the cluster. In particular **`ak-discount` (h2c gRPC) is never exposed**: it is an internal dependency called by Products, and putting cleartext gRPC behind a public HTTP ingress would neither work nor be safe.
+
+The gateway ingress routes `/` (all paths) to `ak-gateway:8080`. The gateway then serves its real upstream routes internally — all under `/gateway/*`:
+
+`/gateway/products` · `/gateway/products/{everything}` · `/gateway/cart/{everything}` · `/gateway/orders` · `/gateway/orders/{everything}` · `/gateway/payments/{everything}` · `/gateway/health/{products|cart|orders|payments}` — plus the gateway's own `/health/*`.
+
+### Ingress controller — self-managed ingress-nginx (chosen)
+
+Two options were considered:
+
+- **AKS managed NGINX (application routing add-on)** — less to operate, and it can be provisioned as code in the `aks` Terraform module (`web_app_routing { ... }`). But it is Azure-specific.
+- **Self-managed `ingress-nginx` via Helm (chosen)** — the same controller, Ingress resources, and cert-manager flow run **identically on AKS and EKS**, so the entire ingress/TLS layer is portable and transfers unchanged to the planned AWS deployment. The small extra operational cost (we install/upgrade the chart ourselves) is worth the cloud-agnostic Kubernetes layer.
+
+Because it is Helm-installed, the `aks` Terraform module is unchanged. (If the managed add-on were preferred instead, it would be enabled via a `web_app_routing` block in `modules/aks/main.tf`, not clicked on in the portal.)
+
+### cert-manager and Let's Encrypt
+
+[cert-manager](https://cert-manager.io) automates certificate issuance. Two `ClusterIssuer`s are defined ([deploy/cert-manager](../../deploy/cert-manager/)), both using the ACME **HTTP-01** solver against the `nginx` class:
+
+- **`letsencrypt-staging`** — generous rate limits, **untrusted** root (browsers warn; use `curl -k`).
+- **`letsencrypt-prod`** — browser-trusted, **strict** weekly rate limits.
+
+**Always validate on staging first.** Let's Encrypt production limits are strict (e.g. duplicate-certificate and per-domain weekly caps); a misconfigured Ingress that retries in a loop can exhaust them and lock the account out for about a week. Only after the *same* setup issues a `Ready` certificate on staging do you switch the Ingress to production.
+
+The Ingress carries a `cert-manager.io/cluster-issuer` annotation and a `tls` block naming a Secret; cert-manager watches these, runs the HTTP-01 challenge, and writes the issued cert/key into that Secret, which the controller then uses to terminate TLS.
+
+### Hostname — nip.io (development convenience)
+
+No custom domain is provisioned, so the platform uses **[nip.io](https://nip.io) wildcard DNS**: `<public-ip>.nip.io` resolves to that IP with no DNS setup. This is a **development convenience only** — in a real environment a proper domain (with its own DNS records) would be used, and the same Ingress/cert-manager wiring applies unchanged; only the `ingress.host` value changes.
+
+### Runbook
+
+Run these in order. Substitute `PUBLIC_IP` once the controller has one.
+
+```bash
+# 1. Install ingress-nginx (self-managed) and cert-manager's Helm repos
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+
+helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx --create-namespace \
+  --set controller.service.externalTrafficPolicy=Local
+
+# 2. Get the controller's public IP — wait until EXTERNAL-IP is no longer <pending>
+kubectl -n ingress-nginx get svc ingress-nginx-controller -w
+PUBLIC_IP=<paste EXTERNAL-IP here>
+HOST=$PUBLIC_IP.nip.io
+
+# 3. Install cert-manager (with CRDs), then the issuers (edit the email in each first)
+helm upgrade --install cert-manager jetstack/cert-manager \
+  --namespace cert-manager --create-namespace \
+  --set crds.enabled=true
+
+kubectl apply -f deploy/cert-manager/cluster-issuer-staging.yaml
+kubectl apply -f deploy/cert-manager/cluster-issuer-prod.yaml
+
+# 4. Enable the gateway ingress with the nip.io host (STAGING issuer by default)
+helm upgrade --install ak-gateway deploy/helm/antkart-service \
+  -n antkart -f deploy/helm/values/gateway.yaml \
+  --set ingress.enabled=true \
+  --set ingress.host=$HOST
+
+# 5. Verify
+kubectl -n antkart get ingress ak-gateway
+kubectl -n antkart get certificate,certificaterequest,order,challenge
+kubectl -n antkart describe certificate ak-gateway-tls   # watch Status/Events
+curl -k https://$HOST/health/live                        # staging cert is untrusted -> -k; expect 200 "Healthy"
+```
+
+**Switch to production** once staging shows a `Ready` certificate:
+
+```bash
+helm upgrade ak-gateway deploy/helm/antkart-service -n antkart -f deploy/helm/values/gateway.yaml \
+  --set ingress.enabled=true --set ingress.host=$HOST \
+  --set ingress.clusterIssuer=letsencrypt-prod
+kubectl -n antkart delete secret ak-gateway-tls          # force a fresh, trusted cert
+# then curl WITHOUT -k — the certificate is browser-trusted:
+curl https://$HOST/health/live
+```
+
+### Troubleshooting — certificate stays `Pending`
+
+cert-manager issues through a chain: **Certificate → CertificateRequest → Order → Challenge**. Walk it to find the stuck step:
+
+```bash
+kubectl -n antkart describe certificate ak-gateway-tls
+kubectl -n antkart get challenge
+kubectl -n antkart describe challenge <name>   # HTTP-01 validation detail
+```
+
+Common causes:
+
+- **DNS not resolving to the controller** — `nslookup $HOST` must return `PUBLIC_IP`. If `ingress.host` was built from the wrong IP, the HTTP-01 challenge can't reach the cluster.
+- **Controller has no public IP** — `kubectl -n ingress-nginx get svc` still shows `<pending>` (Azure LB not provisioned yet); wait, or check the service events.
+- **Challenge 404 / not served** — the challenge path `/.well-known/acme-challenge/...` must reach the controller; a wrong `ingressClassName` or a conflicting redirect can block it (nginx serves the ACME path even with `ssl-redirect` on).
+- **Invalid issuer email** — the placeholder `email:` in the ClusterIssuer must be a real, syntactically valid address.
+- **Production rate limit** — if you jumped to `letsencrypt-prod` and got locked out, go back to staging; the account is limited for up to a week.
+
+---
+
 ## Still to Come
 
 The sections below cover work that is **not yet delivered**. They are placeholders describing scope only; nothing here should be treated as done.
@@ -224,14 +331,6 @@ The sections below cover work that is **not yet delivered**. They are placeholde
 ### 🚧 Base-image hardening _(placeholder)_
 
 Moving the runtime image from the standard ASP.NET runtime to a hardened, minimal base and publishing an organisation-owned base image, per the intent in [ADR-018](../adr/ADR-018-aks-workload-identity-base-image.md).
-
-### 🚧 Helm packaging _(placeholder)_
-
-Packaging the services as Helm charts — Deployments, Services, probes wired to `/health/live` and `/health/ready`, resource requests/limits, the ServiceAccount annotations/labels above, and per-environment values sourced from [Container Configuration](container-configuration.md).
-
-### 🚧 Ingress and TLS _(placeholder)_
-
-External access to the cluster: the ingress controller, routing to the gateway, and TLS termination.
 
 ### 🚧 GitOps delivery _(placeholder)_
 

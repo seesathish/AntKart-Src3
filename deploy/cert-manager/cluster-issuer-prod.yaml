@@ -1,0 +1,23 @@
+# Let's Encrypt PRODUCTION ClusterIssuer.
+#
+# Issues browser-TRUSTED certificates, but has STRICT rate limits (e.g. 5 duplicate
+# certificates per week per identical set of names, 50 certs/week per registered
+# domain). A misconfigured Ingress that retries in a loop can exhaust the limit and
+# lock you out for a week. Do NOT point an Ingress here until the SAME setup has
+# issued successfully against letsencrypt-staging.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # REQUIRED: replace with a monitored email — Let's Encrypt sends expiry/abuse
+    # notices here. Do not commit a personal address to a public repo.
+    email: admin@example.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx

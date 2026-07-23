@@ -100,6 +100,22 @@ ocelot:
   enabled: false
   # config: <structured ocelot document> (see values/gateway.yaml)
 
+# Ingress — disabled by default so the five internal ClusterIP services NEVER render
+# one. Only ak-gateway enables it (see values/gateway.yaml): the gateway is the single
+# public entry point; Products/Cart/Order/Payments/Discount stay internal and are
+# reached through the gateway's Ocelot routes. ak-discount (h2c gRPC) must never be
+# exposed. Host is left empty and supplied at upgrade time (the nip.io name derived
+# from the ingress controller's public IP).
+ingress:
+  enabled: false
+  className: nginx
+  host: ""                       # e.g. 4-3-2-1.nip.io — supplied via --set at upgrade
+  path: /
+  pathType: Prefix
+  clusterIssuer: letsencrypt-staging   # start on STAGING; switch to letsencrypt-prod once it issues
+  tlsSecretName: ""              # defaults to <name>-tls
+  annotations: {}
+
 # Guard rails — the image already runs as the non-root $APP_UID (UID 1654).
 podSecurityContext: {}
 securityContext:

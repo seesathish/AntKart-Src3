@@ -10,6 +10,31 @@ env:
   Entra__Audience: "api://antkart-api-dev"
   Entra__ClientId: "ea22550b-a0ae-4847-a2e2-2524752d9522"
 
+# Ingress — the gateway is the ONLY service exposed externally. Enabled at upgrade
+# time (kept false here so a plain install does not create it before the controller
+# and its public IP exist):
+#   helm upgrade ak-gateway ... --set ingress.enabled=true --set ingress.host=<ip>.nip.io
+ingress:
+  enabled: false
+  className: nginx
+  path: /
+  pathType: Prefix
+  # Start on STAGING to validate the whole flow (Let's Encrypt PRODUCTION has strict
+  # rate limits — a failed loop can lock the account out for a week). Switch to
+  # letsencrypt-prod only after staging issues a certificate successfully.
+  clusterIssuer: letsencrypt-staging
+  annotations:
+    # Max request body the gateway will accept (nginx default is 1m). 10m leaves room
+    # for larger POST/PUT payloads without a 413.
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # Upstream read/send timeouts in seconds — how long nginx waits on the gateway.
+    # 60s matches Ocelot's own per-route QoS TimeoutValue (10s) with headroom.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    # Force HTTP -> HTTPS. nginx does this by default once a TLS block is present;
+    # set explicitly so the intent is obvious and survives controller defaults changing.
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
 # ocelot.json is mounted from a ConfigMap over /app/ocelot.json so downstream
 # routing changes need only a values edit + `helm upgrade` (no image rebuild).
 # Downstream hosts are the in-cluster ak-* Service names on port 8080.
