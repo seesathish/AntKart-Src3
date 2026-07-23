@@ -7,12 +7,16 @@ misconfigured values file cannot render nameless objects.
 {{- end -}}
 
 {{/*
-Fully-qualified container image, derived from the registry + serviceName so the
-ACR path (antkart/<serviceName>) is never repeated by hand.
+Fully-qualified container image. The image PATH segment is image.name when set,
+otherwise it defaults to serviceName. These are deliberately decoupled: serviceName
+drives the in-cluster identity (ServiceAccount ak-<serviceName>) which is bound to
+the federated identity credential subject, while the image path must match whatever
+repository actually exists in ACR — the two are not always the same (e.g. cart).
 */}}
 {{- define "antkart-service.image" -}}
 {{- $svc := required "values.serviceName (e.g. products) is required" .Values.serviceName -}}
-{{- printf "%s/antkart/%s:%s" .Values.image.registry $svc .Values.image.tag -}}
+{{- $name := default $svc .Values.image.name -}}
+{{- printf "%s/antkart/%s:%s" .Values.image.registry $name .Values.image.tag -}}
 {{- end -}}
 
 {{/*

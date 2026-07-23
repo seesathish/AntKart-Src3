@@ -3,6 +3,13 @@ name: ak-gateway
 serviceName: gateway
 workloadIdentityClientId: "a2b00f18-e8ff-4ab0-a399-5b194a2f05e1"
 
+env:
+  # Microsoft Entra ID JWT validation at the edge (AddEntraAuthentication binds the Entra section).
+  Entra__Instance: "https://login.microsoftonline.com"
+  Entra__TenantId: "4cacc56a-0d38-46c4-ba20-429d51d7b449"
+  Entra__Audience: "api://antkart-api-dev"
+  Entra__ClientId: "ea22550b-a0ae-4847-a2e2-2524752d9522"
+
 # ocelot.json is mounted from a ConfigMap over /app/ocelot.json so downstream
 # routing changes need only a values edit + `helm upgrade` (no image rebuild).
 # Downstream hosts are the in-cluster ak-* Service names on port 8080.

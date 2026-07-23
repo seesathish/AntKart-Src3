@@ -24,7 +24,17 @@ workloadIdentityClientId: ""
 
 image:
   registry: acrantkartdev.azurecr.io
-  # repository path is derived as <registry>/antkart/<serviceName>
+  # The image path is <registry>/antkart/<name>, where <name> is `image.name` when
+  # set, otherwise it falls back to `serviceName`.
+  #
+  # WHY image.name is separate from serviceName: serviceName drives the in-cluster
+  # identity — the ServiceAccount is named ak-<serviceName>, which MUST exactly match
+  # the federated identity credential subject (system:serviceaccount:antkart:ak-<serviceName>).
+  # Renaming serviceName to match a registry repository would silently break workload
+  # identity. The image path, by contrast, must match whatever repository actually
+  # exists in ACR. These usually coincide, but not always (e.g. serviceName "cart" vs
+  # ACR repository "antkart/shoppingcart") — set image.name in that case.
+  name: ""
   tag: dev
   pullPolicy: IfNotPresent
 
@@ -75,14 +85,14 @@ resources:
 # Non-secret configuration rendered into a ConfigMap and injected via envFrom.
 # .NET maps `__` to the `:` configuration separator (KeyVault__Uri -> KeyVault:Uri).
 # SECRETS ARE NOT HERE — connection strings / API keys are read from Key Vault at
-# runtime via the pod's workload identity. These defaults are common to all services;
-# per-service values add service-specific keys (DNS overrides, Service Bus, etc.).
+# runtime via the pod's workload identity. Only genuinely common keys live here;
+# per-service values add what that service actually reads (Entra JWT settings, DNS
+# overrides, Service Bus, etc.). Every service reads Key Vault, so KeyVault__Uri is
+# the one shared default. Entra__* is NOT here on purpose: AK.Discount does not bind
+# the Entra section (its gRPC interceptor only decodes the token), so it must not
+# receive dead Entra config — the five JWT-validating services set Entra__* themselves.
 env:
   KeyVault__Uri: "https://kv-antkart-dev.vault.azure.net/"
-  Entra__Instance: "https://login.microsoftonline.com"
-  Entra__TenantId: "4cacc56a-0d38-46c4-ba20-429d51d7b449"
-  Entra__Audience: "api://antkart-api-dev"
-  Entra__ClientId: "ea22550b-a0ae-4847-a2e2-2524752d9522"
 
 # Gateway only: mount an ocelot.json routing file from a ConfigMap so downstream
 # routing can change without rebuilding the image. Disabled for the REST services.
