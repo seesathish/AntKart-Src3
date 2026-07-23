@@ -95,6 +95,7 @@ Significant design and infrastructure decisions are recorded as [Architecture De
 
 | Document | Scope |
 |----------|-------|
+| [Platform Roadmap](docs/ROADMAP.md) | The single authoritative record of what is delivered, in progress, and planned — the best entry point for understanding the full state of the platform. |
 | [Development Guide](DevelopmentGuide.md) | Master index of the build: each delivery phase with its build guide, prerequisite concepts, and governing ADRs. |
 | [Architecture (C4)](docs/architecture/C4Architecture.md) | Detailed C4 model reference; diagrams generated from [`workspace.dsl`](docs/architecture/workspace.dsl). |
 | [Infrastructure Guide](docs/guides/infrastructure-guide.md) | Step-by-step provisioning of the cloud platform — each resource as Understand → Build → Execute → Verify. |

@@ -5,6 +5,8 @@ This guide is the entry point to how the AntKart platform is built and evolved t
 It is a **map, not the detail** — each delivery phase below has a dedicated guide that captures the concepts, the scripts, the execution, and the verification for that area. For the reasoning behind the architecture, see the [Architecture Decision Records index](docs/adr/README.md); for the architecture overview and diagrams, see the [README](README.md#architecture-overview).
 
 > **How to use this guide.** This is the **spine** of the documentation. Each delivery phase below links to three things: the **build guide(s)** that walk through doing it, the **concept guides** to read first to understand it, and the **ADRs** that record the key decisions. Each phase is marked with its **status** so you know what is complete and what is in progress.
+>
+> For a single-page view of everything delivered, in progress, and planned across the whole platform, see the [Platform Roadmap](docs/ROADMAP.md).
 
 ---
 
