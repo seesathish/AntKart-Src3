@@ -1,6 +1,9 @@
+# The .NET 9 aspnet base image binds Kestrel to 8080 (ASPNETCORE_HTTP_PORTS=8080) and the app
+# does not override it, so the container listens on 8080 — consistent with the other services and
+# safe for the non-root user (USER $APP_UID cannot bind ports below 1024).
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
 WORKDIR /app
-EXPOSE 8000
+EXPOSE 8080
 
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
