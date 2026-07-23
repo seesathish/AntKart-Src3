@@ -69,6 +69,15 @@ ocelot:
         AuthenticationOptions: { AuthenticationProviderKey: "Bearer" }
         RateLimitOptions: { EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 10 }
         QoSOptions: { ExceptionsAllowedBeforeBreaking: 3, DurationOfBreak: 30000, TimeoutValue: 10000 }
+      - UpstreamPathTemplate: "/gateway/cart"
+        UpstreamHttpMethod: ["GET", "POST", "PUT", "DELETE"]
+        DownstreamPathTemplate: "/api/v1/cart"
+        DownstreamScheme: "http"
+        DownstreamHostAndPorts:
+          - { Host: "ak-cart", Port: 8080 }
+        AuthenticationOptions: { AuthenticationProviderKey: "Bearer" }
+        RateLimitOptions: { EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 10 }
+        QoSOptions: { ExceptionsAllowedBeforeBreaking: 3, DurationOfBreak: 30000, TimeoutValue: 10000 }
       - UpstreamPathTemplate: "/gateway/orders/{everything}"
         UpstreamHttpMethod: ["GET", "POST", "PUT", "DELETE"]
         DownstreamPathTemplate: "/api/orders/{everything}"
