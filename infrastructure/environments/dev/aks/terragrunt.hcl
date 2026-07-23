@@ -86,7 +86,7 @@ inputs = {
   # Free control plane + burstable B2s nodes keep dev cost low; auto-scaling is
   # left off in the module for predictable cost.
   sku_tier     = "Free"
-  node_vm_size = "Standard_B2s"
+  node_vm_size = "Standard_D2s_v3"
   node_count   = 2
 
   # local_account_disabled stays false in dev so we cannot lock ourselves out
@@ -98,4 +98,9 @@ inputs = {
     project     = "antkart"
     managed-by  = "terraform"
   }
+
+  # AKS retires versions continually. Versions offered only under AKSLongTermSupport
+  # require an LTS-tier subscription; pick one marked KubernetesOfficial.
+  # Verify with: az aks get-versions --location eastus -o table
+  kubernetes_version = "1.35"
 }
