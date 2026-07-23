@@ -64,7 +64,13 @@ Core Azure services in use: **Microsoft Entra ID**, **Azure Kubernetes Service**
 - One user-assigned managed identity per service with a federated credential trusting the cluster OIDC issuer, and a least-privilege role matrix; verified reading Key Vault from a pod with no stored secret — [AKS Guide](guides/aks-guide.md#workload-identity) · [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md)
 
 **Kubernetes deployment (Helm)**
-- All six services run on AKS via Helm — a single generic chart instantiated per service, with workload-identity ServiceAccounts, health probes on `/health/live` and `/health/ready`, resource requests/limits, and ClusterIP services — [Helm charts](../deploy/helm/README.md) · [AKS Guide](guides/aks-guide.md)
+- All six services run on AKS via Helm — a single generic chart instantiated per service, with workload-identity ServiceAccounts, a startupProbe gating liveness (`/health/live`) and readiness (`/health/ready`) so Key-Vault-at-boot never restart-loops a pod, resource requests sized to the node pool, and ClusterIP services on 8080 (AK.Discount uses TCP probes for its h2c gRPC port) — [Helm charts](../deploy/helm/README.md) · [AKS Guide](guides/aks-guide.md#deploying-the-services-helm)
+
+**Ingress and TLS**
+- Public HTTPS entry point via self-managed ingress-nginx exposing the **gateway only**, with cert-manager (Let's Encrypt, staging→production) automated TLS and a nip.io hostname; the AKS subnet's custom NSG opens inbound 80/443 from the Internet tag (the bring-your-own-VNet requirement AKS does not handle automatically) — [AKS Guide](guides/aks-guide.md#ingress-and-tls) · [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md) (target-state managed edge)
+
+**End-to-end verified on the cluster**
+- Verified through the public HTTPS endpoint: browse products, add to cart, and create an order — driving server-authoritative price revalidation, the orchestrated SAGA, stock reservation, order confirmation, cart clearing, and both notification emails delivered via Event Grid → Functions → ACS — [Cluster end-to-end verification](test/README.md#cluster-end-to-end-verification-public-ingress)
 
 **Infrastructure as code**
 - Terraform modules (resource shape) composed by Terragrunt live units per environment over a shared remote-state backend, with a reviewed `plan` before every `apply` — [infrastructure/README](../infrastructure/README.md) · [Infrastructure Guide](guides/infrastructure-guide.md) · [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md) · [ADR-013](adr/ADR-013-key-vault-rbac-and-observability-foundation.md) (Key Vault RBAC + observability foundation)
@@ -74,12 +80,10 @@ Core Azure services in use: **Microsoft Entra ID**, **Azure Kubernetes Service**
 
 ## In progress
 
-- **Ingress and cert-manager TLS** — a self-managed ingress-nginx controller exposing the **gateway only**, with cert-manager (Let's Encrypt) automated TLS and a nip.io development hostname. The chart Ingress template, staging/production ClusterIssuers, and the apply runbook are prepared and being applied to the cluster — [AKS Guide](guides/aks-guide.md#ingress-and-tls).
+- **Azure API Management (managed external edge)** — adding Azure API Management in front of the delivered internal ingress as the managed edge in a **two-gateway model**: APIM owns edge concerns (TLS termination, JWT validation, rate limiting and quotas, subscription keys and products, developer portal, request/response transformation) while the cluster's internal ingress continues to route to services. These are **sequenced layers, not competing gateways** — the internal cluster ingress prerequisite is delivered; APIM is now added in front of it. In-service JWT validation is unchanged (defence in depth) — [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md).
 
 ## Planned — near term
 
-- **Azure API Management (managed external edge)** — Azure API Management as the managed edge in a **two-gateway model**: APIM owns edge concerns (TLS termination, JWT validation, rate limiting and quotas, subscription keys and products, developer portal, request/response transformation) while the cluster's internal ingress handles routing to services. These are **sequenced layers, not competing gateways** — the internal cluster ingress (In progress, above) is a prerequisite and is delivered first, then APIM is added in front of it as the managed edge. In-service JWT validation is unchanged (defence in depth) — [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md).
-- **End-to-end verification on the cluster** — exercising the full order journey and SAGA compensation paths against the services running in AKS.
 - **Kubernetes depth** — storage, networking, policies, probes, resource requests/limits, and failure-diagnosis practices applied to the running fleet.
 - **GitOps delivery with Argo CD** — reconciling the cluster's desired state from Git.
 - **CI/CD with GitHub Actions** — build, test, and delivery pipelines authenticating to Azure with OIDC federated credentials and no stored secrets — [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md).

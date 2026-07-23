@@ -2,7 +2,7 @@
 
 **Purpose:** How the services are containerized and run on a managed Kubernetes (AKS) cluster — packaging, image delivery, ingress, health management, and workload-identity-based access to cloud resources with no stored secrets.
 
-This guide is built one area at a time, following the same rhythm as the other build guides. **Containerization, the AKS cluster, per-service workload identity, and ingress/TLS are complete and documented below**; Helm packaging is delivered (charts under [deploy/helm](../../deploy/helm/README.md)). Only GitOps delivery remains a placeholder. For where this fits in the overall build, see the [Development Guide](../../DevelopmentGuide.md); for the decisions behind the cluster shape, see [ADR-018](../adr/ADR-018-aks-workload-identity-base-image.md).
+This guide is built one area at a time, following the same rhythm as the other build guides. **Containerization, the AKS cluster, per-service workload identity, Helm deployment of all six services, and ingress with cert-manager TLS are complete — verified end to end through the public HTTPS endpoint — and documented below.** Only base-image hardening and GitOps delivery remain placeholders. For where this fits in the overall build, see the [Development Guide](../../DevelopmentGuide.md); for the decisions behind the cluster shape, see [ADR-018](../adr/ADR-018-aks-workload-identity-base-image.md).
 
 ---
 
@@ -20,7 +20,7 @@ Every deployable service is packaged as a container image built the same way, so
 - **`GET /health/ready`** — tolerant readiness (a degraded shared dependency still returns HTTP 200). This is the **readiness probe** target.
 - `GET /health/deps` — detailed per-dependency diagnostics for humans and dashboards; **not** a probe target.
 
-The Kubernetes probe definitions that consume `/health/live` and `/health/ready` are configured with the Helm packaging (a placeholder below).
+The Kubernetes probe definitions that consume `/health/live` and `/health/ready` are configured by the Helm chart (see [Deploying the Services](#deploying-the-services-helm)).
 
 **Serverless notification is not containerized.** `AK.Notification.Functions` is deployed as an Azure Function (Event Grid-triggered) and is **not** part of the container fleet — it is delivered through the serverless path, not the cluster.
 
@@ -191,6 +191,35 @@ With the annotation and label present, the webhook injects `AZURE_CLIENT_ID`, `A
 
 ---
 
+## Deploying the Services (Helm)
+
+All six services deploy through a **single parameterised Helm chart** (`deploy/helm/antkart-service`) instantiated once per service with a per-service values file (`deploy/helm/values/<service>.yaml`). The chart renders, per service, the workload-identity `ServiceAccount` (annotated with the identity's client id) and `Deployment` (pod template labelled `azure.workload.identity/use`; see [Pod wiring](#pod-wiring) above), a `ClusterIP` `Service` on 8080, and a `ConfigMap` of non-secret configuration. The full chart reference is in [deploy/helm/README](../../deploy/helm/README.md).
+
+Install or upgrade one service (idempotent):
+
+```bash
+helm upgrade --install ak-products deploy/helm/antkart-service \
+  -n antkart -f deploy/helm/values/products.yaml
+```
+
+### Startup probe — Key Vault at boot must not restart-loop the pod
+
+Each service loads its secrets from Key Vault during host startup, which can take several seconds before Kestrel binds. A **`startupProbe`** gates the liveness and readiness probes so they do not run until the process has finished booting (`failureThreshold × periodSeconds` allows up to ~150s). Without it, the liveness probe would fire mid-boot, fail, and Kubernetes would kill and restart the pod in a loop. Once the startup probe first succeeds, **liveness** hits shallow `/health/live` (no external calls) and **readiness** hits tolerant `/health/ready`. Resource requests are sized to the node pool (see [the cluster shape](#the-aks-cluster)) so all six services fit with headroom.
+
+### AK.Discount — h2c gRPC probes
+
+`ak-discount` serves **HTTP/2 cleartext (h2c)** only, so an HTTP/1.1 `httpGet` probe would be rejected. Its chart therefore uses **TCP** probes, and its Service port is named `grpc` with `appProtocol: grpc`. It is **internal-only** and is never exposed through the ingress — a public HTTP edge cannot carry cleartext gRPC, and only Products calls it in-cluster.
+
+### Image path decoupled from the in-cluster name
+
+The chart derives the image from an optional `image.name`, falling back to `serviceName`. They are deliberately separate: **`serviceName` drives the ServiceAccount name (`ak-<serviceName>`), which must exactly match the federated identity subject `system:serviceaccount:antkart:ak-<service>`** — so it cannot be renamed to chase a registry repository, or workload identity silently breaks. The image path, by contrast, must match the repository that actually exists in ACR. The cart service is the case in point: it runs as **`ak-cart`** (ServiceAccount and Service) while pulling **`antkart/shoppingcart`** (image), by setting `image.name: shoppingcart` in its values file.
+
+### Gateway health endpoints must bypass Ocelot
+
+The gateway needs one special piece of wiring. Ocelot's middleware is **terminal** — it treats any path that reaches it as a proxy request and returns 404 for anything without a matching downstream route. Mapping the gateway's own health endpoints "before" `UseOcelot()` is **not** sufficient, because `WebApplication` defers endpoint execution to the end of the pipeline: Ocelot short-circuits first, so `/health/live` returns 404 and the probe restart-loops the gateway pod. The fix runs Ocelot **only for non-`/health` paths** (via `MapWhen`), so health requests fall through to endpoint routing and are served. The gateway's liveness and readiness are both **shallow self-checks** — they must never depend on a downstream service, or one failing service would restart the gateway.
+
+---
+
 ## Cost and Idle Management
 
 The node pool bills **hourly** whenever the cluster is running. For idle periods, stop and start the cluster rather than destroying it:
@@ -214,6 +243,8 @@ Issues encountered provisioning and operating this cluster, and how to resolve t
 - **Provider lock drift across Terragrunt units.** Each Terragrunt unit pins its providers in its **own** `.terraform.lock.hcl`. Adding a provider to the shared root config does not update the units automatically — run `terragrunt init -upgrade` in each affected unit and commit the refreshed lock files.
 - **`kubectl` cannot authenticate after `install-cli`.** `az aks install-cli` changes `PATH`; open a **new shell** so `kubectl`/`kubelogin` resolve, and ensure `kubelogin convert-kubeconfig -l azurecli` has been run for this Entra-enabled cluster.
 - **Federated token rejected (`AADSTS70021`).** The ServiceAccount subject does not match the federated credential. The subject `system:serviceaccount:antkart:ak-<service>` is exact-match and case-sensitive — check the namespace, the ServiceAccount name, and the pod-template label.
+- **Stale image after pushing to the same tag.** With a mutable tag (e.g. `dev`) and `imagePullPolicy: IfNotPresent`, a node that has already cached that tag keeps serving the **old** image after a new one is pushed to the same tag — the ConfigMap/manifest change deploys but the code does not. Use an **immutable tag** (the commit SHA) so every rollout pulls a distinct image; this is adopted with the delivery pipeline. (As a stop-gap, delete the pod to force a fresh pull, or roll the tag.)
+- **No shell in the runtime image.** The images ship no shell or tooling, so `kubectl exec ... -- curl` does not work. Use an **ephemeral debug container** (`kubectl debug`) or a throwaway debug pod carrying the tools you need.
 
 ---
 
@@ -323,6 +354,12 @@ Common causes:
 - **Challenge 404 / not served** — the challenge path `/.well-known/acme-challenge/...` must reach the controller; a wrong `ingressClassName` or a conflicting redirect can block it (nginx serves the ACME path even with `ssl-redirect` on).
 - **Invalid issuer email** — the placeholder `email:` in the ClusterIssuer must be a real, syntactically valid address.
 - **Production rate limit** — if you jumped to `letsencrypt-prod` and got locked out, go back to staging; the account is limited for up to a week.
+
+### Troubleshooting — the ingress is unreachable (custom NSG)
+
+If the ingress controller has a public IP but every request — `curl` **and** the ACME HTTP-01 challenge — times out, the cause is likely the **custom NSG on a bring-your-own VNet**. With a customer-managed NSG, AKS does **not** automatically add the LoadBalancer allow rules for a public Service, so client traffic arrives with the `Internet` service tag, matches no allow rule, and is dropped by the deny-all baseline. The `AzureLoadBalancer` service tag covers only Azure's **health probes**, not client traffic — so the load balancer has a public IP but silently drops every request.
+
+The fix is to add inbound allow rules for **80 and 443 from the `Internet` tag**, and **only on the subnet hosting the ingress controller** (the `aks` subnet). This is driven by the networking module's per-subnet `allow_internet_ingress` flag (see [infrastructure/README](../../infrastructure/README.md)). Port **80 must stay open to the `Internet` tag** — Let's Encrypt validates HTTP-01 from many rotating IPs with no published allowlist, so it cannot be narrowed to a fixed source range.
 
 ---
 

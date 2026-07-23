@@ -49,6 +49,8 @@ Then the units apply in dependency order (Terragrunt enforces this via `dependen
 - **`app-registration`** — independent of the resource group (a directory object, not a resource-group resource).
 - **`governance`** — depends on `resource-group` (a budget scoped to it).
 
+**Networking NSGs and internet ingress.** The `networking` module builds one Network Security Group per subnet with a deny-by-default inbound baseline. Because the NSG is customer-managed on a bring-your-own VNet, AKS does **not** automatically add LoadBalancer rules for a public Service — so each subnet carries a per-subnet **`allow_internet_ingress`** flag (default `false`). When set, that subnet's NSG additionally allows inbound **80/443 from the `Internet` service tag**; the dev environment sets it on the **`aks`** subnet only (which hosts the ingress controller) and leaves the others closed. See the [AKS Guide ingress troubleshooting](../docs/guides/aks-guide.md#ingress-and-tls).
+
 ## Authentication prerequisites
 
 - **Run as the Terraform service principal.** Set the four `ARM_*` environment variables before running any unit, so Terraform (and the state backend) authenticate as the automation identity:
