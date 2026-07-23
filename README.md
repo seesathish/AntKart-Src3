@@ -74,7 +74,7 @@ Significant design and infrastructure decisions are recorded as [Architecture De
 |---------|----------------------|-------------------------|
 | Language / framework | .NET 9 · ASP.NET Core Minimal APIs · gRPC | Unchanged |
 | Architecture & patterns | Clean Architecture · DDD · CQRS (MediatR 12) · SAGA · EF Core Outbox · `Result<T>` · FluentValidation | Unchanged |
-| API gateway | Ocelot | Azure API Management (target) |
+| API gateway | Ocelot ([ADR-006](docs/adr/ADR-006-ocelot-api-gateway.md)) | Azure API Management — managed edge ([ADR-020](docs/adr/ADR-020-api-management-managed-edge-gateway.md)) |
 | Identity | Keycloak (OIDC / JWT) | Microsoft Entra ID |
 | Messaging | RabbitMQ + MassTransit | Azure Service Bus + MassTransit |
 | Product store | MongoDB | Azure Cosmos DB (MongoDB API) |
