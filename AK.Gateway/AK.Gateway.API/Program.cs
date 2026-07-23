@@ -57,10 +57,28 @@ app.UseCors("AllowAll");
 app.UseMiddleware<CorrelationIdMiddleware>();
 
 app.UseEntraAuth();
+
+// The gateway's OWN health endpoints — /health, /health/live, /health/ready, /health/deps —
+// wired through the same shared AK.BuildingBlocks mechanism every other service uses, so the
+// gateway is consistent with the platform. The registered check is the shallow "self" check
+// (no downstream calls), so liveness/readiness never depend on a downstream service.
 app.MapDefaultHealthChecks();
 
-// UseOcelot is async and must be awaited — it sets up all route listeners from ocelot.json.
-await app.UseOcelot();
+// CRITICAL — Ocelot's middleware is TERMINAL: any path that reaches it is treated as a proxy
+// request, and anything without a matching downstream route gets a 404. Mapping the health
+// endpoints "before" UseOcelot is NOT sufficient, because WebApplication defers endpoint
+// EXECUTION to the end of the pipeline (UseEndpoints) — Ocelot short-circuits first, so
+// /health/* would still 404 and the Kubernetes probe would restart-loop the pod.
+//
+// Fix: run Ocelot ONLY for non-/health paths via MapWhen, so /health/* bypasses Ocelot
+// entirely and falls through to endpoint routing, which executes the mapped health checks.
+// Every proxied upstream route is under /gateway/*, so excluding /health removes nothing
+// Ocelot needs to serve. UseOcelot is async; it configures the branch pipeline once at
+// startup, so resolving it synchronously here is safe (it is not a per-request call).
+app.MapWhen(
+    context => !context.Request.Path.StartsWithSegments("/health"),
+    ocelotApp => ocelotApp.UseOcelot().GetAwaiter().GetResult());
+
 app.Run();
 
 public partial class Program { }
