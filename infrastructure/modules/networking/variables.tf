@@ -41,6 +41,13 @@ variable "subnets" {
     # private_endpoint_network_policies: must be "Disabled" on a subnet that
     # hosts private endpoints; "Enabled" (the default) everywhere else.
     private_endpoint_network_policies = optional(string, "Enabled")
+
+    # allow_internet_ingress: when true, the subnet's NSG additionally allows
+    # inbound HTTP (80) and HTTPS (443) from the Internet service tag (see main.tf).
+    # Set this ONLY on the subnet(s) that host an internet-facing load balancer /
+    # ingress controller — never on the private-endpoints subnet. Defaults to false
+    # so the deny-by-default baseline is preserved everywhere unless opted in.
+    allow_internet_ingress = optional(bool, false)
   }))
 }
 

@@ -49,14 +49,20 @@ inputs = {
   subnets = {
     "aks" = {
       address_prefixes = ["10.0.0.0/22"]
+      # The AKS nodes host the internet-facing ingress-nginx LoadBalancer, so this
+      # subnet's NSG must permit inbound 80/443 from the Internet (the custom NSG
+      # means AKS won't add those rules itself). Only this subnet opens them.
+      allow_internet_ingress = true
     }
     "private-endpoints" = {
       address_prefixes = ["10.0.4.0/24"]
       # Private endpoints require network policies disabled on their subnet.
       private_endpoint_network_policies = "Disabled"
+      # Stays closed to the internet (allow_internet_ingress defaults to false).
     }
     "gateway" = {
       address_prefixes = ["10.0.5.0/27"]
+      # Stays closed to the internet (allow_internet_ingress defaults to false).
     }
   }
 

@@ -73,7 +73,53 @@ resource "azurerm_network_security_group" "this" {
     destination_address_prefix = "*"
   }
 
-  # 3. Deny everything else inbound — the default-deny baseline. Service-specific
+  # 3. (Conditional) Allow inbound HTTP (80) and HTTPS (443) from the Internet —
+  #    rendered ONLY on subnets flagged allow_internet_ingress (the subnet hosting
+  #    the internet-facing ingress controller / load balancer). Priorities 300/310
+  #    sit BELOW DenyAllInbound (4096), so this traffic is permitted before the
+  #    default deny.
+  #
+  #    WHY these rules are needed: this is a BRING-YOUR-OWN VNet with a
+  #    CUSTOMER-MANAGED NSG. When the NSG on the subnet is not AKS-managed, AKS
+  #    (cloud-controller-manager) will NOT automatically add the LoadBalancer allow
+  #    rules for a public Service. So client traffic from the internet arrives with
+  #    the Internet service tag, matches nothing above, and is dropped by
+  #    DenyAllInbound — the LB gets a public IP but every request times out (and the
+  #    Let's Encrypt HTTP-01 challenge fails). The AzureLoadBalancer rule (2) only
+  #    permits Azure's health probes, NOT client traffic, so it does not cover this.
+  #    These two rules are the customer-managed-NSG equivalent of what AKS would
+  #    otherwise add for you.
+  dynamic "security_rule" {
+    for_each = each.value.allow_internet_ingress ? [1] : []
+    content {
+      name                       = "AllowInternetHttpInbound"
+      priority                   = 300
+      direction                  = "Inbound"
+      access                     = "Allow"
+      protocol                   = "Tcp"
+      source_port_range          = "*"
+      destination_port_range     = "80"
+      source_address_prefix      = "Internet"
+      destination_address_prefix = "*"
+    }
+  }
+
+  dynamic "security_rule" {
+    for_each = each.value.allow_internet_ingress ? [1] : []
+    content {
+      name                       = "AllowInternetHttpsInbound"
+      priority                   = 310
+      direction                  = "Inbound"
+      access                     = "Allow"
+      protocol                   = "Tcp"
+      source_port_range          = "*"
+      destination_port_range     = "443"
+      source_address_prefix      = "Internet"
+      destination_address_prefix = "*"
+    }
+  }
+
+  # 4. Deny everything else inbound — the default-deny baseline. Service-specific
   #    allow rules (for example, inbound 443 to the gateway subnet) are layered
   #    on top as those services are introduced.
   security_rule {
