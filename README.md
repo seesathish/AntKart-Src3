@@ -104,6 +104,7 @@ Significant design and infrastructure decisions are recorded as [Architecture De
 | Cross-cutting design notes | [Event Bus](docs/design/EVENTBUS.md), [Resilience](docs/design/RESILIENCE.md), and [Observability](docs/design/OBSERVABILITY.md) — the design of the messaging, resilience, and logging concerns. |
 | [Building Blocks](AK.BuildingBlocks/BUILDING_BLOCKS.md) | The shared cross-cutting library: DDD base types, authentication, messaging, resilience, and middleware. |
 | [Architecture Decision Records](docs/adr/README.md) | The rationale behind each significant design and infrastructure decision. |
+| [Known Issues Register](docs/KNOWN_ISSUES.md) | Open defects and deferred fixes — severity, impact, mitigation, and planned resolution — plus the resolved history. |
 | [Integration Tests](AK.IntegrationTests/INTEGRATION_TESTS.md) | SAGA and event-bus tests on the MassTransit in-memory harness. |
 | [Developer Testing Guide](docs/test/DevTestGuide.md) | End-to-end manual verification across Postman, messaging, the SAGA, and payments. |
 | [Security Test Guide](docs/test/SECURITY_TESTS.md) | Black-box and grey-box security testing methodology. |

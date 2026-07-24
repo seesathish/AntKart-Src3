@@ -12,11 +12,12 @@
 8. [Infrastructure Layer](#8-infrastructure-layer)
 9. [API Layer](#9-api-layer)
 10. [Database Schema](#10-database-schema)
-11. [API Reference](#11-api-reference)
-12. [Error Handling](#12-error-handling)
-13. [Testing Strategy](#13-testing-strategy)
-14. [Design Decisions](#14-design-decisions)
-15. [Running the Service](#15-running-the-service)
+11. [Integration Events](#11-integration-events)
+12. [API Reference](#12-api-reference)
+13. [Error Handling](#13-error-handling)
+14. [Testing Strategy](#14-testing-strategy)
+15. [Design Decisions](#15-design-decisions)
+16. [Running the Service](#16-running-the-service)
 
 ---
 
@@ -499,7 +500,7 @@ Registered via `AddAzureServiceBusMassTransit(configuration, "order", cfg => { .
 
 ---
 
-## 13. API Reference
+## 12. API Reference
 
 ### GET /api/orders
 
@@ -613,7 +614,7 @@ Standard health check endpoint.
 
 ---
 
-## 14. Error Handling
+## 13. Error Handling
 
 `ExceptionHandlerMiddleware` maps exceptions to HTTP status codes:
 
@@ -627,7 +628,7 @@ Standard health check endpoint.
 
 ---
 
-## 15. Testing Strategy
+## 14. Testing Strategy
 
 All tests are pure unit tests or EF InMemory integration tests — no network, no real database.
 
@@ -664,7 +665,7 @@ All tests are pure unit tests or EF InMemory integration tests — no network, n
 
 ---
 
-## 16. Design Decisions
+## 15. Design Decisions
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
@@ -680,7 +681,7 @@ All tests are pure unit tests or EF InMemory integration tests — no network, n
 
 ---
 
-## 17. Running the Service
+## 16. Running the Service
 
 ### Prerequisites
 

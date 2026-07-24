@@ -55,11 +55,11 @@ AK.Gateway/
 
 | Upstream (Gateway) | Downstream | Auth Required |
 |-------------------|------------|---------------|
-| `GET /api/products` | `ak-products-api:8080` | No |
-| `GET/POST /api/products/{id}` | `ak-products-api:8080` | POST: Yes |
-| `GET/POST/PUT/DELETE /api/v1/cart` | `ak-shoppingcart-api:8080` | Yes |
-| `GET/POST /api/orders` | `ak-order-api:8080` | Yes |
-| `GET /api/orders/{id}` | `ak-order-api:8080` | Yes |
+| `GET /api/products` | `ak-products:8080` | No |
+| `GET/POST /api/products/{id}` | `ak-products:8080` | POST: Yes |
+| `GET/POST/PUT/DELETE /api/v1/cart` | `ak-cart:8080` | Yes |
+| `GET/POST /api/orders` | `ak-order:8080` | Yes |
+| `GET /api/orders/{id}` | `ak-order:8080` | Yes |
 | `POST /api/auth/**` | `ak-useridentity-api:8080` | No |
 | `/health` (all services) | downstream `/health` | No |
 
@@ -123,7 +123,7 @@ await app.UseOcelot();
 - **Port:** 9090 (host) → 8000 (container)
 - **Dockerfile:** `AK.Gateway/AK.Gateway.API/Dockerfile`
 - **Build context:** repo root
-- **Downstream routes:** ak-products-api, ak-shoppingcart-api, ak-order-api, ak-payments-api. Identity is Microsoft Entra ID (an external managed service, validated at the gateway and each downstream service), not a routed container.
+- **Downstream routes:** ak-products, ak-cart, ak-order, ak-payments. Identity is Microsoft Entra ID (an external managed service, validated at the gateway and each downstream service), not a routed container.
 
 ---
 

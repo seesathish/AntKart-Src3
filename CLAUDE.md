@@ -35,7 +35,7 @@ AntKart/
 ├── AK.Seed-Data/         Committed product seed dataset (products.csv + README)
 ├── AntKart.sln
 ├── AntKart.postman_collection.json
-├── KNOWN-ISSUES.md       Tracker for known technical debt & deferred fixes (KI-NNN ids)
+├── KNOWN-ISSUES.md       Pointer to the known-issues register (moved to docs/KNOWN_ISSUES.md, KI-NNN ids)
 ├── docs/
 │   ├── adr/              Architecture Decision Records
 │   ├── architecture/     C4 diagram images + Structurizr workspace

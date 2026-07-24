@@ -2,11 +2,11 @@
 
 This guide is the entry point to how the AntKart platform is built and evolved through its cloud-native transformation. It gives the big picture and links out to focused deep-dive guides for each area.
 
-It is a **map, not the detail** — each delivery phase below has a dedicated guide that captures the concepts, the scripts, the execution, and the verification for that area. For the reasoning behind the architecture, see the [Architecture Decision Records index](docs/adr/README.md); for the architecture overview and diagrams, see the [README](README.md#architecture-overview).
+It is a **map, not the detail** — each delivery phase below has a dedicated guide that captures the concepts, the scripts, the execution, and the verification for that area. For the reasoning behind the architecture, see the [Architecture Decision Records index](docs/adr/README.md); for the architecture overview and diagrams, see the [README](README.md#architecture).
 
 > **How to use this guide.** This is the **spine** of the documentation. Each delivery phase below links to three things: the **build guide(s)** that walk through doing it, the **concept guides** to read first to understand it, and the **ADRs** that record the key decisions. Each phase is marked with its **status** so you know what is complete and what is in progress.
 >
-> For a single-page view of everything delivered, in progress, and planned across the whole platform, see the [Platform Roadmap](docs/ROADMAP.md).
+> For a single-page view of everything delivered, in progress, and planned across the whole platform, see the [Platform Roadmap](docs/ROADMAP.md); for open defects and deferred fixes, see the [Known Issues Register](docs/KNOWN_ISSUES.md).
 
 ---
 
@@ -18,7 +18,7 @@ The platform is delivered as a series of phases. Each phase builds on the previo
 
 The clean application baseline: independently deployable .NET microservices built with Clean Architecture, Domain-Driven Design, CQRS, an event-driven SAGA, an API gateway, resilience, and structured observability. This phase establishes the architecture decisions and the repository structure that everything else builds on.
 
-- **Build guides:** [Architecture overview](README.md#architecture-overview) · cross-cutting design docs — [Event Bus](docs/design/EVENTBUS.md), [Resilience](docs/design/RESILIENCE.md), [Observability](docs/design/OBSERVABILITY.md)
+- **Build guides:** [Architecture overview](README.md#architecture) · cross-cutting design docs — [Event Bus](docs/design/EVENTBUS.md), [Resilience](docs/design/RESILIENCE.md), [Observability](docs/design/OBSERVABILITY.md)
 - **Concepts to read first:** the cross-cutting design docs above (the application's own patterns)
 - **Decisions:** [ADR-001 through ADR-011](docs/adr/README.md) — microservices, Clean Architecture & DDD, fault tolerance, and the application patterns
 

@@ -99,7 +99,7 @@ REST order service. Data store: PostgreSQL (`AKOrdersDb`). Calls AK.Products for
 | `Entra:*` | JWT validation | Env / ConfigMap | committed (non-secret) |
 
 **Flag:** `ProductsApi:BaseUrl` (`http://localhost:5077/`) must be overridden to the in-cluster
-Products Service DNS name (e.g. `http://ak-products-api:8080/`). The committed PostgreSQL default has
+Products Service DNS name (e.g. `http://ak-products:8080/`). The committed PostgreSQL default has
 a plaintext password and must be replaced by the vaulted `ConnectionStrings--Postgres` secret.
 
 ---
@@ -134,8 +134,8 @@ Ocelot API gateway. Single entry point; routes to the four REST services. No dat
 | `GlobalConfiguration:BaseUrl` | External base URL used when building redirect/Location headers | Env / ConfigMap | `http://localhost:9090` |
 | `Entra:*` | Edge JWT validation | Env / ConfigMap | committed (non-secret) |
 
-**Flag:** `ocelot.json` hard-codes downstream hosts (`ak-products-api`, `ak-shoppingcart-api`,
-`ak-order-api`, `ak-payments-api`) on port `8080`. These must match the in-cluster Kubernetes Service
+**Flag:** `ocelot.json` hard-codes downstream hosts (`ak-products`, `ak-cart`,
+`ak-order`, `ak-payments`) on port `8080`. These must match the in-cluster Kubernetes Service
 names; supply the routing file via a mounted ConfigMap so it can be adjusted per environment without
 rebuilding the image. `GlobalConfiguration:BaseUrl` should be set to the gateway's external URL.
 
