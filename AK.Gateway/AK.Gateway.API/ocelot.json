@@ -6,7 +6,7 @@
       "DownstreamPathTemplate": "/api/v1/products/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
-        { "Host": "ak-products-api", "Port": 8080 }
+        { "Host": "ak-products", "Port": 8080 }
       ],
       "AuthenticationOptions": {
         "AuthenticationProviderKey": "Bearer"
@@ -29,7 +29,7 @@
       "DownstreamPathTemplate": "/api/v1/products",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
-        { "Host": "ak-products-api", "Port": 8080 }
+        { "Host": "ak-products", "Port": 8080 }
       ],
       "AuthenticationOptions": {
         "AuthenticationProviderKey": "Bearer"
@@ -52,7 +52,7 @@
       "DownstreamPathTemplate": "/api/v1/cart/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
-        { "Host": "ak-shoppingcart-api", "Port": 8080 }
+        { "Host": "ak-cart", "Port": 8080 }
       ],
       "AuthenticationOptions": {
         "AuthenticationProviderKey": "Bearer"
@@ -75,7 +75,7 @@
       "DownstreamPathTemplate": "/api/v1/cart",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
-        { "Host": "ak-shoppingcart-api", "Port": 8080 }
+        { "Host": "ak-cart", "Port": 8080 }
       ],
       "AuthenticationOptions": {
         "AuthenticationProviderKey": "Bearer"
@@ -98,7 +98,7 @@
       "DownstreamPathTemplate": "/api/orders/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
-        { "Host": "ak-order-api", "Port": 8080 }
+        { "Host": "ak-order", "Port": 8080 }
       ],
       "AuthenticationOptions": {
         "AuthenticationProviderKey": "Bearer"
@@ -121,7 +121,7 @@
       "DownstreamPathTemplate": "/api/orders",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
-        { "Host": "ak-order-api", "Port": 8080 }
+        { "Host": "ak-order", "Port": 8080 }
       ],
       "AuthenticationOptions": {
         "AuthenticationProviderKey": "Bearer"
@@ -143,21 +143,21 @@
       "UpstreamHttpMethod": [ "GET" ],
       "DownstreamPathTemplate": "/health",
       "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [ { "Host": "ak-products-api", "Port": 8080 } ]
+      "DownstreamHostAndPorts": [ { "Host": "ak-products", "Port": 8080 } ]
     },
     {
       "UpstreamPathTemplate": "/gateway/health/cart",
       "UpstreamHttpMethod": [ "GET" ],
       "DownstreamPathTemplate": "/health",
       "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [ { "Host": "ak-shoppingcart-api", "Port": 8080 } ]
+      "DownstreamHostAndPorts": [ { "Host": "ak-cart", "Port": 8080 } ]
     },
     {
       "UpstreamPathTemplate": "/gateway/health/orders",
       "UpstreamHttpMethod": [ "GET" ],
       "DownstreamPathTemplate": "/health",
       "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [ { "Host": "ak-order-api", "Port": 8080 } ]
+      "DownstreamHostAndPorts": [ { "Host": "ak-order", "Port": 8080 } ]
     },
     {
       "UpstreamPathTemplate": "/gateway/payments/{everything}",
@@ -165,7 +165,7 @@
       "DownstreamPathTemplate": "/api/payments/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
-        { "Host": "ak-payments-api", "Port": 8080 }
+        { "Host": "ak-payments", "Port": 8080 }
       ],
       "AuthenticationOptions": {
         "AuthenticationProviderKey": "Bearer"
@@ -187,7 +187,7 @@
       "UpstreamHttpMethod": [ "GET" ],
       "DownstreamPathTemplate": "/health",
       "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [ { "Host": "ak-payments-api", "Port": 8080 } ]
+      "DownstreamHostAndPorts": [ { "Host": "ak-payments", "Port": 8080 } ]
     }
   ],
   "GlobalConfiguration": {

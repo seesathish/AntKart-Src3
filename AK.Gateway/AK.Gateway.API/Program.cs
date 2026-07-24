@@ -8,24 +8,38 @@ using Ocelot.Provider.Polly;
 
 // AK.Gateway is the single entry point for all external traffic.
 // Clients never call downstream services (Products, Cart, Order, etc.) directly —
-// everything goes through this gateway on port 9090 (Docker) / 8000 (dev).
+// everything goes through this gateway, which listens on port 8080 in the cluster.
 //
-// Ocelot routes are defined in ocelot.json (Docker) and ocelot.Development.json (dev).
+// Ocelot routes are defined in ocelot.json (in-cluster ak-* Service names) or
+// ocelot.Development.json (localhost ports for local runs) — see the config loading below.
 // Each route specifies: upstream path, downstream service, rate limit, and QoS circuit breaker.
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 
-// Load config sources in priority order (last wins on duplicate keys):
-//   appsettings.json → appsettings.{Environment}.json → ocelot.json → ocelot.{Environment}.json → env vars
-// ocelot.Development.json overrides downstream URLs to use localhost ports for local dev.
-builder.Configuration
-    .SetBasePath(builder.Environment.ContentRootPath)
-    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
-    .AddJsonFile("ocelot.json", optional: false, reloadOnChange: true)
-    .AddJsonFile($"ocelot.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
-    .AddEnvironmentVariables();
+// WebApplication.CreateBuilder already loads appsettings.json, appsettings.{Environment}.json,
+// environment variables and the command line — so only the Ocelot ROUTING config is added here.
+//
+// Load EXACTLY ONE ocelot file, selected by environment. The two files are FULL REPLACEMENTS of
+// one another — they define the same upstream routes with different downstreams:
+//   * ocelot.json             — in-cluster ak-* Service names on 8080; the DEFAULT, used in
+//                               Production / AKS (and what the Helm ocelot ConfigMap supplies at
+//                               /app/ocelot.json).
+//   * ocelot.Development.json — localhost downstream ports, for running the gateway locally
+//                               against services started on the host. Used only in Development.
+//
+// Loading BOTH (the previous `AddJsonFile("ocelot.json")` + `AddJsonFile("ocelot.{env}.json")`)
+// merged their Routes arrays BY INDEX, which left the same upstream template defined twice and
+// made Ocelot refuse to start ("route ... has duplicate"). Ocelot's own AddOcelot(...) merger is
+// no help here either: it CONCATENATES routes across files (so a full-replacement override still
+// duplicates), and its on-disk merge cannot write to the read-only ConfigMap mount in the cluster.
+// Selecting a single file avoids the merge entirely — both profiles start and route correctly.
+var ocelotFile = $"ocelot.{builder.Environment.EnvironmentName}.json";
+if (!File.Exists(Path.Combine(builder.Environment.ContentRootPath, ocelotFile)))
+{
+    ocelotFile = "ocelot.json";
+}
+builder.Configuration.AddJsonFile(ocelotFile, optional: false, reloadOnChange: true);
 
 builder.AddSerilogLogging();
 
