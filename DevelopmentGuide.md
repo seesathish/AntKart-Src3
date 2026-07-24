@@ -7,6 +7,8 @@ It is a **map, not the detail** — each delivery phase below has a dedicated gu
 > **How to use this guide.** This is the **spine** of the documentation. Each delivery phase below links to three things: the **build guide(s)** that walk through doing it, the **concept guides** to read first to understand it, and the **ADRs** that record the key decisions. Each phase is marked with its **status** so you know what is complete and what is in progress.
 >
 > For a single-page view of everything delivered, in progress, and planned across the whole platform, see the [Platform Roadmap](docs/ROADMAP.md); for open defects and deferred fixes, see the [Known Issues Register](docs/KNOWN_ISSUES.md).
+>
+> To run and operate the platform from the command line — every `az`, `kubectl`, `helm`, `terragrunt`, and `docker` command with its parameters explained — see the [Operations Command Reference](docs/guides/operations-command-reference.md).
 
 ---
 
