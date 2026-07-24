@@ -1,498 +1,313 @@
 # AntKart — Security Test Guide
 
-This document covers ethical black-box and grey-box security tests for the AntKart platform. All tests are run against the live, running services.
+This document covers ethical black-box and grey-box security tests for the **current** AntKart platform: Microsoft **Entra ID** authentication, Azure **Service Bus** messaging, serverless **Azure Communication Services** notifications, and the real `/gateway/*` routes. All tests run against the live, running services.
 
-**Prerequisites:** the AntKart services running and reachable — cloud-deployed, or run locally against live cloud services / via cloud port-forwarding (the docker-compose-based Phase-1 local stack is preserved in the public AntKart reference repository) — plus `curl` and Python 3 available.
+> **Note (2026-07-24): Entra-native, no application identity service.** The standalone identity service was retired (see [ADR-021](../adr/ADR-021-retire-identity-service-for-entra.md)) — there is **no** `/api/auth/register`/`/api/auth/login` endpoint and **no** `/gateway/identity*` route. Tokens are obtained directly from Entra (see Setup). Notifications are **serverless** (Event Grid → Functions → ACS) with **no client-facing HTTP surface**, so there is no `/gateway/notifications*` route to test. Tests that targeted those retired components are updated or marked **N/A** below.
+
+> **PowerShell note.** These are bash examples (correct as-is for bash / WSL / Git Bash). In native **PowerShell**, `curl` is an alias for `Invoke-WebRequest`, so use **`curl.exe`** for the `-s`/`-H`/`-k`/`-w` flags. See [Operations Command Reference → Gotchas](../guides/operations-command-reference.md#j-gotchas-and-powershell-notes).
+
+**Prerequisites:** the AntKart services running and reachable — cloud-deployed (through the ingress) or run locally against live cloud services — plus `curl` (or `curl.exe`) and Python 3.
 
 ---
 
-## Setup
+## Setup — acquire two test-user tokens (Entra)
+
+There is no application login endpoint; tokens come from Entra. Acquire an access token for the API (`api://antkart-api-dev`) for **two distinct Entra test users** via the OAuth2 Authorization Code + PKCE flow (see [OAuth2 + PKCE Concepts](../guides/oauth2-pkce-concepts.md)). Both users must be **non-admin** (they hold no `admin` app role) — the privilege-escalation tests confirm non-admins are rejected. Provision the users and assign app roles in Entra / Microsoft Graph.
 
 ```bash
-# Ensure the AntKart services are running and reachable (cloud-deployed or
-# run locally against cloud services / via port-forward) before continuing.
-
-# Register two test accounts (run once)
-curl -s -X POST http://localhost:5085/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"sectest_user","email":"sectest@example.com","password":"SecTest@123","firstName":"Sec","lastName":"Test"}'
-
-curl -s -X POST http://localhost:5085/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"sectest_user2","email":"sectest2@example.com","password":"SecTest@123","firstName":"Sec2","lastName":"Test2"}'
-
-# Fetch tokens (re-run at the start of each test session — tokens expire)
-USER1_TOKEN=$(curl -s -X POST http://localhost:5085/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"sectest_user","password":"SecTest@123"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")
-
-USER2_TOKEN=$(curl -s -X POST http://localhost:5085/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"sectest_user2","password":"SecTest@123"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")
+# Paste tokens obtained for each test user via the Entra PKCE flow.
+# Each token's audience must be api://antkart-api-dev. Both users are standard (non-admin).
+USER1_TOKEN="<access token for test user 1>"
+USER2_TOKEN="<access token for test user 2>"
 ```
+
+The gateway base URL is `http://localhost:8000` for a local run, or `https://<public-ip>.nip.io` through the cluster ingress (add `curl.exe -k` for the Let's Encrypt **staging** certificate). Substitute `<GATEWAY>` below.
 
 ---
 
 ## Test Results Summary
 
-| # | Category | Last Result | Expected |
-|---|----------|-------------|----------|
-| 1 | Unauthenticated access | ✅ PASS | 401 on all protected routes |
-| 2 | JWT tampering / alg:none | ✅ PASS | 401 on forged tokens |
-| 3 | Privilege escalation | ✅ PASS | 403 for regular user on admin routes |
-| 4 | IDOR — Orders | ✅ PASS | 403 cross-user order access |
-| 4b | IDOR — Payments | ✅ PASS | 403 cross-user payment access |
-| 5 | Body injection (register) | ✅ PASS | Extra fields silently ignored |
-| 6 | Cart userId spoofing | ✅ PASS | JWT sub used; injected field ignored |
-| 7 | Input validation | ✅ PASS | 400 on invalid amounts |
-| 8 | Information disclosure | ✅ PASS | No stack traces in error responses |
-| 9 | Gateway rate limiting | ✅ PASS | 429 after threshold exceeded |
-| 10 | HTTP verb tampering | ✅ PASS | 405 on wrong verbs |
-| 11 | Brute force login | ✅ PASS | Account locked after 5 failed attempts |
-| 12 | Server header exposure | ✅ PASS | No `Server` header in responses |
-| 13 | Direct service bypass | ✅ PASS | Auth enforced on all services |
-| 14 | Mass assignment (Payments) | ✅ PASS | Extra body fields ignored |
-| 15 | Notification IDOR | ✅ PASS | JWT-scoped; admin endpoint restricted |
+| # | Category | Expected |
+|---|----------|----------|
+| 1 | Unauthenticated access | 401 on all protected routes |
+| 2 | JWT tampering / alg:none | 401 on forged tokens |
+| 3 | Privilege escalation | 403 for a regular user on admin routes |
+| 4 | IDOR — Orders | 403 cross-user order access |
+| 4b | IDOR — Payments | Each user sees only their own data |
+| 5 | Body injection (registration) | **N/A under Entra** — no application registration endpoint |
+| 6 | Cart userId spoofing | JWT `sub` used; injected field ignored |
+| 7 | Input validation | 400 on invalid amounts |
+| 8 | Information disclosure | No stack traces in error responses |
+| 9 | Gateway rate limiting | 429 after the per-route threshold |
+| 10 | HTTP verb tampering | 405 on wrong verbs |
+| 11 | Brute force / account lockout | Enforced by **Entra Smart Lockout** (verified in Entra sign-in logs) |
+| 12 | Server header exposure | No `Server` header in responses |
+| 13 | Direct service bypass | Auth enforced on each service directly |
+| 14 | Mass assignment (Payments) | Extra body fields ignored |
+| 15 | Notification IDOR | **N/A** — notifications have no client-facing HTTP surface |
 
 ---
 
 ## Test 1 — Unauthenticated Access
 
-**Objective:** Confirm all protected routes reject requests with no token.
+**Objective:** confirm protected routes reject requests with no token.
 
 ```bash
-# Cart (must be authenticated)
-curl -s -o /dev/null -w "Cart: %{http_code}\n" http://localhost:8000/gateway/cart
-
-# Orders
-curl -s -o /dev/null -w "Orders: %{http_code}\n" http://localhost:8000/gateway/orders/me
-
-# Payments
+curl -s -o /dev/null -w "Cart: %{http_code}\n"     http://localhost:8000/gateway/cart
+curl -s -o /dev/null -w "Orders: %{http_code}\n"   http://localhost:8000/gateway/orders/me
 curl -s -o /dev/null -w "Payments: %{http_code}\n" http://localhost:8000/gateway/payments/me
-
-# Notifications
-curl -s -o /dev/null -w "Notifications: %{http_code}\n" http://localhost:8000/gateway/notifications
 ```
 
-**Expected:** All return `401`.  
-**Note:** `GET /gateway/products` is intentionally public (no auth required) — 200 is correct.
+**Expected:** all return `401`.
+**Note:** `GET /gateway/products` is intentionally public — `200` is correct.
 
 ---
 
 ## Test 2 — JWT Tampering / alg:none Attack
 
-**Objective:** Confirm tampered and unsigned tokens are rejected.
+**Objective:** confirm tampered and unsigned tokens are rejected.
 
 ```bash
-# Tampered token (change one character in the payload)
 TAMPERED="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.TAMPERED_PAYLOAD.signature"
 curl -s -o /dev/null -w "Tampered JWT: %{http_code}\n" \
-  http://localhost:8000/gateway/cart \
-  -H "Authorization: Bearer $TAMPERED"
+  http://localhost:8000/gateway/cart -H "Authorization: Bearer $TAMPERED"
 
-# alg:none attack — base64url-encode {"alg":"none","typ":"JWT"} header
-ALG_NONE_TOKEN="eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJoYWNrZXIiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsiYWRtaW4iXX19."
+# alg:none — base64url of {"alg":"none",...} with a flat roles:[admin] claim
+ALG_NONE_TOKEN="eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJoYWNrZXIiLCJyb2xlcyI6WyJhZG1pbiJdfQ."
 curl -s -o /dev/null -w "alg:none token: %{http_code}\n" \
-  http://localhost:8000/gateway/cart \
-  -H "Authorization: Bearer $ALG_NONE_TOKEN"
+  http://localhost:8000/gateway/cart -H "Authorization: Bearer $ALG_NONE_TOKEN"
 ```
 
-**Expected:** Both return `401`.
+**Expected:** both return `401` — Entra JWT validation rejects an unsigned/tampered token at the gateway and again at each service (defence in depth).
 
 ---
 
 ## Test 3 — Privilege Escalation
 
-**Objective:** Confirm regular users cannot access admin-only endpoints.
+**Objective:** confirm a regular user cannot reach admin-only endpoints. The current admin-gated routes are the **order status update** and **product writes**.
 
 ```bash
-# Order status update (admin only)
+# Order status update — admin only
 ORDER_ID="00000000-0000-0000-0000-000000000001"
 curl -s -o /dev/null -w "PUT order status (user): %{http_code}\n" \
   -X PUT "http://localhost:8000/gateway/orders/$ORDER_ID/status" \
-  -H "Authorization: Bearer $USER1_TOKEN" \
-  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $USER1_TOKEN" -H "Content-Type: application/json" \
   -d '{"status":"Confirmed"}'
 
-# Admin user list (UserIdentity)
-curl -s -o /dev/null -w "Admin users list (user): %{http_code}\n" \
-  http://localhost:8000/gateway/identity/admin/users \
-  -H "Authorization: Bearer $USER1_TOKEN"
-
-# Admin notifications view
-curl -s -o /dev/null -w "Admin notifications (user): %{http_code}\n" \
-  http://localhost:8000/gateway/notifications/admin \
-  -H "Authorization: Bearer $USER1_TOKEN"
+# Product create — admin only
+curl -s -o /dev/null -w "POST product (user): %{http_code}\n" \
+  -X POST "http://localhost:8000/gateway/products" \
+  -H "Authorization: Bearer $USER1_TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"x","categoryName":"Men","subCategoryName":"Shirts","price":10}'
 ```
 
-**Expected:** All return `403`.
+**Expected:** both return `403` — authorization reads the flat `roles` claim; a token without `admin` is rejected.
 
 ---
 
 ## Test 4 — IDOR: Orders
 
-**Objective:** Confirm users cannot read or cancel another user's orders.
+**Objective:** confirm users cannot read or cancel another user's orders. (Create an order as user1 first — see the [Developer Test Guide](DevTestGuide.md) — and note its id.)
 
 ```bash
-# Create an order as user1 first, then try to access it as user2
-# Step 1: Create order as user1 (requires items in cart)
-# Step 2: Note the order ID from the response
-
-# Cross-user read
 ORDER_ID="<order-id-belonging-to-user1>"
 curl -s -o /dev/null -w "User2 reads User1 order: %{http_code}\n" \
-  "http://localhost:8000/gateway/orders/$ORDER_ID" \
-  -H "Authorization: Bearer $USER2_TOKEN"
-
-# Cross-user cancel
+  "http://localhost:8000/gateway/orders/$ORDER_ID" -H "Authorization: Bearer $USER2_TOKEN"
 curl -s -o /dev/null -w "User2 cancels User1 order: %{http_code}\n" \
-  -X DELETE "http://localhost:8000/gateway/orders/$ORDER_ID" \
-  -H "Authorization: Bearer $USER2_TOKEN"
-
-# Own orders (should work)
+  -X DELETE "http://localhost:8000/gateway/orders/$ORDER_ID" -H "Authorization: Bearer $USER2_TOKEN"
 curl -s -o /dev/null -w "User1 reads own orders: %{http_code}\n" \
-  "http://localhost:8000/gateway/orders/me" \
-  -H "Authorization: Bearer $USER1_TOKEN"
+  "http://localhost:8000/gateway/orders/me" -H "Authorization: Bearer $USER1_TOKEN"
 ```
 
-**Expected:** Cross-user → `403`. Own order → `200`.
+**Expected:** cross-user → `403`; own → `200`. Ownership is checked against `http.GetUserId()` (the JWT `sub`), never a path/body value.
 
 ---
 
 ## Test 4b — IDOR: Payments
 
-**Objective:** Confirm users cannot read another user's payment history.
+**Objective:** confirm users cannot read another user's payment history — the API exposes only `/me`, never another user's id.
 
 ```bash
-# Own payment history
 curl -s -o /dev/null -w "User1 own payments: %{http_code}\n" \
-  http://localhost:8000/gateway/payments/me \
-  -H "Authorization: Bearer $USER1_TOKEN"
-
-# Try to access user1's payments as user2 (no userId param accepted by design)
-curl -s -o /dev/null -w "User2 queries payments/me: %{http_code}\n" \
-  http://localhost:8000/gateway/payments/me \
-  -H "Authorization: Bearer $USER2_TOKEN"
-# Returns user2's own empty list — cannot cross-reference user1
+  http://localhost:8000/gateway/payments/me -H "Authorization: Bearer $USER1_TOKEN"
+curl -s -o /dev/null -w "User2 payments/me: %{http_code}\n" \
+  http://localhost:8000/gateway/payments/me -H "Authorization: Bearer $USER2_TOKEN"
 ```
 
-**Expected:** Each user sees only their own data. No way to specify another user's ID.
+**Expected:** each user sees only their own data; there is no parameter to specify another user's id.
 
 ---
 
-## Test 5 — Body Injection (Registration)
+## Test 5 — Body Injection (Registration) — N/A under Entra
 
-**Objective:** Confirm extra/dangerous fields in register body are ignored.
-
-```bash
-curl -s -X POST http://localhost:5085/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username":"injtest_user",
-    "email":"injtest@example.com",
-    "password":"Test@1234",
-    "firstName":"Inj",
-    "lastName":"Test",
-    "role":"admin",
-    "isAdmin":true,
-    "verified":true,
-    "groups":["admin","superuser"]
-  }'
-```
-
-**Expected:** `{"message":"User registered successfully."}` — extra fields silently ignored. Verify in Keycloak Admin that the registered user has only the `user` role.
+**Not applicable.** There is no application registration endpoint under Entra ID — user provisioning and role assignment are done in **Entra / Microsoft Graph**, so a client cannot self-register or inject role/`isAdmin` fields at registration. Extra-field / mass-assignment injection **is** still exercised against the endpoints that accept request bodies — see **Test 6** (cart) and **Test 14** (payments).
 
 ---
 
 ## Test 6 — Cart userId Spoofing
 
-**Objective:** Confirm cart operations use JWT identity, not a client-supplied userId.
+**Objective:** confirm cart operations use the JWT identity, not a client-supplied `userId`.
 
 ```bash
-# Attempt to add to cart with a spoofed userId in the body
 curl -s -X POST http://localhost:8000/gateway/cart/items \
-  -H "Authorization: Bearer $USER1_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "productId":"SPOOFED-PRODUCT-ID",
-    "quantity":1,
-    "userId":"victim-user-id",
-    "price":99.99,
-    "productName":"Test"
-  }' -w "\nHTTP:%{http_code}"
-
-# Confirm user1 can only see their own cart
-curl -s http://localhost:8000/gateway/cart \
-  -H "Authorization: Bearer $USER1_TOKEN" -w "\nHTTP:%{http_code}"
+  -H "Authorization: Bearer $USER1_TOKEN" -H "Content-Type: application/json" \
+  -d '{"productId":"SPOOFED-PRODUCT-ID","quantity":1,"userId":"victim-user-id","price":99.99,"productName":"Test"}' \
+  -w "\nHTTP:%{http_code}"
+curl -s http://localhost:8000/gateway/cart -H "Authorization: Bearer $USER1_TOKEN" -w "\nHTTP:%{http_code}"
 ```
 
-**Expected:** The `userId` field in the body is ignored; cart is created for the token holder.
+**Expected:** the `userId` field is ignored; the cart belongs to the token holder (the endpoint DTO has no `userId`; extra JSON is dropped by `System.Text.Json`).
 
 ---
 
 ## Test 7 — Input Validation
 
-**Objective:** Confirm validation rejects malformed and boundary-violating inputs.
+**Objective:** confirm validation rejects malformed and boundary-violating inputs.
 
 ```bash
-# Negative payment amount
+# Negative amount
 curl -s -X POST http://localhost:8000/gateway/payments/initiate \
-  -H "Authorization: Bearer $USER1_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"orderId":"00000000-0000-0000-0000-000000000001","orderNumber":"ORD-20260101-AAAAAAAA","amount":-500,"currency":"INR"}' \
-  -w "\nHTTP:%{http_code}"
-
+  -H "Authorization: Bearer $USER1_TOKEN" -H "Content-Type: application/json" \
+  -d '{"orderId":"00000000-0000-0000-0000-000000000001","orderNumber":"ORD-20260101-AAAAAAAA","amount":-500,"currency":"INR"}' -w "\nHTTP:%{http_code}"
 # Zero amount
 curl -s -X POST http://localhost:8000/gateway/payments/initiate \
-  -H "Authorization: Bearer $USER1_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"orderId":"00000000-0000-0000-0000-000000000001","orderNumber":"ORD-20260101-AAAAAAAA","amount":0,"currency":"INR"}' \
-  -w "\nHTTP:%{http_code}"
-
-# Missing required fields
+  -H "Authorization: Bearer $USER1_TOKEN" -H "Content-Type: application/json" \
+  -d '{"orderId":"00000000-0000-0000-0000-000000000001","orderNumber":"ORD-20260101-AAAAAAAA","amount":0,"currency":"INR"}' -w "\nHTTP:%{http_code}"
+# Missing fields
 curl -s -X POST http://localhost:8000/gateway/payments/initiate \
-  -H "Authorization: Bearer $USER1_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{}' -w "\nHTTP:%{http_code}"
+  -H "Authorization: Bearer $USER1_TOKEN" -H "Content-Type: application/json" -d '{}' -w "\nHTTP:%{http_code}"
 ```
 
-**Expected:** All return `400` with validation error details.
+**Expected:** all return `400` with validation details (FluentValidation).
 
 ---
 
 ## Test 8 — Information Disclosure
 
-**Objective:** Confirm error responses do not leak stack traces or internal details.
+**Objective:** confirm error responses do not leak stack traces or internals.
 
 ```bash
-# Non-existent resource
-curl -s "http://localhost:8000/gateway/orders/00000000-0000-0000-0000-000000000001" \
-  -H "Authorization: Bearer $USER1_TOKEN"
-
-# Invalid GUID (triggers 400 not 500)
-curl -s "http://localhost:8000/gateway/orders/not-a-guid" \
-  -H "Authorization: Bearer $USER1_TOKEN"
+curl -s "http://localhost:8000/gateway/orders/00000000-0000-0000-0000-000000000001" -H "Authorization: Bearer $USER1_TOKEN"
+curl -s "http://localhost:8000/gateway/orders/not-a-guid" -H "Authorization: Bearer $USER1_TOKEN"
 ```
 
-**Expected:** Clean JSON error message. No exception type names, file paths, line numbers, or stack traces.
+**Expected:** clean JSON error; no exception type names, file paths, line numbers, or stack traces (the shared `ExceptionHandlerMiddleware` maps exceptions to status codes).
 
 ---
 
 ## Test 9 — Gateway Rate Limiting
 
-**Objective:** Confirm rate limiting enforces per-route request limits.
+**Objective:** confirm per-route rate limiting. Requests must be truly concurrent — a sequential loop is too slow to saturate a 1-second window.
 
 ```bash
-# Products route: limit is 20 req/1s
-# IMPORTANT: requests must be truly concurrent — a sequential loop is too slow to
-# saturate a 1-second window. Use background jobs to fire all requests at once.
 tmpdir=$(mktemp -d)
 for i in $(seq 1 30); do
   curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/gateway/products \
     -H "Authorization: Bearer $USER1_TOKEN" > "$tmpdir/$i.out" &
-done
-wait
-
+done; wait
 SUCCESS=0; RATE_LIMITED=0
-for f in "$tmpdir"/*.out; do
-  code=$(cat "$f")
-  [ "$code" = "200" ] && SUCCESS=$((SUCCESS+1))
-  [ "$code" = "429" ] && RATE_LIMITED=$((RATE_LIMITED+1))
-done
-echo "200: $SUCCESS | 429: $RATE_LIMITED"
+for f in "$tmpdir"/*.out; do c=$(cat "$f"); [ "$c" = "200" ] && SUCCESS=$((SUCCESS+1)); [ "$c" = "429" ] && RATE_LIMITED=$((RATE_LIMITED+1)); done
+echo "200: $SUCCESS | 429: $RATE_LIMITED"     # expect ~ 200: 20 | 429: 10
 rm -rf "$tmpdir"
-# Expect: 200: 20 | 429: 10
 ```
 
-**Expected:** Exactly 20 requests pass; the remaining 10 return `429 Too Many Requests` with body `"Rate limit exceeded. Please slow down."`.
+**Expected:** ~20 pass; the rest return `429` with body `"Rate limit exceeded. Please slow down."`.
 
-**Route limits configured in `ocelot.json`:**
+**Per-route limits (from `ocelot.json`):**
+
 | Route | Limit |
 |-------|-------|
 | `/gateway/products` | 20 req/1s |
 | `/gateway/cart` | 10 req/1s |
 | `/gateway/orders` | 10 req/1s |
-| `/gateway/identity` | 30 req/1s |
 | `/gateway/payments` | 30 req/1s |
-| `/gateway/notifications` | 20 req/1s |
+
+(`AddMemoryCache()` in the gateway backs the rate-limit counters — without it, limits are silently ignored; see VULN-001.)
 
 ---
 
 ## Test 10 — HTTP Verb Tampering
 
-**Objective:** Confirm routes reject unexpected HTTP methods.
+**Objective:** confirm routes reject unexpected HTTP methods.
 
 ```bash
-# DELETE on a read-only collection route
-curl -s -o /dev/null -w "DELETE /gateway/products: %{http_code}\n" \
-  -X DELETE http://localhost:8000/gateway/products
-
-# PATCH on orders (not a supported verb in the API)
-curl -s -o /dev/null -w "PATCH /gateway/orders/me: %{http_code}\n" \
-  -X PATCH http://localhost:8000/gateway/orders/me \
-  -H "Authorization: Bearer $USER1_TOKEN"
-
-# PUT on cart root
-curl -s -o /dev/null -w "PUT /gateway/cart: %{http_code}\n" \
-  -X PUT http://localhost:8000/gateway/cart \
-  -H "Authorization: Bearer $USER1_TOKEN"
+curl -s -o /dev/null -w "DELETE /gateway/products: %{http_code}\n" -X DELETE http://localhost:8000/gateway/products
+curl -s -o /dev/null -w "PATCH /gateway/orders/me: %{http_code}\n" -X PATCH http://localhost:8000/gateway/orders/me -H "Authorization: Bearer $USER1_TOKEN"
 ```
 
-**Expected:** `405 Method Not Allowed`.
+**Expected:** the gateway routes only the configured verbs; an unconfigured verb is not routed (`404`/`405`).
 
 ---
 
-## Test 11 — Brute Force Login Protection
+## Test 11 — Brute Force / Account Lockout — enforced by Entra
 
-**Objective:** Confirm Keycloak locks an account after repeated failed login attempts.
+**Enforced at the identity provider, not the application.** With Entra ID there is no application login endpoint to brute-force; password validation happens at Entra, which applies **Smart Lockout** automatically (locking the account after repeated failures, per the tenant's configuration). There is nothing in the application to script against.
 
-```bash
-# 6 consecutive failed logins (threshold is 5)
-for i in $(seq 1 6); do
-  CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-    -X POST http://localhost:5085/api/auth/login \
-    -H "Content-Type: application/json" \
-    -d '{"username":"sectest_user","password":"WrongPassword!"}')
-  echo "Attempt $i: $CODE"
-done
-
-# 7th attempt — account should now be locked
-curl -s -X POST http://localhost:5085/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"sectest_user","password":"SecTest@123"}'
-```
-
-**Expected:** After 5 failures, the 6th attempt (even with the correct password) returns an error indicating the account is temporarily locked.
-
-**Keycloak brute force settings (configured in `keycloak/antkart-realm.json`):**
-| Setting | Value |
-|---------|-------|
-| `bruteForceProtected` | `true` |
-| `failureFactor` | `5` |
-| `waitIncrementSeconds` | `60` |
-| `maxFailureWaitSeconds` | `900` (15 min) |
-| `permanentLockout` | `false` |
-
-To unlock a user manually via Keycloak Admin Portal (`http://localhost:8090`) → Users → select user → Credentials tab → Clear temporary lockout.
+**How to verify:** confirm Smart Lockout is enabled for the tenant and review lockout events in the **Microsoft Entra admin center → Monitoring → Sign-in logs**. No application-side unlock is required — Smart Lockout resets automatically.
 
 ---
 
 ## Test 12 — Response Header Exposure
 
-**Objective:** Confirm the `Server` header is suppressed to avoid technology fingerprinting.
+**Objective:** confirm the `Server` header is suppressed (no technology fingerprinting).
 
 ```bash
-# Check Gateway response headers
 curl -sI http://localhost:8000/gateway/products | grep -i "server\|x-powered\|x-aspnet"
-
-# Check a direct service (should also be suppressed)
-curl -sI http://localhost:5087/health | grep -i "server"
+curl -sI http://localhost:5077/health | grep -i "server"     # a service directly (Products dev port)
 ```
 
-**Expected:** No `Server:` header in any response. All services set `AddServerHeader = false` in Kestrel options.
+**Expected:** no `Server:` header — every service sets `AddServerHeader = false` in Kestrel.
 
 ---
 
 ## Test 13 — Direct Service Bypass (Skip Gateway)
 
-**Objective:** Confirm auth is enforced at the service layer, not just the gateway.
+**Objective:** confirm auth is enforced at the service layer, not only the gateway (defence in depth). Reach a service directly on its local dev port (or via `kubectl port-forward` in the cluster).
 
 ```bash
-# Products: intentionally public — 200 expected
-curl -s -o /dev/null -w "Direct Products (no auth): %{http_code}\n" \
-  http://localhost:8080/api/v1/products
-
-# Orders: requires auth — 401 expected even without gateway
-curl -s -o /dev/null -w "Direct Orders (no auth): %{http_code}\n" \
-  http://localhost:8083/api/orders/me
-
-# Cart: requires auth — 401 expected
-curl -s -o /dev/null -w "Direct Cart (no auth): %{http_code}\n" \
-  http://localhost:8082/api/v1/cart
-
-# Payments: requires auth — 401 expected
-curl -s -o /dev/null -w "Direct Payments (no auth): %{http_code}\n" \
-  http://localhost:8085/api/payments/me
+curl -s -o /dev/null -w "Direct Products (no auth): %{http_code}\n" http://localhost:5077/api/v1/products   # public -> 200
+curl -s -o /dev/null -w "Direct Orders (no auth): %{http_code}\n"   http://localhost:5080/api/orders/me      # 401
+curl -s -o /dev/null -w "Direct Cart (no auth): %{http_code}\n"     http://localhost:5079/api/v1/cart        # 401
+curl -s -o /dev/null -w "Direct Payments (no auth): %{http_code}\n" http://localhost:5086/api/payments/me    # 401
 ```
 
-**Expected:** Auth-protected services return `401` even when the gateway is bypassed. Defence in depth is working.
+**Expected:** auth-protected services return `401` even when the gateway is bypassed. (Local dev ports: Products 5077, Cart 5079, Order 5080, Payments 5086.)
 
 ---
 
 ## Test 14 — Mass Assignment (Payments)
 
-**Objective:** Confirm extra fields injected in the request body are silently ignored and do not affect the stored record.
+**Objective:** confirm extra body fields are ignored and cannot influence the stored record.
 
 ```bash
-# Inject userId, isAdmin, role into a payment initiation request
 curl -s -X POST http://localhost:8000/gateway/payments/initiate \
-  -H "Authorization: Bearer $USER1_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "orderId":"00000000-0000-0000-0000-000000000001",
-    "orderNumber":"ORD-20260101-AAAAAAAA",
-    "amount":100.00,
-    "currency":"INR",
-    "userId":"hacker-injected-id",
-    "isAdmin":true,
-    "role":"admin"
-  }' -w "\nHTTP:%{http_code}"
+  -H "Authorization: Bearer $USER1_TOKEN" -H "Content-Type: application/json" \
+  -d '{"orderId":"00000000-0000-0000-0000-000000000001","orderNumber":"ORD-20260101-AAAAAAAA","amount":100.00,"currency":"INR","userId":"hacker-injected-id","isAdmin":true,"role":"admin"}' \
+  -w "\nHTTP:%{http_code}"
 ```
 
-**Expected:** `200` with a valid payment record. The `userId` stored in the database is the token holder's `sub` claim — not `"hacker-injected-id"`. Verify by calling `GET /gateway/payments/me` with both user tokens.
-
-**Why it's safe:** The `InitiatePaymentRequest` endpoint-layer DTO has no `userId` field. Extra JSON fields are silently dropped by `System.Text.Json`. The handler reads `userId` exclusively from `http.GetUserId()`.
+**Expected:** the injected `userId`/`isAdmin`/`role` are ignored — the stored `userId` is the token holder's `sub` (verify with `GET /gateway/payments/me`). The `InitiatePaymentRequest` DTO has no `userId`; the handler reads it only from `http.GetUserId()`.
 
 ---
 
-## Test 15 — Notification IDOR
+## Test 15 — Notification IDOR — N/A (serverless notifications)
 
-**Objective:** Confirm users can only read their own notifications.
-
-```bash
-# User1 sees their own notifications
-curl -s http://localhost:8000/gateway/notifications \
-  -H "Authorization: Bearer $USER1_TOKEN"
-
-# User2 tries to access admin notification view (all users)
-curl -s -o /dev/null -w "User2 → admin notifications: %{http_code}\n" \
-  http://localhost:8000/gateway/notifications/admin \
-  -H "Authorization: Bearer $USER2_TOKEN"
-
-# User2 tries to read a specific notification belonging to User1
-# (replace NOTIF_ID with a real ID from User1's notification list)
-NOTIF_ID="<notification-id-from-user1>"
-curl -s -o /dev/null -w "User2 reads User1 notification: %{http_code}\n" \
-  "http://localhost:8000/gateway/notifications/$NOTIF_ID" \
-  -H "Authorization: Bearer $USER2_TOKEN"
-```
-
-**Expected:**
-- `GET /gateway/notifications` — each user sees only their own (JWT-scoped in handler)
-- `GET /gateway/notifications/admin` with user token → `403`
-- `GET /gateway/notifications/{id}` for another user's notification → `403`
+**Not applicable.** Notifications are delivered by a serverless path (Order/Payments → Event Grid → Azure Functions → ACS email) with **no client-facing HTTP surface** and **no `/gateway/notifications*` route** — there is no notification API for a client to enumerate, so there is no notification IDOR to test. Notification **delivery** is verified end to end by placing an order and confirming the emails are received (see [Cluster End-to-End Verification](README.md#cluster-end-to-end-verification-public-ingress)); the recipient is derived from the signed-in user's `email` claim, never a client-supplied id.
 
 ---
 
 ## Vulnerability History
 
-| ID | Severity | Description | Status | Fixed In |
-|----|----------|-------------|--------|----------|
-| VULN-001 | Critical | Gateway rate limiting silently disabled — `AddMemoryCache()` missing | Fixed | `AK.Gateway/Program.cs` |
-| VULN-002 | Medium | Keycloak brute force threshold too high (30 → 5 attempts) | Fixed | `keycloak/antkart-realm.json` |
-| VULN-003 | Critical | IDOR — userId accepted as URL path param, not validated against JWT | Fixed | Cart, Order, Payments, Notification endpoints |
-| INFO-001 | Low | `Server: Kestrel` header exposed on all responses | Fixed | All service `Program.cs` files |
+| ID | Severity | Description | Status |
+|----|----------|-------------|--------|
+| VULN-001 | Critical | Gateway rate limiting silently disabled — `AddMemoryCache()` missing | Fixed (`AK.Gateway/Program.cs`) |
+| VULN-003 | Critical | IDOR — `userId` accepted as a URL path/body param, not validated against the JWT | Fixed (Cart, Order, Payments endpoints) |
+| INFO-001 | Low | `Server: Kestrel` header exposed on all responses | Fixed (all services set `AddServerHeader = false`) |
+
+*(A former item on the Phase-1 identity provider's brute-force threshold no longer applies — account lockout is now enforced by Entra Smart Lockout; see Test 11.)*
 
 ---
 
-## Re-running All Tests
+## Re-running the tests
 
-A convenience script is available at the repo root:
-
-```bash
-bash test_all.sh
-```
-
-This script covers functional flow testing. For security-specific regression testing, re-run the curl commands in this document against the live stack after every change to auth, routing, or endpoint logic.
+Re-run the `curl` commands in this document against the live stack after any change to authentication, routing, or endpoint logic. For the automated regression suites (unit + integration), see the [Testing index](README.md); for the functional end-to-end walk-through, the [Developer Test Guide](DevTestGuide.md); for the cluster end-to-end path, [Cluster End-to-End Verification](README.md#cluster-end-to-end-verification-public-ingress).

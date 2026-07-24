@@ -326,6 +326,8 @@ kubectl -n antkart describe certificate ak-gateway-tls   # watch Status/Events
 curl -k https://$HOST/health/live                        # staging cert is untrusted -> -k; expect 200 "Healthy"
 ```
 
+> **PowerShell note.** These are bash examples. In native PowerShell `curl` is an alias for `Invoke-WebRequest`, so use **`curl.exe -k https://$HOST/health/live`** for the `-k` (insecure-TLS) flag to take effect. See [Operations Command Reference → Gotchas](operations-command-reference.md#j-gotchas-and-powershell-notes).
+
 **Switch to production** once staging shows a `Ready` certificate:
 
 ```bash

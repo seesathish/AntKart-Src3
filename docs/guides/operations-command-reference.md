@@ -100,6 +100,8 @@ az acr build -r <ACR> -t antkart/<SERVICE>:<TAG> -f AK.Products/AK.Products.API/
 
 ### PostgreSQL Flexible Server — state, start/stop, firewall
 
+> **Note — the `eus2` in the server name is deliberate.** The Flexible Server is named `psql-antkart-dev-eus2` and lives in **East US 2**, while the rest of the platform is in **East US** (`<LOCATION>` = `eastus`). This is intentional, not a typo: at provisioning time East US was capacity-restricted for the Flexible Server SKU, so the server was created in East US 2. Cross-region latency to the AKS cluster is negligible for this workload. **Do not "correct" the name to match the region** — the server, its DNS name, and the vaulted connection strings all depend on it.
+
 ```bash
 az postgres flexible-server show -g <RG> -n <PG> --query "{name:name, state:state, fqdn:fullyQualifiedDomainName}" -o json
 ```
@@ -468,7 +470,7 @@ resource-group
   → workload-identity (needs aks, key-vault, servicebus, eventgrid)
 app-registration and governance are independent of the above.
 ```
-See [infrastructure/README](../../infrastructure/README.md) for the authoritative map. Two bootstrap steps run with `az` **before any Terraform**: the Terraform service principal, and the remote-state storage account/container.
+See [infrastructure/README](../../infrastructure/README.md) for the authoritative map. Two bootstrap steps run with `az` **before any Terraform** — the remote-state storage account/container and the Terraform service principal. These are documented in [section K](#k-one-time-bootstrap--terraform-backend--service-principal); they run **once**, before the first `terragrunt init`.
 
 ---
 
@@ -542,6 +544,117 @@ az postgres flexible-server stop -g <RG> -n <PG>   # stop the DB compute
 - **Subscription VM SKU allow-lists, and ARM vs amd64.** The intended VM size may be restricted in a region/subscription (`az vm list-skus ... restrictions`). Watch **architecture**: the available `b*ps_v2` sizes are **ARM64** and will **not** run the amd64-built service images — check architecture, not just availability.
 - **Mutable image tags with `imagePullPolicy: IfNotPresent` serve a stale image.** A node that cached a tag keeps the old image after you push a new one to the **same** tag. Fix: use an **immutable tag** (the commit SHA); as a stop-gap `kubectl rollout restart` / delete the pod to force a pull. Tracked as [KI-004](../KNOWN_ISSUES.md).
 - **Custom NSGs don't get automatic LoadBalancer rules.** With a bring-your-own VNet and a customer-managed NSG, AKS does **not** add the inbound rules a public Service needs, so internet traffic (and the ACME HTTP-01 challenge) is dropped by the deny-all baseline — the `AzureLoadBalancer` tag covers only health probes. Inbound 80/443 from the `Internet` tag must be added on the ingress subnet's NSG (the networking module's `allow_internet_ingress` flag). See [AKS Guide → Ingress troubleshooting](aks-guide.md#ingress-and-tls).
+
+---
+
+## K. One-time bootstrap — Terraform backend & service principal
+
+> **When you need this:** exactly **once**, when standing up the environment from nothing — **before the first `terragrunt init`**. Terraform needs somewhere to keep its state and an identity to authenticate as; neither can be created by Terraform itself (chicken-and-egg), so both are created here with `az`. After this runs once, everything else is Terraform/Terragrunt ([section G](#g-terraform--terragrunt)). Concept + rationale: [Infrastructure Guide](infrastructure-guide.md) and [ADR-012](../adr/ADR-012-iac-with-terraform-terragrunt.md).
+
+> **Secrets:** every value shown as `<...>` below is a placeholder — **no real subscription id, tenant id, client id, or client secret is ever committed**. The generated service-principal password is stored **only** in the CI/CD secret store (GitHub Actions repository secrets / environment secrets) and, for local runs, in the operator's own environment — never in this repo, `appsettings`, or Terraform files. The workloads themselves use **workload identity / OIDC federation** and hold no secret at all (see [section G](#g-terraform--terragrunt) and [ADR-022](../adr/ADR-022-cicd-github-actions-oidc.md)); this service principal exists for the bootstrap/CI apply, not for the running services.
+
+### K.1 — Terraform remote-state backend (storage account + container)
+
+```bash
+az group create --name rg-antkart-tfstate --location <LOCATION>
+```
+- Creates the resource group that holds **only** the Terraform state — kept separate from the platform resource group so a `terragrunt destroy` of the platform can never delete the state. `--location` is the Azure region (dev: `eastus`).
+
+```bash
+az storage account create \
+  --name stantkarttfstate \
+  --resource-group rg-antkart-tfstate \
+  --location <LOCATION> \
+  --sku Standard_LRS \
+  --encryption-services blob \
+  --min-tls-version TLS1_2 \
+  --allow-blob-public-access false
+```
+- Creates the storage account backing the state. `--sku Standard_LRS` = locally-redundant (sufficient for state); `--encryption-services blob` encrypts blob data at rest; `--min-tls-version TLS1_2` enforces modern TLS; `--allow-blob-public-access false` guarantees the state container can never be exposed publicly. The account name must be globally unique and lowercase (`stantkarttfstate`).
+
+```bash
+az storage container create \
+  --name tfstate \
+  --account-name stantkarttfstate \
+  --auth-mode login
+```
+- Creates the blob **container** (`tfstate`) that holds each unit's `terraform.tfstate`. `--auth-mode login` uses **your Entra identity** (not an account key) to create it — no storage key is fetched or stored. This matches the backend config Terragrunt injects (`resource_group_name = rg-antkart-tfstate`, `storage_account_name = stantkarttfstate`, `container_name = tfstate`), which is why [section B](#b-azure-cli--resource-provisioning-and-inspection) lists these exact names.
+
+### K.2 — Terraform automation service principal
+
+```bash
+az ad sp create-for-rbac \
+  --name "sp-antkart-terraform-dev" \
+  --role "Contributor" \
+  --scopes "/subscriptions/<subscription-id>"
+```
+- Creates an Entra **service principal** for Terraform to authenticate as when provisioning. `--name` is the app display name; `--role "Contributor"` lets it create/modify resources in the subscription; `--scopes` bounds that role to the one subscription (never broader). The command prints `appId`, `password`, and `tenant` **once** — these are the only time the password is shown:
+
+  ```jsonc
+  {
+    "appId":    "<client-id>",       // → ARM_CLIENT_ID
+    "password": "<client-secret>",   // → ARM_CLIENT_SECRET  (shown once; store immediately, never commit)
+    "tenant":   "<tenant-id>"        // → ARM_TENANT_ID
+  }
+  ```
+
+> **Contributor is not enough on its own for role-assignment units.** The `role-assignments` / `workload-identity` units create RBAC role assignments, which requires **User Access Administrator** (or a custom role with `Microsoft.Authorization/roleAssignments/write`). Grant it additionally, scoped to the subscription:
+>
+> ```bash
+> az role assignment create \
+>   --assignee "<client-id>" \
+>   --role "User Access Administrator" \
+>   --scope "/subscriptions/<subscription-id>"
+> ```
+> - `--assignee` is the service principal's `appId`/client id from above.
+
+### K.3 — Supplying the credentials to Terraform
+
+The AzureRM provider reads these from environment variables — set them in the shell (local) or as CI secrets (GitHub Actions); **do not** put them in `.tf`/`.tfvars` files:
+
+```bash
+export ARM_CLIENT_ID="<client-id>"
+export ARM_CLIENT_SECRET="<client-secret>"      # from K.2 — the value shown once
+export ARM_TENANT_ID="<tenant-id>"
+export ARM_SUBSCRIPTION_ID="<subscription-id>"
+# PowerShell equivalent: $env:ARM_CLIENT_ID = "<client-id>"  (etc.)
+```
+- `ARM_CLIENT_ID` / `ARM_CLIENT_SECRET` / `ARM_TENANT_ID` authenticate the service principal; `ARM_SUBSCRIPTION_ID` selects the target subscription. In CI these are repository/environment **secrets**; the running services never use them. With these set, `terragrunt init` in any unit connects to the `stantkarttfstate`/`tfstate` backend and `terragrunt apply` provisions as the service principal.
+
+---
+
+## L. External provider verification — Razorpay (payments)
+
+> **When you need this:** during payment testing, to confirm the **Razorpay sandbox** credentials the platform holds are valid and to inspect a specific test payment/order from the provider side. This verifies an **external provider**, not an AntKart service — the AntKart payment flow itself is exercised in the [Payments test walkthrough](../test/DevTestGuide.md) and [Security Test Guide](../test/SECURITY_TESTS.md) (Tests 7 & 14). Sandbox test cards/OTP: see [AK.Payments design doc](../../AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md).
+
+> **Secrets:** the Razorpay key id/secret are **sandbox** credentials stored in Key Vault as `Razorpay--KeyId` / `Razorpay--KeySecret` (see [section B → Key Vault](#b-azure-cli--resource-provisioning-and-inspection)) — never committed. Show them below only as placeholders. Read them at test time from the vault; do not paste real values into a shell history file.
+
+```bash
+# Pull the sandbox credentials from Key Vault into shell vars (they never leave your session)
+RZP_KEY_ID=$(az keyvault secret show --vault-name <VAULT> --name "Razorpay--KeyId"     --query value -o tsv)
+RZP_KEY_SECRET=$(az keyvault secret show --vault-name <VAULT> --name "Razorpay--KeySecret" --query value -o tsv)
+```
+- Resolves the vaulted secrets to `<razorpay-key-id>` / `<razorpay-key-secret>` **in memory only**. `--query value -o tsv` prints the bare value. Never echo these.
+
+```bash
+# 1. Verify the credentials are accepted by the Razorpay API (lists recent payments)
+curl.exe -s -u "$RZP_KEY_ID:$RZP_KEY_SECRET" "https://api.razorpay.com/v1/payments?count=5"
+```
+- Confirms the key pair authenticates. `-u "id:secret"` sends HTTP Basic auth (Razorpay's scheme); a `200` with a `items` array proves the credentials are valid, a `401` means they are wrong or expired. **`curl.exe`** (not the PowerShell `curl` alias) is required for `-u`/`-s` — see [section J](#j-gotchas-and-powershell-notes).
+
+```bash
+# 2. Inspect one payment the platform created during a test (id from the Payments record / logs)
+curl.exe -s -u "$RZP_KEY_ID:$RZP_KEY_SECRET" "https://api.razorpay.com/v1/payments/<razorpay-payment-id>"
+```
+- Fetches a single payment by its Razorpay id (`pay_...`, captured by AK.Payments at initiate/verify time). Use it to confirm status (`created` / `authorized` / `captured` / `failed`) matches what AntKart recorded — the two must agree after `VerifyPayment` runs.
+
+```bash
+# 3. Inspect the Razorpay order behind a payment (order id = rzp order, not the AntKart order number)
+curl.exe -s -u "$RZP_KEY_ID:$RZP_KEY_SECRET" "https://api.razorpay.com/v1/orders/<razorpay-order-id>"
+```
+- Fetches the Razorpay **order** (`order_...`) that AK.Payments created before checkout. Note this is Razorpay's order id, **distinct** from AntKart's `ORD-yyyyMMdd-XXXXXXXX` order number. Use it to cross-check the amount/currency and receipt.
+
+Clear the variables when done: `unset RZP_KEY_ID RZP_KEY_SECRET` (bash) / `Remove-Item Env:RZP_KEY_ID,Env:RZP_KEY_SECRET` (PowerShell).
 
 ---
 

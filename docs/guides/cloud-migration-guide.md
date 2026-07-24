@@ -452,6 +452,8 @@ curl -i http://localhost:5077/health/ready      # tolerant readiness: 200 unless
 curl -s http://localhost:5077/health/deps | jq  # diagnostics: per-dependency JSON (Cosmos, Key Vault, bus)
 ```
 
+> **PowerShell note.** These are bash examples; in native PowerShell `curl` aliases `Invoke-WebRequest`, so use **`curl.exe`** for the `-i`/`-s` flags (see [Operations Command Reference → Gotchas](operations-command-reference.md#j-gotchas-and-powershell-notes)).
+
 ### Verify
 
 - **Liveness stays shallow:** `/health/live` returns 200 even while a dependency (Cosmos / Key Vault) is down — it makes no external calls, so a dependency outage can never trigger a restart storm.

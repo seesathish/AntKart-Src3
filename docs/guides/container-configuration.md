@@ -131,7 +131,7 @@ Ocelot API gateway. Single entry point; routes to the four REST services. No dat
 | Config key | Purpose | Source in Kubernetes | Local default |
 |------------|---------|----------------------|---------------|
 | Ocelot `Routes[].DownstreamHostAndPorts` | Downstream service host/port for each route | Env / ConfigMap (mount `ocelot.json`) | `ak-*-api` hosts, port `8080` |
-| `GlobalConfiguration:BaseUrl` | External base URL used when building redirect/Location headers | Env / ConfigMap | `http://localhost:9090` |
+| `GlobalConfiguration:BaseUrl` | External base URL used when building redirect/Location headers | Env / ConfigMap | `http://ak-gateway:8080` (in-cluster); `http://localhost:8000` for a local run |
 | `Entra:*` | Edge JWT validation | Env / ConfigMap | committed (non-secret) |
 
 **Flag:** `ocelot.json` hard-codes downstream hosts (`ak-products`, `ak-cart`,
