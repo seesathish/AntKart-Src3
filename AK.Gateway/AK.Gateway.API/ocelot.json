@@ -191,7 +191,7 @@
     }
   ],
   "GlobalConfiguration": {
-    "BaseUrl": "http://localhost:9090",
+    "BaseUrl": "http://ak-gateway:8080",
     "RateLimitOptions": {
       "DisableRateLimitHeaders": false,
       "QuotaExceededMessage": "Rate limit exceeded. Please slow down.",
