@@ -2,6 +2,7 @@
 name: ak-products
 serviceName: products
 workloadIdentityClientId: "c2f1d5e5-fe15-48bd-b75f-d7e820e9c687"
+replicaCount: 2
 
 env:
   # CRITICAL: override the localhost:5001 default with the in-cluster Discount DNS.
