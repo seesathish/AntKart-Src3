@@ -69,8 +69,12 @@ Core Azure services in use: **Microsoft Entra ID**, **Azure Kubernetes Service**
 **Ingress and TLS**
 - Public HTTPS entry point via self-managed ingress-nginx exposing the **gateway only**, with cert-manager (Let's Encrypt, staging→production) automated TLS and a nip.io hostname; the AKS subnet's custom NSG opens inbound 80/443 from the Internet tag (the bring-your-own-VNet requirement AKS does not handle automatically) — [AKS Guide](guides/aks-guide.md#ingress-and-tls) · [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md) (target-state managed edge)
 
+**GitOps delivery (Argo CD)**
+- The cluster is Git-driven by Argo CD: a dedicated `antkart` AppProject scopes the allowed repository, destination namespace, and resource scope; six Applications (with an ApplicationSet alternative) reconcile the **same** generic Helm chart per service. Adopted with manual-first sync (the only diff was Argo CD's tracking-id annotations, no workload change), and a `replicaCount` change proven to deploy via `git push` alone — [GitOps Guide](guides/gitops-guide.md) · [deploy/argocd/README](../deploy/argocd/README.md)
+
 **End-to-end verified on the cluster**
 - Verified through the public HTTPS endpoint: browse products, add to cart, and create an order — driving server-authoritative price revalidation, the orchestrated SAGA, stock reservation, order confirmation, cart clearing, and both notification emails delivered via Event Grid → Functions → ACS — [Cluster end-to-end verification](test/README.md#cluster-end-to-end-verification-public-ingress)
+- Re-verified after a stop/redeploy: the six services reinstalled from ACR images; three (Order, Payments, Discount) self-healed from `CrashLoopBackOff` automatically once PostgreSQL was started (Kubernetes reconciliation, no pod intervention); ingress/TLS re-enabled and served the existing production certificate on the persisted public IP; and the full Postman journey — including the Razorpay payment-initiate call returning a `razorpayOrderId` (the outbound egress leg) — confirmed every integration path
 
 **Infrastructure as code**
 - Terraform modules (resource shape) composed by Terragrunt live units per environment over a shared remote-state backend, with a reviewed `plan` before every `apply` — [infrastructure/README](../infrastructure/README.md) · [Infrastructure Guide](guides/infrastructure-guide.md) · [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md) · [ADR-013](adr/ADR-013-key-vault-rbac-and-observability-foundation.md) (Key Vault RBAC + observability foundation)
@@ -81,8 +85,6 @@ Core Azure services in use: **Microsoft Entra ID**, **Azure Kubernetes Service**
 ## In progress
 
 - **Azure API Management (managed external edge)** — adding Azure API Management in front of the delivered internal ingress as the managed edge in a **two-gateway model**: APIM owns edge concerns (TLS termination, JWT validation, rate limiting and quotas, subscription keys and products, developer portal, request/response transformation) while the cluster's internal ingress continues to route to services. These are **sequenced layers, not competing gateways** — the internal cluster ingress prerequisite is delivered; APIM is now added in front of it. In-service JWT validation is unchanged (defence in depth) — [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md).
-- **GitOps delivery with Argo CD** — Argo CD drives the cluster's desired state from Git: a dedicated `antkart` AppProject and an ApplicationSet (with per-service standalone Applications as an alternative) reconcile the **same** generic Helm chart per service. Manifests and adoption runbook are in place, starting with manual sync for a safe, observable adoption of the already-running services; staged enablement of auto-sync / self-heal / prune to follow — [Argo CD README](../deploy/argocd/README.md).
-
 ## Planned — near term
 
 - **Kubernetes depth** — storage, networking, policies, probes, resource requests/limits, and failure-diagnosis practices applied to the running fleet.

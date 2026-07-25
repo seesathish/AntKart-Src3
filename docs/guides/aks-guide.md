@@ -365,14 +365,18 @@ The fix is to add inbound allow rules for **80 and 443 from the `Internet` tag**
 
 ---
 
+## GitOps delivery (Argo CD)
+
+The manual `helm upgrade` flow above is how the cluster was first deployed and remains valid, but the platform is **now Git-driven**: **Argo CD** runs in the cluster, watches this repository, and reconciles the live state to the **same** generic Helm chart per service. Deploying a change is a `git push`; Argo CD renders the identical chart and applies the result. Adoption was done manual-sync-first for a safe, observable cutover of the already-running services (the only diff was Argo CD's tracking-id annotations), and a `replicaCount` change was proven to roll out through Git alone.
+
+Full concept, structure, install, and adoption runbook: **[GitOps Guide](gitops-guide.md)** (manifests: [deploy/argocd/README](../../deploy/argocd/README.md)). The CI/CD platform and its authentication model are decided in [ADR-022](../adr/ADR-022-cicd-github-actions-oidc.md); the delivery pipeline is documented in the [DevOps Guide](devops-guide.md) as it is built.
+
+---
+
 ## Still to Come
 
-The sections below cover work that is **not yet delivered**. They are placeholders describing scope only; nothing here should be treated as done.
+The section below covers work that is **not yet delivered**. It is a placeholder describing scope only; nothing here should be treated as done.
 
 ### 🚧 Base-image hardening _(placeholder)_
 
 Moving the runtime image from the standard ASP.NET runtime to a hardened, minimal base and publishing an organisation-owned base image, per the intent in [ADR-018](../adr/ADR-018-aks-workload-identity-base-image.md).
-
-### GitOps delivery _(in progress)_
-
-The cluster's desired state is driven from Git by **Argo CD**: a dedicated `antkart` AppProject plus an ApplicationSet (with per-service standalone Applications as an alternative) reconcile the **same** generic Helm chart per service that this guide deploys manually. The gateway's `--set ingress.enabled/host` overrides are carried as Argo Helm parameters so the GitOps-rendered manifests match what is running. Adoption starts with **manual sync** for a safe, observable cutover of the already-running services, then stages in auto-sync / self-heal / prune. Manifests, install steps, and the adoption runbook: **[deploy/argocd/README](../../deploy/argocd/README.md)**. The CI/CD platform and its authentication model are decided in [ADR-022](../adr/ADR-022-cicd-github-actions-oidc.md); the delivery pipeline is documented in the [DevOps Guide](devops-guide.md) as it is built.

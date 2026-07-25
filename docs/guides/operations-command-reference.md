@@ -496,32 +496,35 @@ docker image prune -a -f                              # remove dangling/unused i
 
 ---
 
-## I. Operational routines
+## I. Session bring-up and shutdown
 
-> **When you need this:** to bring the platform up at the start of a session, and shut it down afterwards to control cost.
+> **When you need this:** to bring the platform up at the start of a session, and shut it down afterwards to control cost. The AKS node pool and the PostgreSQL server are the two billable compute resources that are stopped when idle; everything else is always-on managed services (Cosmos DB, Service Bus, Event Grid, Key Vault, ACS) with low/no idle cost.
 
 ### Start-of-session bring-up (in order)
 
 ```bash
 az login && az account set --subscription "<subscription-id>"   # 1. auth + context (section A)
 az aks start -g <RG> -n <CLUSTER>                                # 2. start the cluster nodes
-az postgres flexible-server start -g <RG> -n <PG>               # 3. start the relational DB
-az aks get-credentials -g <RG> -n <CLUSTER>                     # 4. kubeconfig (if not cached)
-kubelogin convert-kubeconfig -l azurecli                        # 5. Entra login for kubectl
-kubectl -n <NS> get pods                                        # 6. confirm the fleet is Running
-kubectl -n <NS> get ingress ak-gateway                          # 7. confirm the ingress host
-curl.exe -k https://<PUBLIC_IP>.nip.io/health/live              # 8. end-to-end reachability (staging cert => -k)
+az aks show -g <RG> -n <CLUSTER> --query powerState.code -o tsv  # 3. verify -> expect "Running"
+az postgres flexible-server start -g <RG> -n <PG>               # 4. start the relational DB (Order/Payments/Discount need it)
+az aks get-credentials -g <RG> -n <CLUSTER>                     # 5. kubeconfig (if not cached)
+kubelogin convert-kubeconfig -l azurecli                        # 6. Entra login for kubectl
+kubectl -n <NS> get pods                                        # 7. confirm the fleet is Running
+kubectl -n <NS> get ingress ak-gateway                          # 8. confirm the ingress host
+curl.exe -k https://<PUBLIC_IP>.nip.io/health/live              # 9. end-to-end reachability (staging cert => -k; prod cert => drop -k)
 ```
-- Order matters: the cluster and database must be running before the pods can become Ready. Cosmos DB, Service Bus, Event Grid, Key Vault, and ACS are always-on managed services — nothing to start.
+- **Order matters:** the cluster and database must be running before the pods can become Ready. `az aks show --query powerState.code -o tsv` confirms the start finished (`Running`) before you spend time on `kubectl`. If PostgreSQL is still stopped when the pods start, **Order/Payments/Discount will `CrashLoopBackOff` and then self-heal automatically** once the DB is up — the Kubernetes control loop keeps restarting them until the dependency returns, so no pod intervention is needed (starting the DB in step 4 avoids the churn).
+- **Argo CD resumes on restart.** The `argocd` namespace and its Applications persist across a stop; when the nodes come back, Argo CD reconciles the cluster to Git automatically — no re-install or re-apply. Deploying while stopped is just a `git push` that reconciles once the cluster is running again.
 
 ### End-of-session shutdown (cost control)
 
 ```bash
-az aks stop  -g <RG> -n <CLUSTER>                # stop node billing (control plane Free tier costs nothing)
-az postgres flexible-server stop -g <RG> -n <PG>   # stop the DB compute
+az aks stop  -g <RG> -n <CLUSTER>                                # stop node billing (control plane Free tier costs nothing)
+az postgres flexible-server stop -g <RG> -n <PG>                # stop the DB compute
+az aks show -g <RG> -n <CLUSTER> --query powerState.code -o tsv  # verify -> expect "Stopped"
 ```
-- **Stops (billing paused, state kept):** the AKS node pool and the PostgreSQL server.
-- **Persists automatically (no action, low/no idle cost):** Cosmos DB (serverless), Service Bus, Event Grid, Key Vault, ACS, the container registry, Log Analytics — and the **ingress load balancer's public IP**, which is **retained across an `az aks stop`, so the `nip.io` hostname and issued certificate stay valid** when you start again.
+- **Stops (billing paused, state kept):** the AKS node pool and the PostgreSQL server. `powerState.code` should read `Stopped` once `az aks stop` returns.
+- **Persists automatically (no action, low/no idle cost):** Cosmos DB (serverless), Service Bus, Event Grid, Key Vault, ACS, the container registry, Log Analytics — and the **ingress load balancer's public IP**, which is **retained across an `az aks stop`, so the `nip.io` hostname and the issued TLS certificate stay valid** when you start again (verified after a stop/redeploy: the existing production certificate was served on the same host with no re-issue).
 - **Only deleting removes cost/data:** to fully decommission, `terragrunt destroy` per unit (or `run-all destroy`). Deleting the cluster releases the LB public IP — the `nip.io` host would then change. Redis and Cosmos hold data; destroying them is irreversible.
 
 ---
@@ -658,9 +661,75 @@ Clear the variables when done: `unset RZP_KEY_ID RZP_KEY_SECRET` (bash) / `Remov
 
 ---
 
+## M. Argo CD (GitOps)
+
+> **When you need this:** to install, operate, and observe Argo CD, which drives the cluster's desired state from Git. Concept and full runbook: [GitOps Guide](gitops-guide.md); manifests: [deploy/argocd/README](../../deploy/argocd/README.md).
+
+### Install and access
+
+```bash
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl -n argocd rollout status deploy/argocd-server --timeout=180s
+```
+- `create namespace argocd` — Argo CD runs in, and reconciles Application/ApplicationSet objects only from, its own namespace. `apply -f <install.yaml>` — the official non-HA install (`stable` = latest release; swap for `.../argo-cd/<version>/manifests/install.yaml` to pin). `rollout status --timeout=180s` blocks until the API server is available.
+
+```bash
+# Initial admin password (username: admin) — bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
+```
+- Reads the auto-generated bootstrap password; `-o jsonpath` selects the base64 field, `base64 -d` decodes it. Change it after first login (`argocd account update-password`) and delete the secret. PowerShell decode: `[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}")))`.
+
+```bash
+kubectl -n argocd port-forward svc/argocd-server 8080:443
+argocd login localhost:8080 --username admin --password '<password>' --insecure
+```
+- `port-forward 8080:443` maps local `8080` to the server's `443`; browse **https://localhost:8080**. `argocd login ... --insecure` accepts the self-signed cert on the port-forward so the `argocd` CLI can be used.
+
+### Apply the project and Applications (order matters)
+
+```bash
+kubectl apply -f deploy/argocd/appproject-antkart.yaml          # 1. the AppProject FIRST
+kubectl apply -f deploy/argocd/applicationset-antkart.yaml      # 2. then the Applications (ApplicationSet)
+#   OR: kubectl apply -f deploy/argocd/applications/            #    the six standalone Applications
+```
+- **The AppProject must exist before any Application.** Each Application declares `project: antkart`; applying one first is rejected with `application is not allowed in project antkart`. Apply the ApplicationSet **or** the standalone Applications, never both (identical names collide).
+
+### List, diff, sync
+
+```bash
+argocd app list                                 # all Applications: SYNC + HEALTH
+argocd app get ak-products                       # one Application: per-resource sync/health + parameters
+argocd app diff ak-products                      # what a sync WOULD change (live vs Git) — read before syncing
+argocd app sync ak-products                      # apply Git state now (one-shot reconcile)
+argocd app wait ak-products --health             # block until Healthy
+kubectl -n argocd get applications               # the same, straight from the CRD (no argocd CLI needed)
+```
+- `app diff` is the pre-sync safety check (for an already-correct service the only diff is Argo's tracking-id annotation). `app sync` is the CLI equivalent of clicking **Sync**. `app wait --health` gates the next step on readiness.
+
+### Enable automated sync / self-heal / prune
+
+```bash
+argocd app set ak-products --sync-policy automated   # auto-sync on every Git change
+argocd app set ak-products --self-heal               # also revert live drift back to Git
+argocd app set ak-products --auto-prune              # also delete resources removed from Git
+argocd app set ak-products --sync-policy none         # back to manual
+```
+- `--sync-policy automated` = sync when Git changes; `--self-heal` = revert manual/controller drift; `--auto-prune` = delete what Git no longer declares (enable last — it is the only one that deletes). Enable in that order, only once every Application is stably Synced + Healthy. These mutate the **live** object; for a lasting change edit and commit `syncPolicy` in the manifest (the ApplicationSet re-asserts Git on the next reconcile).
+
+```bash
+# Set syncPolicy directly on the Application CRD (equivalent low-level operation)
+kubectl -n argocd patch application ak-products --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":{"selfHeal":true,"prune":true}}}}'
+```
+- `patch --type merge` sets `spec.syncPolicy.automated` in one call — the same effect as the `argocd app set` flags above, useful when the `argocd` CLI is not installed. Set `"automated":null` to return to manual sync.
+
+---
+
 ## See also
 
 - [AKS Guide](aks-guide.md) — cluster shape, operator access, workload identity, Helm deployment, ingress/TLS, troubleshooting.
+- [GitOps Guide](gitops-guide.md) — Argo CD concept, structure, and adoption runbook (the commands in section M in context).
 - [Infrastructure Guide](infrastructure-guide.md) — per-resource provisioning (Understand → Build → Execute → Verify).
 - [Container Configuration](container-configuration.md) — the config keys each service reads.
 - [deploy/helm/README](../../deploy/helm/README.md) · [deploy/cert-manager/README](../../deploy/cert-manager/README.md) — chart and issuer references.
