@@ -1,0 +1,115 @@
+# =============================================================================
+# ApplicationSet: antkart-services  (RECOMMENDED — one source of truth for all six)
+# =============================================================================
+# Templates six Argo CD Applications — one per service — from the `elements`
+# list below. All six instantiate the SAME chart (deploy/helm/antkart-service)
+# with a different per-service values file, exactly as the manual
+#   helm upgrade --install ak-<svc> deploy/helm/antkart-service -f deploy/helm/values/<svc>.yaml
+# commands do today. Adding/removing a service is a one-line list edit.
+#
+# Why ApplicationSet over six standalone Application manifests: the six services
+# are near-identical (same repo, same chart, same project, same destination) and
+# differ only by name + values file (+ the gateway's ingress). One template avoids
+# six copies drifting out of sync. The trade-off — a standalone Application is a
+# flatter, more obvious object and is trivial to hand-tweak per service — is why
+# the same six are ALSO provided individually under applications/ as an
+# alternative. Apply ONE of the two approaches, never both (they create the same
+# Application names).
+#
+# NOTE on the gateway: an ApplicationSet template supports only string
+# substitution ({{ .field }}), not per-element control flow, so every element
+# carries the SAME shape. `ingress.enabled`/`ingress.host` are therefore rendered
+# as Helm parameters for ALL six — but they are `false`/empty for the five
+# internal services (a no-op: identical to the chart/values default, and the
+# chart renders an Ingress only when ingress.enabled=true). Only the gateway sets
+# them to real values — the GitOps equivalent of its
+# `--set ingress.enabled=true --set ingress.host=<ip>.nip.io` overrides.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: antkart-services
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+    - list:
+        elements:
+          - name: ak-products
+            valueFile: products.yaml
+            ingressEnabled: "false"
+            ingressHost: ""
+          - name: ak-cart
+            valueFile: cart.yaml
+            ingressEnabled: "false"
+            ingressHost: ""
+          - name: ak-discount
+            valueFile: discount.yaml
+            ingressEnabled: "false"
+            ingressHost: ""
+          - name: ak-order
+            valueFile: order.yaml
+            ingressEnabled: "false"
+            ingressHost: ""
+          - name: ak-payments
+            valueFile: payments.yaml
+            ingressEnabled: "false"
+            ingressHost: ""
+          # The gateway is the ONLY service with an ingress. `ingressHost` is the
+          # one environment-specific value (the nip.io name from the ingress
+          # controller's LoadBalancer public IP); it is stable because that IP is
+          # retained across `az aks stop`. Set it ONCE to the real host.
+          - name: ak-gateway
+            valueFile: gateway.yaml
+            ingressEnabled: "true"
+            ingressHost: "REPLACE_WITH_PUBLIC_IP.nip.io"
+  template:
+    metadata:
+      name: "{{ .name }}"
+      # Argo CD only reconciles Applications in its own namespace.
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: antkart
+      source:
+        repoURL: https://github.com/seesathish/AntKart-Src3.git
+        targetRevision: master
+        path: deploy/helm/antkart-service
+        helm:
+          # Resolved relative to `path` (the chart dir), so ../values/<svc>.yaml
+          # is deploy/helm/values/<svc>.yaml — the same file the manual `helm -f`
+          # command uses.
+          valueFiles:
+            - "../values/{{ .valueFile }}"
+          parameters:
+            - name: ingress.enabled
+              value: "{{ .ingressEnabled }}"
+            - name: ingress.host
+              value: "{{ .ingressHost }}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: antkart
+      # ---------------------------------------------------------------------
+      # MANUAL SYNC to start (no `automated:` block). Argo CD tracks drift and
+      # reports OutOfSync, but changes are applied only when you click Sync (UI)
+      # or run `argocd app sync <name>`. This makes the first adoption of the
+      # already-running services safe and observable — you diff before applying.
+      #
+      # To enable automation later, add an `automated:` block (see README §"Enable
+      # auto-sync"). Recommended staged rollout:
+      #   1) automated: {}                      # auto-sync on every Git change
+      #   2) automated: { selfHeal: true }      # also revert manual/live drift
+      #   3) automated: { selfHeal: true, prune: true }  # also delete resources removed from Git
+      #        automated = sync automatically when Git changes
+      #        selfHeal  = if the live cluster drifts from Git, revert it
+      #        prune     = if a resource is deleted from Git, delete it from the cluster
+      # ---------------------------------------------------------------------
+      syncPolicy:
+        syncOptions:
+          # The antkart namespace already exists (created out-of-band); do not let
+          # Argo try to create/own it.
+          - CreateNamespace=false
+          # Adopt pre-existing, manually-helm-installed resources instead of
+          # failing on "already exists" — Argo takes ownership via server-side
+          # apply on first sync.
+          - ServerSideApply=true

@@ -1,0 +1,38 @@
+# Alternative to the ApplicationSet — one standalone Application per service.
+# Apply EITHER the applications/ directory OR applicationset-antkart.yaml, never
+# both (they create the same Application names). See ../README.md.
+#
+# The gateway is the only service with an ingress. The two values the running
+# deployment passes as `--set ingress.enabled=true --set ingress.host=<ip>.nip.io`
+# at helm-upgrade time are carried below as Helm parameters — the GitOps
+# equivalent of those --set flags. `ingress.host` is the one environment-specific
+# value (the nip.io name from the ingress controller's LoadBalancer public IP,
+# stable across `az aks stop`); set it ONCE to the real host.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ak-gateway
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: antkart
+  source:
+    repoURL: https://github.com/seesathish/AntKart-Src3.git
+    targetRevision: master
+    path: deploy/helm/antkart-service
+    helm:
+      valueFiles:
+        - ../values/gateway.yaml
+      parameters:
+        - name: ingress.enabled
+          value: "true"
+        - name: ingress.host
+          value: "REPLACE_WITH_PUBLIC_IP.nip.io"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: antkart
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true

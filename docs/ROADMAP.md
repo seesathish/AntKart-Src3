@@ -81,11 +81,11 @@ Core Azure services in use: **Microsoft Entra ID**, **Azure Kubernetes Service**
 ## In progress
 
 - **Azure API Management (managed external edge)** — adding Azure API Management in front of the delivered internal ingress as the managed edge in a **two-gateway model**: APIM owns edge concerns (TLS termination, JWT validation, rate limiting and quotas, subscription keys and products, developer portal, request/response transformation) while the cluster's internal ingress continues to route to services. These are **sequenced layers, not competing gateways** — the internal cluster ingress prerequisite is delivered; APIM is now added in front of it. In-service JWT validation is unchanged (defence in depth) — [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md).
+- **GitOps delivery with Argo CD** — Argo CD drives the cluster's desired state from Git: a dedicated `antkart` AppProject and an ApplicationSet (with per-service standalone Applications as an alternative) reconcile the **same** generic Helm chart per service. Manifests and adoption runbook are in place, starting with manual sync for a safe, observable adoption of the already-running services; staged enablement of auto-sync / self-heal / prune to follow — [Argo CD README](../deploy/argocd/README.md).
 
 ## Planned — near term
 
 - **Kubernetes depth** — storage, networking, policies, probes, resource requests/limits, and failure-diagnosis practices applied to the running fleet.
-- **GitOps delivery with Argo CD** — reconciling the cluster's desired state from Git.
 - **CI/CD with GitHub Actions** — build, test, and delivery pipelines authenticating to Azure with OIDC federated credentials and no stored secrets — [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md).
 - **Infrastructure provisioning and teardown pipelines** — automated apply and destroy of the environment as code.
 - **Observability** — OpenTelemetry instrumentation, Prometheus metrics, and Grafana dashboards, with Azure Monitor / Application Insights as the logging destination — [Observability design](design/OBSERVABILITY.md).

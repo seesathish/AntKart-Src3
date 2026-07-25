@@ -373,6 +373,6 @@ The sections below cover work that is **not yet delivered**. They are placeholde
 
 Moving the runtime image from the standard ASP.NET runtime to a hardened, minimal base and publishing an organisation-owned base image, per the intent in [ADR-018](../adr/ADR-018-aks-workload-identity-base-image.md).
 
-### 🚧 GitOps delivery _(placeholder)_
+### GitOps delivery _(in progress)_
 
-Continuous delivery of the cluster's desired state from Git. The CI/CD platform and its authentication model are decided in [ADR-022](../adr/ADR-022-cicd-github-actions-oidc.md); the delivery pipeline is documented in the [DevOps Guide](devops-guide.md) as it is built.
+The cluster's desired state is driven from Git by **Argo CD**: a dedicated `antkart` AppProject plus an ApplicationSet (with per-service standalone Applications as an alternative) reconcile the **same** generic Helm chart per service that this guide deploys manually. The gateway's `--set ingress.enabled/host` overrides are carried as Argo Helm parameters so the GitOps-rendered manifests match what is running. Adoption starts with **manual sync** for a safe, observable cutover of the already-running services, then stages in auto-sync / self-heal / prune. Manifests, install steps, and the adoption runbook: **[deploy/argocd/README](../../deploy/argocd/README.md)**. The CI/CD platform and its authentication model are decided in [ADR-022](../adr/ADR-022-cicd-github-actions-oidc.md); the delivery pipeline is documented in the [DevOps Guide](devops-guide.md) as it is built.
