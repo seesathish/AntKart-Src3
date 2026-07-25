@@ -61,7 +61,7 @@ spec:
           - name: ak-gateway
             valueFile: gateway.yaml
             ingressEnabled: "true"
-            ingressHost: "REPLACE_WITH_PUBLIC_IP.nip.io"
+            ingressHost: "20.246.197.150.nip.io"
   template:
     metadata:
       name: "{{ .name }}"
