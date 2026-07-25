@@ -28,7 +28,7 @@ spec:
         - name: ingress.enabled
           value: "true"
         - name: ingress.host
-          value: "REPLACE_WITH_PUBLIC_IP.nip.io"
+          value: "20.246.197.150.nip.io"
   destination:
     server: https://kubernetes.default.svc
     namespace: antkart
