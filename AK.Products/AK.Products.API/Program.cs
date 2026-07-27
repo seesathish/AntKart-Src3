@@ -95,7 +95,6 @@ if (runSeedOnStartup)
 }
 
 app.MapProductEndpoints();
-app.MapGet("/version", () => new { service = "products", version = "cicd-test-1", deployedVia = "GitOps" });
 app.MapDefaultHealthChecks();
 
 app.Run();
