@@ -132,7 +132,7 @@ Configuration in the workflow: organization **`seesathish`**, project key **`see
 
 Both use `exit-code: 1`, so a finding at the threshold fails the check and blocks the merge. `ignore-unfixed` is a commented switch to optionally suppress vulnerabilities that have no fix available yet.
 
-> **Action supply chain (ADR-022).** Third-party Actions (including Trivy) should be **pinned to a reviewed commit SHA** rather than a floating version tag before this pattern is rolled out across services. The Products CI file references version tags for readability and flags this in a comment.
+> **Action supply chain (ADR-022).** Every third-party Action in the Products CI workflow (including Trivy) is **pinned to an immutable commit SHA** — a version tag can be repointed, a commit SHA cannot — with the release version kept as a trailing `# vX.Y.Z` comment for readability. When bumping an Action, look up the SHA its new release tag points to and update both the SHA and the comment.
 
 ---
 
