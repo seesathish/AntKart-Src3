@@ -85,10 +85,10 @@ Core Azure services in use: **Microsoft Entra ID**, **Azure Kubernetes Service**
 ## In progress
 
 - **Azure API Management (managed external edge)** — adding Azure API Management in front of the delivered internal ingress as the managed edge in a **two-gateway model**: APIM owns edge concerns (TLS termination, JWT validation, rate limiting and quotas, subscription keys and products, developer portal, request/response transformation) while the cluster's internal ingress continues to route to services. These are **sequenced layers, not competing gateways** — the internal cluster ingress prerequisite is delivered; APIM is now added in front of it. In-service JWT validation is unchanged (defence in depth) — [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md).
+- **CI/CD with GitHub Actions** — per-service, path-filtered pipelines; two decoupled workflows per service (CI on pull request as the quality gate, CD on merge as delivery); GitOps delivery via a Git image-tag update reconciled by Argo CD, so CI/CD holds no cluster credentials. The pattern is established with Products first: the CI workflow (build, unit + in-memory integration tests with coverage, SonarCloud, Trivy) is in place; the CD workflow follows — [DevOps CI/CD Guide](guides/devops-cicd-guide.md) · [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md) · [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md).
 ## Planned — near term
 
 - **Kubernetes depth** — storage, networking, policies, probes, resource requests/limits, and failure-diagnosis practices applied to the running fleet.
-- **CI/CD with GitHub Actions** — build, test, and delivery pipelines authenticating to Azure with OIDC federated credentials and no stored secrets — [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md).
 - **Infrastructure provisioning and teardown pipelines** — automated apply and destroy of the environment as code.
 - **Observability** — OpenTelemetry instrumentation, Prometheus metrics, and Grafana dashboards, with Azure Monitor / Application Insights as the logging destination — [Observability design](design/OBSERVABILITY.md).
 - **Architecture and flow diagrams** — C4 plus Mermaid, including regeneration of the C4 model to match the current service set — [Architecture reference](architecture/C4Architecture.md).

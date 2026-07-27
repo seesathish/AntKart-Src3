@@ -52,11 +52,11 @@ The services are containerized and run on a managed Kubernetes (AKS) cluster, wi
 
 ### 5. DevOps & DevSecOps · _Status: in progress_
 
-Continuous integration and delivery, security and compliance gates, and end-to-end observability tie the platform together and keep it shippable and safe.
+Continuous integration and delivery, security and compliance gates, and end-to-end observability tie the platform together and keep it shippable and safe. The CI/CD pattern is being established with Products first: per-service, path-filtered pipelines with two decoupled workflows per service (CI on pull request, CD on merge), delivering through Git for Argo CD to reconcile so no cluster credentials live in CI. The Products CI quality gate (build, unit + in-memory integration tests with coverage, SonarCloud, Trivy) is in place; the CD workflow follows.
 
-- **Build guide:** [DevOps Guide](docs/guides/devops-guide.md) _(in progress)_
-- **Concepts to read first:** [Observability design](docs/design/OBSERVABILITY.md)
-- **Decisions:** [ADR-022](docs/adr/ADR-022-cicd-github-actions-oidc.md) (CI/CD on GitHub Actions with OIDC federated credentials to Azure)
+- **Build guide:** [DevOps CI/CD Guide](docs/guides/devops-cicd-guide.md) — the journey from code change to running pod, the per-service workflow layout, SonarCloud/Trivy gates, branch protection, and OIDC/secrets handling _(DevOps Guide index: [devops-guide.md](docs/guides/devops-guide.md))_
+- **Concepts to read first:** [Observability design](docs/design/OBSERVABILITY.md) · [GitOps Guide](docs/guides/gitops-guide.md) (how delivery reaches the cluster)
+- **Decisions:** [ADR-022](docs/adr/ADR-022-cicd-github-actions-oidc.md) (CI/CD on GitHub Actions with OIDC federated credentials to Azure) · [ADR-023](docs/adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md) (pipeline design and repository strategy)
 
 ---
 
