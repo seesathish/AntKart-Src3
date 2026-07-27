@@ -2,7 +2,7 @@
 
 This guide explains how a code change becomes a running pod on the cluster, and how the pipelines are built. It is written for a reader learning CI/CD — every concept is explained rather than assumed. The design decisions behind it are recorded in [ADR-023](../adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md) (pipeline design and repository strategy) and [ADR-022](../adr/ADR-022-cicd-github-actions-oidc.md) (GitHub Actions + OIDC to Azure).
 
-The pattern is being established with **one service — Products — first**, then templated to the others. Today the **CI (pull-request) workflow** is in place; the **CD (merge) workflow** follows next.
+The pattern is being established with **one service — Products — first**, then templated to the others. Both halves are now in place for Products: the **CI (pull-request) quality gate** and the **CD (merge) delivery workflow**.
 
 ---
 
@@ -154,20 +154,39 @@ With this in place, a PR cannot merge until `build-test`, `sonar`, and `trivy` a
 ### Secrets and OIDC
 
 - **`SONAR_TOKEN`** — a GitHub Actions repository secret (SonarCloud token). It **must exist** for the `sonar` job to authenticate; it already does. This is the only secret CI uses.
-- **Azure authentication uses OIDC — no stored secret.** When the CD workflow lands, it authenticates to Azure (to push the image) by exchanging a short-lived **GitHub OIDC token** for an Entra token via a **federated credential**, scoped to this repository/branch/environment. Nothing long-lived is stored in GitHub (ADR-022). CI, being a pure quality gate, needs no Azure access at all.
+- **Azure authentication uses OIDC — no stored secret.** The CD workflow authenticates to Azure (to push the image) by exchanging a short-lived **GitHub OIDC token** for an Entra token via a **federated credential**, scoped to this repository and the `refs/heads/master` ref. The `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID` it uses are repository **variables** — identifiers, not secrets — so nothing long-lived is stored in GitHub (ADR-022). CI, being a pure quality gate, needs no Azure access at all.
 
 ---
 
-## What comes next (CD)
+## CD — delivery on merge to master
 
-The CD workflow (`products-cd.yml`) will trigger on push to `master` affecting Products and will:
+The CD workflow, [`.github/workflows/products-cd.yml`](../../.github/workflows/products-cd.yml), triggers on **push to `master`** affecting `AK.Products/**` or `AK.BuildingBlocks/**` (not `pull_request` — that is CI's job). It has two jobs:
 
-1. Build an **immutable image** tagged with the commit SHA.
-2. Authenticate to ACR via **OIDC** and push it.
-3. **Update the Products image tag in Git**, confined to the values the cluster watches and guarded against retriggering the pipeline.
-4. Leave the deployment to **Argo CD**, which reconciles the change into a rolling update.
+**Job 1 — `build-and-push`:**
 
-It will be documented here as it is delivered.
+1. **Compute an immutable tag** — the short commit SHA (`${GITHUB_SHA::7}`). A given tag always means exactly one build (the opposite of a mutable `dev`/`latest` tag).
+2. **Authenticate to Azure with OIDC — no secret.** `azure/login` exchanges a short-lived GitHub OIDC token for an Entra token for the `id-ak-cicd-dev` identity, using three repository **variables** — `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (identifiers, not secrets; provisioned by the `github-oidc` Terraform unit). The presented OIDC subject `repo:seesathish/AntKart-Src3:ref:refs/heads/master` matches the identity's federated credential. The job declares `permissions: id-token: write` — required to mint the OIDC token.
+3. **Build and push.** `az acr login` wires the OIDC session into Docker; the image is built from `AK.Products/AK.Products.API/Dockerfile` with the **repository root as build context** (matching the manual build — the Dockerfile COPYs repo-root-relative paths), tagged with the SHA (and `latest`), and pushed to `acrantkartdev.azurecr.io/antkart/products:<sha>`. The identity's only privilege is **AcrPush**.
+
+**Job 2 — `update-gitops`** (this is the deploy):
+
+4. **Bump the image tag in Git.** It sets **`.image.tag`** in `deploy/helm/values/products.yaml` to the new SHA with `yq -i '.image.tag = strenv(TAG)'`. That field does not exist in the file today (the chart default is `dev`); `yq` **creates** the `image.tag` key — which is why `yq` is used rather than `sed` (sed cannot add a missing key). The value is passed via the environment (`strenv`) so it can never be interpreted as an expression.
+5. **Commit and push** `chore(cd): products image -> <sha> [skip ci]` to `master` as `github-actions[bot]` (`permissions: contents: write`).
+6. **Argo CD deploys.** Argo CD watches `deploy/helm/values/products.yaml`; the commit makes the `ak-products` Application `OutOfSync`, and it rolls the Deployment to the new image on sync — automatically once auto-sync is enabled, otherwise on a manual sync (see the [GitOps Guide](gitops-guide.md)). **CD runs no `helm`/`kubectl` and holds no cluster credentials** — its "deploy" action is the Git commit.
+
+**Loop prevention (three independent guards).** The tag-bump commit only touches `deploy/helm/values/**`, which is **not** in the CD path filter, so it can never retrigger CD; the message carries `[skip ci]`; and pushes made with the built-in `GITHUB_TOKEN` do not trigger further workflow runs by GitHub's design.
+
+### Branch protection and the CD tag-bump
+
+`master` requires a pull request and passing status checks, so the CD job's **direct push** of the tag-bump would be blocked by default. Three options were considered:
+
+- **(a) Let the automated tag-bump bypass branch protection** — grant the `github-actions` bot a bypass on the branch ruleset, so *only* the deterministic CD commit to the values file may push directly; humans still go through PRs.
+- **(b) Have CD open a PR that auto-merges** once checks pass.
+- **(c) Move the deploy manifests to a separate path/branch (or a config repo)** outside this protection.
+
+**Chosen: (a).** For a solo maintainer it is the simplest and is secure in this shape: the tag-bump is a machine-generated, single-line change to a values file, and the **application code it points to already passed the CI gate** on its way into `master`, so the bump adds no unreviewed application code. Option (b) is fragile here — the required check `products-ci` is path-filtered to `AK.Products/**` etc. and would **never run** on a values-only PR, so the required-check would sit forever "Expected", deadlocking auto-merge; and a PR opened with `GITHUB_TOKEN` does not trigger workflows anyway (it would need a PAT or GitHub App). Option (c) is cleaner long-term and is recorded as the evolution path in [ADR-023](../adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md) (separate config repository), but adds moving parts now.
+
+**One-time setup for (a):** in **Settings → Rules → Rulesets** (or branch protection) for `master`, add a **bypass** for the **GitHub Actions** actor (Deploy/Actions bypass) — or, on classic branch protection, keep "Require a pull request" but allow the Actions bot to bypass. Human pushes remain gated; only the CD workflow's tag-bump is exempt.
 
 ---
 
@@ -177,4 +196,6 @@ It will be documented here as it is delivered.
 - [ADR-022 — CI/CD on GitHub Actions with OIDC](../adr/ADR-022-cicd-github-actions-oidc.md) — the platform and authentication choice.
 - [GitOps Guide](gitops-guide.md) — how Argo CD turns a Git change into a rolling update.
 - [Operations Command Reference](operations-command-reference.md) — the `az`/`kubectl`/`helm`/`argocd` commands with flags explained.
-- [`.github/workflows/products-ci.yml`](../../.github/workflows/products-ci.yml) — the Products CI workflow this guide describes.
+- [`.github/workflows/products-ci.yml`](../../.github/workflows/products-ci.yml) — the Products CI (quality-gate) workflow.
+- [`.github/workflows/products-cd.yml`](../../.github/workflows/products-cd.yml) — the Products CD (delivery) workflow.
+- [`infrastructure/modules/github-oidc`](../../infrastructure/modules/github-oidc) — the Terraform for the CD federated identity (AcrPush, no secret).
