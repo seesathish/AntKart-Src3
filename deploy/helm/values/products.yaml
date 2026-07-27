@@ -3,7 +3,6 @@ name: ak-products
 serviceName: products
 workloadIdentityClientId: "c2f1d5e5-fe15-48bd-b75f-d7e820e9c687"
 replicaCount: 2
-
 env:
   # CRITICAL: override the localhost:5001 default with the in-cluster Discount DNS.
   # No trailing slash, matching the appsettings default form (http://localhost:5001).
@@ -17,3 +16,5 @@ env:
   Entra__TenantId: "4cacc56a-0d38-46c4-ba20-429d51d7b449"
   Entra__Audience: "api://antkart-api-dev"
   Entra__ClientId: "ea22550b-a0ae-4847-a2e2-2524752d9522"
+image:
+  tag: ede8b04
