@@ -225,7 +225,7 @@ jobs:
       # dependencies, leaked secrets, and IaC/Dockerfile misconfiguration. Fails
       # the job (exit-code 1) on any finding at TRIVY_SEVERITY or above.
       - name: Trivy filesystem/dependency scan (AK.Products)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: 'fs'
           scan-ref: 'AK.Products'
@@ -236,7 +236,7 @@ jobs:
 
       # (2) Dedicated Dockerfile misconfiguration scan of the Products image build.
       - name: Trivy Dockerfile scan (Products)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: 'config'
           scan-ref: 'AK.Products/AK.Products.API/Dockerfile'
