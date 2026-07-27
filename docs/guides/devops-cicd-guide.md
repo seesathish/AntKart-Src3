@@ -2,7 +2,7 @@
 
 This guide explains how a code change becomes a running pod on the cluster, and how the pipelines are built. It is written for a reader learning CI/CD — every concept is explained rather than assumed. The design decisions behind it are recorded in [ADR-023](../adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md) (pipeline design and repository strategy) and [ADR-022](../adr/ADR-022-cicd-github-actions-oidc.md) (GitHub Actions + OIDC to Azure).
 
-The pattern is being established with **one service — Products — first**, then templated to the others. Both halves are now in place for Products: the **CI (pull-request) quality gate** and the **CD (merge) delivery workflow**.
+The pattern is established with **one service — Products — first**, then templated to the others. Both halves are delivered and **proven end to end**: a `/version` change flowed through the full loop — PR → gate → merge → image build → ACR → Git image-tag bump → Argo CD auto-sync — and was served from a pod running the exact commit-SHA image tag, hands-free. The **CI (pull-request) quality gate** and the **CD (merge) delivery workflow** are both live.
 
 ---
 
@@ -38,8 +38,8 @@ The two are **separate workflows** with different triggers, purposes, and permis
 1. **A developer opens a pull request.** The change lives on a branch; the PR is the proposal to merge it into `master`.
 2. **CI runs as the quality gate.** The Products CI workflow builds the service, runs the unit and in-memory integration tests with coverage, runs SonarCloud static analysis, and runs Trivy security scanning. These appear as **status checks** on the PR.
 3. **Review and merge.** A human reviews; branch protection requires the CI checks to be green before the merge button is enabled. Merging produces one commit on `master`.
-4. **CD runs on the merge.** The CD workflow (next step of this build) builds an **immutable image** tagged with the commit SHA, pushes it to the Azure Container Registry (authenticating with an **OIDC token exchanged for an Entra token — no stored secret**), and then **updates the service's image tag in Git** (a commit to the values the cluster watches).
-5. **Argo CD reconciles.** Argo CD runs *inside* the cluster, watches Git, notices the tag changed, and performs a rolling update to the new image. See the [GitOps Guide](gitops-guide.md).
+4. **CD runs on the merge.** The CD workflow builds an **immutable image** tagged with the commit SHA, pushes it to the Azure Container Registry (authenticating with an **OIDC token exchanged for an Entra token — no stored secret**), and then **updates the service's image tag in Git** (a commit to the values the cluster watches).
+5. **Argo CD reconciles.** Argo CD runs *inside* the cluster, watches Git, notices the tag changed, and — with **auto-sync enabled** on `ak-products` — performs a rolling update to the new image with no manual step. See the [GitOps Guide](gitops-guide.md).
 6. **New pods are live.** The Deployment rolls the ReplicaSet to the new image; the old pods drain once the new ones are Ready.
 
 No step 4–6 command runs against the cluster from GitHub. The only actor that changes the cluster is Argo CD, from within it.
@@ -138,18 +138,29 @@ Both use `exit-code: 1`, so a finding at the threshold fails the check and block
 
 ## Branch protection — making CI a required gate
 
-Branch protection is what turns "the checks ran" into "the checks *must pass* before merge". Configure it on `master` (GitHub → **Settings → Branches → Add branch ruleset / protection rule**, or **Settings → Rules**):
+Branch protection is what turns "the checks ran" into "the checks *must pass* before merge". As-built, `master` is protected by the ruleset **`master-protection`** (Active) in **Settings → Rules → Rulesets**:
 
-1. **Branch name pattern:** `master`.
-2. **Require a pull request before merging** — no direct pushes to `master`; changes arrive only via PR. (Optionally require at least one approving review.)
-3. **Require status checks to pass before merging**, and mark these checks **required** (they appear once the workflow has run at least once so GitHub knows their names):
-   - `build-test`
-   - `sonar`
-   - `trivy`
+1. **Target:** the `master` branch.
+2. **Require a pull request before merging** — no direct pushes to `master` for gated content; changes arrive via PR. (Optionally require at least one approving review.)
+3. **Require status checks to pass before merging** — the **four** required checks (they appear once each workflow has run once so GitHub knows their names):
+   - `build-test` — the compile + test job
+   - `sonar` — the SonarScanner-for-.NET job in the workflow
+   - `trivy` — the security-scan job
+   - `SonarCloud Code Analysis` — SonarCloud's own quality-gate status posted back on the PR
 4. **Require branches to be up to date before merging** — the PR must include the latest `master` so the checks reflect the post-merge state.
-5. **(Recommended)** Include administrators, and block force-pushes and deletions of `master`.
+5. **Block force-pushes and deletions** of `master`.
+6. **Bypass list:** **Repository admin**. This is what lets the CD tag-bump push (and admin infrastructure/doc pushes) proceed — see below.
 
-With this in place, a PR cannot merge until `build-test`, `sonar`, and `trivy` are all green — CI is a genuine gate, not just a report.
+With this in place, an application-code PR cannot merge until all four checks are green — CI is a genuine gate, not just a report.
+
+### The deliberate split — application code vs. infrastructure/docs
+
+The bypass list (Repository admin) is a **deliberate design**, not a loophole:
+
+- **Application code** (`AK.*/**`) always flows through a **PR + the CI gate** — it is never pushed directly, because that is the code the tests and scanners exist to guard.
+- **Infrastructure and documentation** (Terraform, guides, ADRs, workflow files) may be pushed **directly by an admin** and are gated **separately** — a reviewed `terraform plan` today, and an infrastructure pipeline later. Running the application test suite over a Terraform or Markdown change would gate the wrong thing.
+
+So both classes are gated; they are gated by the mechanism that fits each. The admin bypass exists to serve that split (and to let the CD tag-bump through — next section), not to wave code past the gate.
 
 ### Secrets and OIDC
 
@@ -171,10 +182,10 @@ The CD workflow, [`.github/workflows/products-cd.yml`](../../.github/workflows/p
 **Job 2 — `update-gitops`** (this is the deploy):
 
 4. **Bump the image tag in Git.** It sets **`.image.tag`** in `deploy/helm/values/products.yaml` to the new SHA with `yq -i '.image.tag = strenv(TAG)'`. That field does not exist in the file today (the chart default is `dev`); `yq` **creates** the `image.tag` key — which is why `yq` is used rather than `sed` (sed cannot add a missing key). The value is passed via the environment (`strenv`) so it can never be interpreted as an expression.
-5. **Commit and push** `chore(cd): products image -> <sha> [skip ci]` to `master` as `github-actions[bot]` (`permissions: contents: write`).
-6. **Argo CD deploys.** Argo CD watches `deploy/helm/values/products.yaml`; the commit makes the `ak-products` Application `OutOfSync`, and it rolls the Deployment to the new image on sync — automatically once auto-sync is enabled, otherwise on a manual sync (see the [GitOps Guide](gitops-guide.md)). **CD runs no `helm`/`kubectl` and holds no cluster credentials** — its "deploy" action is the Git commit.
+5. **Commit and push** `chore(cd): products image -> <sha> [skip ci]` to `master`. The push is authenticated by the scoped **`CD_PUSH_TOKEN`** PAT (the commit author is `github-actions[bot]`, cosmetic) — see the branch-protection section below for why.
+6. **Argo CD deploys.** Argo CD watches `deploy/helm/values/products.yaml`; the commit makes the `ak-products` Application `OutOfSync`, and — with **auto-sync enabled** (`selfHeal: true`, `prune: false`) — it rolls the Deployment to the new image **with no manual sync** (see the [GitOps Guide](gitops-guide.md)). **CD runs no `helm`/`kubectl` and holds no cluster credentials** — its "deploy" action is the Git commit.
 
-**Loop prevention (three independent guards).** The tag-bump commit only touches `deploy/helm/values/**`, which is **not** in the CD path filter, so it can never retrigger CD; the message carries `[skip ci]`; and pushes made with the built-in `GITHUB_TOKEN` do not trigger further workflow runs by GitHub's design.
+**Loop prevention.** The tag-bump commit only touches `deploy/helm/values/**`, which is **not** in the CD path filter, so it can never retrigger CD — this is the real guard. Belt-and-suspenders: CI is `pull_request`-only (a push never matches it) and the message carries `[skip ci]`. Note the tag-bump push uses a **PAT**, and — unlike the built-in `GITHUB_TOKEN` — a PAT push *can* trigger workflows, so the path filter, not the token, is what prevents a loop.
 
 ### Branch protection and the CD tag-bump
 
@@ -194,6 +205,60 @@ The CD workflow, [`.github/workflows/products-cd.yml`](../../.github/workflows/p
 - **Note the loop-prevention consequence:** because a PAT push (unlike a `GITHUB_TOKEN` push) *can* trigger workflows, the loop is prevented by the **path filter** (the tag-bump touches `deploy/helm/values/**`, which is not in CD's trigger) plus CI being `pull_request`-only, plus `[skip ci]` — not by the token. See the CD workflow header.
 
 **One-time setup:** create the fine-grained PAT (Contents: read/write on `AntKart-Src3`) on the admin account and save it as the repository secret `CD_PUSH_TOKEN` (**Settings → Secrets and variables → Actions → New repository secret**). The token is the one CD-side secret; the Azure auth remains secret-less via OIDC.
+
+---
+
+## The CD identity — OIDC to Azure, AcrPush only
+
+CD's Azure access is a **user-assigned managed identity**, `id-ak-cicd-dev`, provisioned as Terraform in [`infrastructure/modules/github-oidc`](../../infrastructure/modules/github-oidc) and its dev unit (`infrastructure/environments/dev/github-oidc`). It mirrors the workload-identity model the cluster pods use — federation, not a stored secret.
+
+**How the token exchange works.** The identity carries **GitHub federated credentials**: they trust GitHub's OIDC issuer `https://token.actions.githubusercontent.com`, audience `api://AzureADTokenExchange`, for two exact-match subjects:
+
+- `repo:seesathish/AntKart-Src3:ref:refs/heads/master` — a run on the `master` branch (what CD uses).
+- `repo:seesathish/AntKart-Src3:environment:dev` — a run targeting the GitHub Environment `dev` (available if a job declares `environment: dev`).
+
+At run time, `azure/login` presents the workflow's short-lived GitHub OIDC token; Entra checks the issuer/audience/subject against a federated credential and, on an exact match, returns an Entra access token. **No client secret exists** — there is nothing to store or rotate on the Azure side.
+
+**Least privilege — AcrPush, and nothing else.** The identity's only role is **AcrPush on the ACR** (`acrantkartdev`). It has **no cluster access whatsoever** — it cannot run `kubectl`/`helm`, read cluster secrets, or deploy. This is the security payoff of the GitOps split: even a fully-compromised CD run can only push an image; it cannot change what runs, because that is Argo CD's job, driven from Git.
+
+**The three GitHub variables.** `azure/login` needs the identity's `client_id`, its `tenant_id`, and the `subscription_id`. These are **identifiers, not secrets** (they name an identity; they do not authenticate as it — the OIDC token does), so they are stored as repository **variables** `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID`, read in the workflow as `${{ vars.* }}`. Get their values from the applied unit: `terragrunt output client_id` (and `tenant_id` / `subscription_id`).
+
+---
+
+## Argo CD auto-sync — closing the loop
+
+For the loop to be hands-free, Argo CD must apply the tag-bump without a human clicking **Sync**. **Auto-sync is enabled** on the `ak-products` Application:
+
+```bash
+kubectl -n argocd patch application ak-products --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":{"selfHeal":true,"prune":false}}}}'
+```
+
+- **`automated`** — Argo CD syncs automatically whenever Git changes (so the CD tag-bump deploys on its own).
+- **`selfHeal: true`** — if the live cluster drifts from Git, Argo reverts it back to Git.
+- **`prune: false`** — Argo does **not** delete resources that disappear from Git (a conservative default; enable pruning deliberately once you trust the manifests). See the [GitOps Guide](gitops-guide.md) for the staged enablement rationale.
+
+For a lasting change, set the same `syncPolicy` in the `ak-products` Application manifest and commit it, rather than only patching the live object.
+
+---
+
+## One-time human setup (checklist)
+
+These are the manual, one-time steps a human performs in the GitHub / SonarCloud / Azure UIs — everything else is code. All secret/token values are placeholders; never commit them.
+
+1. **SonarCloud project + token.** Create the project (organization `seesathish`, project key `seesathish_AntKart-Src3`) in SonarCloud, generate a token, and save it as the repository **secret** `SONAR_TOKEN` (Settings → Secrets and variables → Actions → **Secrets**). This is the only secret CI uses.
+2. **Azure OIDC identity variables.** Apply the `github-oidc` Terraform unit, then read its outputs and save three repository **variables** (Settings → Secrets and variables → Actions → **Variables**): `AZURE_CLIENT_ID` = `terragrunt output -raw client_id`, `AZURE_TENANT_ID` = `… tenant_id`, `AZURE_SUBSCRIPTION_ID` = `… subscription_id`. Variables, not secrets — they are identifiers.
+3. **CD push token.** Create a **fine-grained PAT** on the admin account, scoped to **`AntKart-Src3` only** with **Contents: Read and write** (nothing else), and save it as the repository **secret** `CD_PUSH_TOKEN`. Set a finite expiry and rotate before it lapses.
+4. **Branch ruleset.** Create the `master-protection` ruleset (Active): require a PR + the four status checks, block force-push/deletion, and put **Repository admin** on the bypass list (see [Branch protection](#branch-protection--making-ci-a-required-gate)).
+5. **Argo CD auto-sync.** Enable auto-sync on `ak-products` (the patch above), or commit the `syncPolicy` into its Application manifest.
+
+---
+
+## Troubleshooting
+
+- **A tag-bump PR sits on "Expected" forever (required-check deadlock).** If you ever route the tag-bump through a PR instead of a direct push, the required check `products-ci` is path-filtered to `AK.Products/**` etc. and **never runs** on a values-only change — so GitHub shows the check as "Expected" indefinitely and the PR cannot merge. This is exactly why CD pushes directly with `CD_PUSH_TOKEN` rather than opening a PR (and why option (b) was rejected in ADR-023).
+- **CD's image builds and pushes, but the tag-bump step fails with a Git auth error.** The `CD_PUSH_TOKEN` PAT has **expired** (fine-grained PATs are time-bounded). Only the `update-gitops` job fails — the image is already in ACR. Re-issue the PAT with the same scope (Contents: read/write on this repo) and update the `CD_PUSH_TOKEN` secret; re-run the job.
+- **`kubectl port-forward` to Argo CD fails on Windows (IPv6 quirk).** On Windows, `kubectl port-forward svc/argocd-server 8080:443` may bind `[::1]` (IPv6) so `https://localhost:8080` refuses the connection while `https://127.0.0.1:8080` works. Force IPv4 with `kubectl port-forward --address 127.0.0.1 svc/argocd-server 8080:443`, or browse `https://127.0.0.1:8080` explicitly.
 
 ---
 

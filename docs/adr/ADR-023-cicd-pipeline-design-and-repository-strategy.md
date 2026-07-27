@@ -95,3 +95,23 @@ Workflows, values, and tests are organised so a service could be lifted into its
 ## Notes
 
 The concrete workflow files and the end-to-end journey (PR → checks → merge → image build/push → Git tag update → Argo CD sync → rolling update) are documented in the [DevOps CI/CD Guide](../guides/devops-cicd-guide.md). This ADR records the design; ADR-022 records the platform and authentication choice it builds on.
+
+---
+
+## Amendment (2026-07-27) — As-built, verified end to end
+
+The design above was implemented for **Products** and **proven end to end**. This amendment records the as-built specifics that were left open or decided differently at build time. The original decisions stand; the points below refine the two trade-offs the design flagged as "to be encoded" (the automated-commit mechanism and loop prevention) and add the identity and branch-protection specifics.
+
+**Delivery identity — OIDC, AcrPush only, no cluster access.** CD authenticates to Azure via a user-assigned managed identity **`id-ak-cicd-dev`** (Terraform: `infrastructure/modules/github-oidc` + the dev unit) with GitHub **federated credentials** — issuer `https://token.actions.githubusercontent.com`, audience `api://AzureADTokenExchange`, subjects `repo:seesathish/AntKart-Src3:ref:refs/heads/master` and `:environment:dev`. Its **only** role is **AcrPush on the registry** — it has **no cluster access at all**, which is the concrete realisation of "no cluster credentials in CI/CD": the pipeline literally cannot deploy or touch the cluster even if it tried. The identity's `client_id` / `tenant_id` / `subscription_id` are **GitHub repository variables** (identifiers, not secrets).
+
+**Immutable images.** Each build is tagged with the **commit SHA** (short form), never a mutable tag — a given tag always means exactly one build. (Verified: a `/version` change deployed as image tag `ede8b04`.)
+
+**The automated tag-bump push — a scoped PAT.** The original trade-off noted the tag-bump commit "must … use `[skip ci]` semantics / a bot identity". As-built, the `github-actions` bot is **not a listable bypass actor** in this repository's ruleset UI, so CD instead pushes with a **fine-grained Personal Access Token** (repo secret `CD_PUSH_TOKEN`, **Contents: read/write on this repository only**) owned by the admin account, which **is** on the branch-ruleset bypass list. The **auto-merge-PR alternative was rejected on a concrete deadlock**: a values-only PR never matches the path-filtered required check (`products-ci` is scoped to `AK.Products/**` etc.), so that required check sits **"Expected" forever** and the PR can never merge. The [separate configuration repository](#evolution-path-future-options) evolution removes the need for this token entirely.
+
+**Loop-prevention correction.** The original trade-off assumed a bot/`GITHUB_TOKEN` identity, whose pushes do not trigger workflows. Because the tag-bump uses a **PAT**, and **PAT pushes *can* trigger workflows**, the real guard is the **path filter** — the tag-bump writes only `deploy/helm/values/**`, which is outside CD's trigger paths — with `[skip ci]` as belt-and-suspenders. The token is not the loop guard.
+
+**Branch-protection split — application code vs. infrastructure/docs.** The ruleset **`master-protection`** (Active) requires a PR plus **four** status checks (`build-test`, `sonar`, `trivy`, and `SonarCloud Code Analysis`) before merge, with **Repository admin** on the bypass list. This is a deliberate split: **application code** flows through PR + the CI gate; **infrastructure and documentation** may be pushed directly by an admin and are gated **separately** (a `terraform plan` review today; an infrastructure pipeline later). Application changes are never un-gated; infrastructure is gated by its own mechanism rather than the application test suite.
+
+**Delivery is auto-synced.** Argo CD **auto-sync** (`selfHeal: true`, `prune: false`) is enabled on the `ak-products` Application, so the tag-bump commit deploys with **no manual sync** — the full loop (code change → PR → gate → merge → build → ACR → Git tag bump → Argo CD auto-sync → running pod) runs hands-free.
+
+The remaining five services still run their manually-installed images; templating the two workflows (and enabling auto-sync) to them is the next step, and is intentionally out of scope for this first, proven pattern.

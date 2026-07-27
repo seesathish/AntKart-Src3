@@ -718,11 +718,46 @@ argocd app set ak-products --sync-policy none         # back to manual
 - `--sync-policy automated` = sync when Git changes; `--self-heal` = revert manual/controller drift; `--auto-prune` = delete what Git no longer declares (enable last — it is the only one that deletes). Enable in that order, only once every Application is stably Synced + Healthy. These mutate the **live** object; for a lasting change edit and commit `syncPolicy` in the manifest (the ApplicationSet re-asserts Git on the next reconcile).
 
 ```bash
-# Set syncPolicy directly on the Application CRD (equivalent low-level operation)
+# Set syncPolicy directly on the Application CRD (equivalent low-level operation).
+# This is the AS-BUILT auto-sync enabled on ak-products for the CI/CD loop:
+# selfHeal on, prune off (Argo won't delete resources dropped from Git).
 kubectl -n argocd patch application ak-products --type merge \
-  -p '{"spec":{"syncPolicy":{"automated":{"selfHeal":true,"prune":true}}}}'
+  -p '{"spec":{"syncPolicy":{"automated":{"selfHeal":true,"prune":false}}}}'
 ```
-- `patch --type merge` sets `spec.syncPolicy.automated` in one call — the same effect as the `argocd app set` flags above, useful when the `argocd` CLI is not installed. Set `"automated":null` to return to manual sync.
+- `patch --type merge` sets `spec.syncPolicy.automated` in one call — the same effect as the `argocd app set` flags above, useful when the `argocd` CLI is not installed. With this enabled, the CD workflow's image-tag commit deploys hands-free. Set `"automated":null` to return to manual sync.
+
+---
+
+## N. CI/CD (GitHub Actions)
+
+> **When you need this:** to provision and inspect the CI/CD federated identity, and to understand what the pipeline now does automatically. The pipelines themselves run in GitHub Actions (`.github/workflows/products-ci.yml`, `products-cd.yml`); concept and setup: [DevOps CI/CD Guide](devops-cicd-guide.md).
+
+### The CD OIDC identity (Terraform)
+
+```bash
+cd infrastructure/environments/dev/github-oidc
+terragrunt plan          # preview: UAMI id-ak-cicd-dev + 2 federated credentials + AcrPush
+terragrunt apply         # create them
+```
+- The `github-oidc` unit provisions the user-assigned managed identity `id-ak-cicd-dev`, its GitHub federated credentials (subjects `repo:seesathish/AntKart-Src3:ref:refs/heads/master` and `:environment:dev`), and an **AcrPush-only** role assignment on the ACR. It applies after `resource-group` and `container-registry` (see [infrastructure/README](../../infrastructure/README.md)). No cluster access is granted.
+
+```bash
+terragrunt output -raw client_id         # -> AZURE_CLIENT_ID       (GitHub repository variable)
+terragrunt output -raw tenant_id         # -> AZURE_TENANT_ID       (GitHub repository variable)
+terragrunt output -raw subscription_id   # -> AZURE_SUBSCRIPTION_ID (GitHub repository variable)
+```
+- Read the identity's coordinates to set the three GitHub repository **variables** the CD workflow's `azure/login` uses. `-raw` prints the bare value (no quotes) for copy-paste. These are **identifiers, not secrets** (they name the identity; the OIDC token authenticates as it).
+
+### What the pipeline now does for you (was manual)
+
+```bash
+# The CD workflow does this automatically on merge to master — you no longer run it by hand:
+az acr login --name acrantkartdev
+docker build -f AK.Products/AK.Products.API/Dockerfile -t acrantkartdev.azurecr.io/antkart/products:<sha> .
+docker push acrantkartdev.azurecr.io/antkart/products:<sha>
+# ...then the workflow bumps .image.tag in deploy/helm/values/products.yaml and Argo CD auto-syncs.
+```
+- Inside the CD job, `az acr login` runs against the **OIDC-authenticated** session (no `az login` with a secret) and the identity's AcrPush role authorises the push. The manual build/push in [section H](#h-docker) is now the **fallback** — for Products, delivery is the pipeline. The image tag is the **commit SHA** (immutable), and the deploy is a Git commit that Argo CD reconciles ([section M](#m-argo-cd-gitops)).
 
 ---
 
@@ -730,6 +765,7 @@ kubectl -n argocd patch application ak-products --type merge \
 
 - [AKS Guide](aks-guide.md) — cluster shape, operator access, workload identity, Helm deployment, ingress/TLS, troubleshooting.
 - [GitOps Guide](gitops-guide.md) — Argo CD concept, structure, and adoption runbook (the commands in section M in context).
+- [DevOps CI/CD Guide](devops-cicd-guide.md) — the GitHub Actions pipelines the section N commands support.
 - [Infrastructure Guide](infrastructure-guide.md) — per-resource provisioning (Understand → Build → Execute → Verify).
 - [Container Configuration](container-configuration.md) — the config keys each service reads.
 - [deploy/helm/README](../../deploy/helm/README.md) · [deploy/cert-manager/README](../../deploy/cert-manager/README.md) — chart and issuer references.
