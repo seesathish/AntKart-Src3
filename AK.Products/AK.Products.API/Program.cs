@@ -14,6 +14,8 @@ using Serilog;
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 
+// CI pipeline test
+
 // M3 Step 1 — load configuration/secrets from Azure Key Vault (when KeyVault:Uri is set),
 // using this service's own Entra identity, before anything reads configuration.
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
