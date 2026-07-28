@@ -10,10 +10,10 @@ env:
   Entra__Audience: "api://antkart-api-dev"
   Entra__ClientId: "ea22550b-a0ae-4847-a2e2-2524752d9522"
 
-# Ingress — the gateway is the ONLY service exposed externally. Enabled at upgrade
-# time (kept false here so a plain install does not create it before the controller
-# and its public IP exist):
-#   helm upgrade ak-gateway ... --set ingress.enabled=true --set ingress.host=<ip>.nip.io
+# Ingress — the gateway is the ONLY service exposed externally. Enabled here is
+# kept false so a plain `helm install` does not create it before the controller
+# exists; the ak-gateway Argo CD Application sets enabled=true and the external
+# host (ingress.host=api.antkart.in) and Argo CD reconciles it.
 ingress:
   enabled: false
   className: nginx

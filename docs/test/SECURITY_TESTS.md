@@ -21,7 +21,7 @@ USER1_TOKEN="<access token for test user 1>"
 USER2_TOKEN="<access token for test user 2>"
 ```
 
-The gateway base URL is `http://localhost:8000` for a local run, or `https://<public-ip>.nip.io` through the cluster ingress (add `curl.exe -k` for the Let's Encrypt **staging** certificate). Substitute `<GATEWAY>` below.
+The gateway base URL is **`https://api.antkart.in`** through the cluster ingress — a trusted Let's Encrypt **production** certificate terminates TLS, so no `-k` is needed. This is the valid target; a `http://localhost:8000` local run is **superseded** (see the [Testing index](README.md)) and does not exercise the cloud platform. Substitute `<GATEWAY>` below.
 
 ---
 

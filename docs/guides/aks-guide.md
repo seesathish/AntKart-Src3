@@ -282,9 +282,11 @@ Because it is Helm-installed, the `aks` Terraform module is unchanged. (If the m
 
 The Ingress carries a `cert-manager.io/cluster-issuer` annotation and a `tls` block naming a Secret; cert-manager watches these, runs the HTTP-01 challenge, and writes the issued cert/key into that Secret, which the controller then uses to terminate TLS.
 
-### Hostname — nip.io (development convenience)
+### Hostname — custom domain `api.antkart.in` (nip.io as the zero-DNS fallback)
 
-No custom domain is provisioned, so the platform uses **[nip.io](https://nip.io) wildcard DNS**: `<public-ip>.nip.io` resolves to that IP with no DNS setup. This is a **development convenience only** — in a real environment a proper domain (with its own DNS records) would be used, and the same Ingress/cert-manager wiring applies unchanged; only the `ingress.host` value changes.
+The platform is served at the **custom domain `api.antkart.in`** — a GoDaddy **A record** points it at the ingress controller's LoadBalancer public IP (`20.246.197.150`), and cert-manager issues a **trusted Let's Encrypt production** certificate for it. Where no domain is available, **[nip.io](https://nip.io) wildcard DNS** (`<public-ip>.nip.io`, which resolves to that IP with no DNS setup) is the drop-in fallback — the same Ingress/cert-manager wiring applies unchanged; only the `ingress.host` value differs.
+
+> **Delivered state is GitOps-driven.** The live gateway host and issuer are set **in Git** — the `ak-gateway` Argo CD Application (`ingress.host=api.antkart.in`) and `deploy/helm/values/gateway.yaml` (`clusterIssuer: letsencrypt-prod`) — and reconciled by Argo CD with self-heal on. A `helm upgrade --set ...` would be **reverted** by self-heal. The runbook below is the **first-time bootstrap / non-GitOps path**; to change the host or issuer on the running platform, edit Git and let Argo CD apply it (see the [GitOps Guide](gitops-guide.md)).
 
 ### Runbook
 
@@ -328,7 +330,7 @@ curl -k https://$HOST/health/live                        # staging cert is untru
 
 > **PowerShell note.** These are bash examples. In native PowerShell `curl` is an alias for `Invoke-WebRequest`, so use **`curl.exe -k https://$HOST/health/live`** for the `-k` (insecure-TLS) flag to take effect. See [Operations Command Reference → Gotchas](operations-command-reference.md#j-gotchas-and-powershell-notes).
 
-**Switch to production** once staging shows a `Ready` certificate:
+**Switch to production** once staging shows a `Ready` certificate. On the delivered (GitOps) platform this is a **Git change** — `deploy/helm/values/gateway.yaml` already sets `clusterIssuer: letsencrypt-prod` and the `ak-gateway` Application sets `ingress.host: api.antkart.in`, and Argo CD reconciles it. The manual equivalent (bootstrap / non-GitOps) is:
 
 ```bash
 helm upgrade ak-gateway deploy/helm/antkart-service -n antkart -f deploy/helm/values/gateway.yaml \
@@ -338,6 +340,20 @@ kubectl -n antkart delete secret ak-gateway-tls          # force a fresh, truste
 # then curl WITHOUT -k — the certificate is browser-trusted:
 curl https://$HOST/health/live
 ```
+
+### Verify the certificate and the `api.antkart.in` endpoint
+
+On the running platform (host `api.antkart.in`, prod issuer), confirm the certificate issued and the endpoint serves a trusted cert:
+
+```bash
+kubectl -n antkart get ingress ak-gateway \
+  -o jsonpath='{.metadata.annotations.cert-manager\.io/cluster-issuer}{"\n"}'   # -> letsencrypt-prod
+kubectl -n antkart get certificate ak-gateway-tls                                # READY column must be True
+kubectl -n antkart get certificate ak-gateway-tls \
+  -o jsonpath='{.spec.dnsNames[*]}{"\n"}'                                        # -> api.antkart.in
+curl https://api.antkart.in/health/live                                          # 200 "Healthy", NO -k (trusted prod cert)
+```
+- The first two commands confirm the live annotation is `letsencrypt-prod` and the `ak-gateway-tls` Certificate is `Ready=True` for `api.antkart.in`. The final `curl` (no `-k`) proves the browser-trusted production certificate terminates TLS — a `-k`-free 200 is the whole point of the prod cutover. (PowerShell: `curl.exe https://api.antkart.in/health/live`.)
 
 ### Troubleshooting — certificate stays `Pending`
 

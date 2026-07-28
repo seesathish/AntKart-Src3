@@ -8,7 +8,8 @@ Two ACME (Let's Encrypt) `ClusterIssuer`s for automated TLS on the gateway ingre
 | `cluster-issuer-prod.yaml` | `letsencrypt-prod` | Browser-trusted, but **strict weekly rate limits**. Only after staging issues successfully. |
 
 Both use the **HTTP-01** solver against the `nginx` ingress class, which works with the
-public `nip.io` hostname pointed at the ingress controller's IP.
+public hostname pointed at the ingress controller's IP — the custom domain
+`api.antkart.in` (or a `<public-ip>.nip.io` fallback where no domain exists).
 
 **Before applying:** replace the placeholder `email:` in each file with a monitored
 address (Let's Encrypt sends expiry notices there). It is a placeholder on purpose —

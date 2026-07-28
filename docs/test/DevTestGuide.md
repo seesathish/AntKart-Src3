@@ -1,5 +1,7 @@
 # AntKart — Developer Manual Test Guide
 
+> **⛔ SUPERSEDED — local/localhost testing is no longer a valid verification path.** This guide describes **Phase-1 local running** (Docker Compose, Keycloak, Mailhog, RabbitMQ, Kibana) against the old public [`AntKart`](https://github.com/seesathish/AntKart) repository. The cloud-native platform is verified **only against cloud resources through the public HTTPS endpoint `https://api.antkart.in`** — a localhost/local-environment run does not exercise the delivered platform (Entra ID, Service Bus, Cosmos DB, ACS, AKS + ingress/TLS) and its results are not valid. It is retained for historical reference; the replacement Full-Cloud E2E, Security, and Load/Performance guides are tracked in the [Testing index](README.md) and the [Roadmap](../ROADMAP.md).
+
 This guide walks a developer through manually testing every AntKart service end-to-end using Postman. It starts from a clean Docker environment and progresses through each service in dependency order, covering positive flows, negative flows, compensation scenarios, RabbitMQ event monitoring, Kibana log tracing, circuit breaker testing, and email notification verification.
 
 **Intended audience:** Developers and reviewers running a full end-to-end validation of the platform.  

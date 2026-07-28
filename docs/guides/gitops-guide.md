@@ -75,9 +75,9 @@ kubectl apply -f deploy/argocd/applicationset-antkart.yaml      # 2. then the Ap
 ```
 - **Apply the AppProject before any Application.** Each Application declares `project: antkart`; applying an Application before its project exists is rejected with **`application is not allowed in project antkart`** (Argo CD validates project membership on admission). Applying the project first avoids it.
 - The ApplicationSet controller expands `applicationset-antkart.yaml` into the six Applications automatically; watch them appear with `kubectl -n argocd get applications`.
-- Because the manifests ship with **no `automated:` block**, applying them changes nothing in the cluster yet — each Application comes up `OutOfSync` or `Synced` and waits for a manual sync.
+- **Note on sync policy:** the committed manifests now declare **auto-sync** (`automated: { selfHeal: true, prune: false }`) on all six Applications, so applying them and pushing a change deploys hands-free. The manual-sync steps below describe the **safe first-adoption** approach used historically (diff before applying); to reproduce it, temporarily set the Application's sync policy to manual (`argocd app set <app> --sync-policy none`) before syncing.
 
-> The gateway's `ingress.host` is environment-specific (the `nip.io` name from the ingress controller's public IP). Set it once in the gateway Application/ApplicationSet before syncing `ak-gateway`; the value is stable because that public IP is retained across a cluster stop. See [deploy/argocd/README](../../deploy/argocd/README.md).
+> The gateway's `ingress.host` is the external host — the custom domain **`api.antkart.in`** (GoDaddy A record → the ingress controller's public IP), set in the `ak-gateway` Application (keep it in sync with the ApplicationSet element). Its issuer (`letsencrypt-prod`) comes from `deploy/helm/values/gateway.yaml`. Both are driven from Git — with auto-sync + self-heal now enabled on all six Applications, a `helm --set` would be reverted; change the host/issuer in Git instead. See [deploy/argocd/README](../../deploy/argocd/README.md).
 
 ### 4. Read the diff, then sync manually
 

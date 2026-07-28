@@ -104,12 +104,12 @@ ocelot:
 # one. Only ak-gateway enables it (see values/gateway.yaml): the gateway is the single
 # public entry point; Products/Cart/Order/Payments/Discount stay internal and are
 # reached through the gateway's Ocelot routes. ak-discount (h2c gRPC) must never be
-# exposed. Host is left empty and supplied at upgrade time (the nip.io name derived
-# from the ingress controller's public IP).
+# exposed. Host is left empty here and supplied per environment (the gateway's
+# ak-gateway Argo CD Application sets it to the external host, e.g. api.antkart.in).
 ingress:
   enabled: false
   className: nginx
-  host: ""                       # e.g. 4-3-2-1.nip.io — supplied via --set at upgrade
+  host: ""                       # e.g. api.antkart.in (or a <public-ip>.nip.io fallback) — set by the gateway Application
   path: /
   pathType: Prefix
   clusterIssuer: letsencrypt-staging   # start on STAGING; switch to letsencrypt-prod once it issues

@@ -23,7 +23,7 @@
 # internal services (a no-op: identical to the chart/values default, and the
 # chart renders an Ingress only when ingress.enabled=true). Only the gateway sets
 # them to real values — the GitOps equivalent of its
-# `--set ingress.enabled=true --set ingress.host=<ip>.nip.io` overrides.
+# `--set ingress.enabled=true --set ingress.host=api.antkart.in` overrides.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -55,13 +55,15 @@ spec:
             ingressEnabled: "false"
             ingressHost: ""
           # The gateway is the ONLY service with an ingress. `ingressHost` is the
-          # one environment-specific value (the nip.io name from the ingress
-          # controller's LoadBalancer public IP); it is stable because that IP is
-          # retained across `az aks stop`. Set it ONCE to the real host.
+          # external host — the real domain api.antkart.in (GoDaddy A record ->
+          # the ingress controller's LoadBalancer public IP 20.246.197.150). Keep
+          # this in sync with applications/ak-gateway.yaml so applying either path
+          # never reverts the ingress host. (The TLS issuer comes from
+          # values/gateway.yaml, which is letsencrypt-prod.)
           - name: ak-gateway
             valueFile: gateway.yaml
             ingressEnabled: "true"
-            ingressHost: "20.246.197.150.nip.io"
+            ingressHost: "api.antkart.in"
   template:
     metadata:
       name: "{{ .name }}"

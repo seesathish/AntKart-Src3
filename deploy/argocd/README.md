@@ -34,7 +34,7 @@ Today the gateway is deployed with two command-line overrides on top of its valu
 helm upgrade --install ak-gateway deploy/helm/antkart-service \
   -n antkart -f deploy/helm/values/gateway.yaml \
   --set ingress.enabled=true \
-  --set ingress.host=<public-ip>.nip.io
+  --set ingress.host=api.antkart.in
 ```
 
 GitOps has no `--set` at sync time — every input must live in Git. Those two flags are translated **1:1** into the gateway’s Argo **Helm parameters**:
@@ -44,19 +44,19 @@ GitOps has no `--set` at sync time — every input must live in Git. Those two f
   helm:
     valueFiles: [ ../values/gateway.yaml ]
     parameters:
-      - { name: ingress.enabled, value: "true" }
-      - { name: ingress.host,    value: "REPLACE_WITH_PUBLIC_IP.nip.io" }
+      - { name: ingress.enabled,      value: "true" }
+      - { name: ingress.host,         value: "api.antkart.in" }
+      - { name: ingress.clusterIssuer, value: "letsencrypt-prod" }
   ```
-- In the **ApplicationSet**, an ApplicationSet template allows only string substitution (not per-element control flow), so every element carries the same `ingressEnabled`/`ingressHost` fields and the template renders them as the two parameters for all six. They are `"false"`/`""` for the five internal services — a no-op equal to the chart default — and only the `ak-gateway` element sets `"true"` / the real `<ip>.nip.io`.
+- In the **ApplicationSet**, an ApplicationSet template allows only string substitution (not per-element control flow), so every element carries the same `ingressEnabled`/`ingressHost` fields and the template renders them as the two parameters for all six. They are `"false"`/`""` for the five internal services — a no-op equal to the chart default — and only the `ak-gateway` element sets `"true"` / the real host `api.antkart.in`.
 
-This was chosen over baking the values into `gateway.yaml` so that the values file stays **byte-for-byte unchanged** — the manual `helm` flow in the [AKS Guide](../../docs/guides/aks-guide.md) keeps working identically (its `ingress.enabled: false` default still prevents a plain install from creating an ingress before the controller exists). The GitOps-specific enablement lives only in the Argo manifest, which is the GitOps entry point.
+This was chosen over baking the values into `gateway.yaml` so that the values file stays largely unchanged and the manual `helm` flow in the [AKS Guide](../../docs/guides/aks-guide.md) keeps working (its `ingress.enabled: false` default still prevents a plain install from creating an ingress before the controller exists). The GitOps-specific enablement lives in the Argo manifest, which is the GitOps entry point.
 
-`ingress.host` is the **one environment-specific value** — the `nip.io` name derived from the ingress controller’s LoadBalancer public IP. It is **not** committed with a real IP anywhere in this repo; you set it once (it is stable because the LB public IP is retained across `az aks stop`). Get it and substitute it:
+`ingress.host` is the **external host** — the custom domain **`api.antkart.in`** (a GoDaddy A record points it at the ingress controller's LoadBalancer public IP `20.246.197.150`), committed in the manifests. Where no domain is available, a **`<public-ip>.nip.io`** value is the drop-in fallback (nip.io resolves any embedded IP with no DNS setup). Find the controller IP — to set the A record, or to build the nip.io fallback:
 
 ```bash
-PUBLIC_IP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
-  -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-echo "$PUBLIC_IP.nip.io"   # e.g. 4-3-2-1.nip.io -> put this in the gateway parameter
+kubectl -n ingress-nginx get svc ingress-nginx-controller \
+  -o jsonpath='{.status.loadBalancer.ingress[0].ip}{"\n"}'   # -> 20.246.197.150 (point api.antkart.in here, or use <ip>.nip.io)
 ```
 
 > **Before enabling self-heal, reconcile the TLS issuer with live state.** `gateway.yaml` commits `clusterIssuer: letsencrypt-staging`. If the running gateway was already switched to `letsencrypt-prod` (the documented post-validation step), then Git says *staging* while the cluster runs *prod* — a manual sync will show that diff, and turning on `selfHeal` would revert prod → staging. Check with `kubectl -n antkart get ingress ak-gateway -o yaml` (and the issued cert); if live is prod, change `gateway.yaml` to `letsencrypt-prod` and commit **before** enabling self-heal.
@@ -153,7 +153,7 @@ kubectl apply -f deploy/argocd/applications/
 ```
 - `apply -f <dir>` applies every manifest in the directory. The ApplicationSet controller expands `applicationset-antkart.yaml` into the six Applications automatically; you’ll see them appear with `kubectl -n argocd get applications`.
 
-> **Set the gateway host first.** Replace `REPLACE_WITH_PUBLIC_IP.nip.io` in the gateway (in `applicationset-antkart.yaml` or `applications/ak-gateway.yaml`) with the real `<ip>.nip.io` (see the command above) and commit, **before** you sync `ak-gateway`. Syncing it with the placeholder would render an ingress for a bogus host.
+> **Gateway host.** The `ak-gateway` element/manifest already carries the live host `api.antkart.in` (kept in sync between `applications/ak-gateway.yaml` and `applicationset-antkart.yaml`). If you deploy into a different environment, change that one value first — to your own domain, or a `<public-ip>.nip.io` fallback (see the command above) — and commit **before** syncing `ak-gateway`, so it never renders an ingress for the wrong host.
 
 Because there is **no `automated:` block**, applying these does **not** change the cluster yet — each Application comes up `OutOfSync` (or `Synced` if the live state already matches Git) and waits for a manual sync.
 

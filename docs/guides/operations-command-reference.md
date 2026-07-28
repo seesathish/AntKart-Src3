@@ -379,10 +379,10 @@ Walk the cert-manager chain **Certificate → CertificateRequest → Order → C
 kubectl -n <NS> get certificate,certificaterequest,order,challenge
 kubectl -n <NS> describe certificate ak-gateway-tls
 kubectl -n <NS> describe challenge <name>          # HTTP-01 validation detail
-nslookup <PUBLIC_IP>.nip.io                        # must resolve to the ingress controller IP
+nslookup api.antkart.in                            # must resolve to the ingress controller public IP
 kubectl -n ingress-nginx get svc ingress-nginx-controller   # EXTERNAL-IP must not be <pending>
 ```
-- Each object references the next; `describe` the one that's stuck. Common causes: the `nip.io` host doesn't resolve to the controller IP; the controller has no public IP yet; the HTTP-01 `/.well-known/acme-challenge` path can't be reached (**custom NSG** not allowing inbound 80 — see [section J](#j-gotchas-and-powershell-notes)); an invalid issuer email; or a production rate-limit lockout. Full detail: [AKS Guide → Ingress troubleshooting](aks-guide.md#ingress-and-tls).
+- Each object references the next; `describe` the one that's stuck. Common causes: the host (`api.antkart.in`, or a `<public-ip>.nip.io` fallback) doesn't resolve to the controller IP; the controller has no public IP yet; the HTTP-01 `/.well-known/acme-challenge` path can't be reached (**custom NSG** not allowing inbound 80 — see [section J](#j-gotchas-and-powershell-notes)); an invalid issuer email; or a production rate-limit lockout. Full detail: [AKS Guide → Ingress troubleshooting](aks-guide.md#ingress-and-tls).
 
 ### DNS resolution inside the cluster
 
@@ -413,9 +413,9 @@ helm upgrade --install ak-<SERVICE> deploy/helm/antkart-service -n <NS> -f deplo
 
 ```bash
 helm upgrade ak-gateway deploy/helm/antkart-service -n <NS> -f deploy/helm/values/gateway.yaml \
-  --set ingress.enabled=true --set ingress.host=<PUBLIC_IP>.nip.io --set image.tag=<TAG>
+  --set ingress.enabled=true --set ingress.host=api.antkart.in --set image.tag=<TAG>
 ```
-- `-f` loads a values **file**; `--set key=value` overrides a single value on the command line (takes precedence over `-f`). Used to enable the gateway ingress with the runtime nip.io host, or pin an image tag.
+- `-f` loads a values **file**; `--set key=value` overrides a single value on the command line (takes precedence over `-f`). Used here to enable the gateway ingress with the external host `api.antkart.in`, or pin an image tag. **On the delivered platform the host/issuer/tag live in Git** and Argo CD reconciles them (auto-sync + self-heal) — a `--set` would be reverted; this manual form is the bootstrap / non-GitOps path. Where no domain exists, substitute `<PUBLIC_IP>.nip.io`.
 
 ```bash
 helm list -n <NS>                       # releases in the namespace, their revision and chart version
@@ -510,8 +510,8 @@ az postgres flexible-server start -g <RG> -n <PG>               # 4. start the r
 az aks get-credentials -g <RG> -n <CLUSTER>                     # 5. kubeconfig (if not cached)
 kubelogin convert-kubeconfig -l azurecli                        # 6. Entra login for kubectl
 kubectl -n <NS> get pods                                        # 7. confirm the fleet is Running
-kubectl -n <NS> get ingress ak-gateway                          # 8. confirm the ingress host
-curl.exe -k https://<PUBLIC_IP>.nip.io/health/live              # 9. end-to-end reachability (staging cert => -k; prod cert => drop -k)
+kubectl -n <NS> get ingress ak-gateway                          # 8. confirm the ingress host (api.antkart.in)
+curl.exe https://api.antkart.in/health/live                     # 9. end-to-end reachability -> 200 "Healthy" (trusted prod cert, no -k)
 ```
 - **Order matters:** the cluster and database must be running before the pods can become Ready. `az aks show --query powerState.code -o tsv` confirms the start finished (`Running`) before you spend time on `kubectl`. If PostgreSQL is still stopped when the pods start, **Order/Payments/Discount will `CrashLoopBackOff` and then self-heal automatically** once the DB is up — the Kubernetes control loop keeps restarting them until the dependency returns, so no pod intervention is needed (starting the DB in step 4 avoids the churn).
 - **Argo CD resumes on restart.** The `argocd` namespace and its Applications persist across a stop; when the nodes come back, Argo CD reconciles the cluster to Git automatically — no re-install or re-apply. Deploying while stopped is just a `git push` that reconciles once the cluster is running again.
@@ -524,8 +524,8 @@ az postgres flexible-server stop -g <RG> -n <PG>                # stop the DB co
 az aks show -g <RG> -n <CLUSTER> --query powerState.code -o tsv  # verify -> expect "Stopped"
 ```
 - **Stops (billing paused, state kept):** the AKS node pool and the PostgreSQL server. `powerState.code` should read `Stopped` once `az aks stop` returns.
-- **Persists automatically (no action, low/no idle cost):** Cosmos DB (serverless), Service Bus, Event Grid, Key Vault, ACS, the container registry, Log Analytics — and the **ingress load balancer's public IP**, which is **retained across an `az aks stop`, so the `nip.io` hostname and the issued TLS certificate stay valid** when you start again (verified after a stop/redeploy: the existing production certificate was served on the same host with no re-issue).
-- **Only deleting removes cost/data:** to fully decommission, `terragrunt destroy` per unit (or `run-all destroy`). Deleting the cluster releases the LB public IP — the `nip.io` host would then change. Redis and Cosmos hold data; destroying them is irreversible.
+- **Persists automatically (no action, low/no idle cost):** Cosmos DB (serverless), Service Bus, Event Grid, Key Vault, ACS, the container registry, Log Analytics — and the **ingress load balancer's public IP**, which is **retained across an `az aks stop`, so the `api.antkart.in` hostname and the issued TLS certificate stay valid** when you start again (verified after a stop/redeploy: the existing production certificate was served on the same host with no re-issue).
+- **Only deleting removes cost/data:** to fully decommission, `terragrunt destroy` per unit (or `run-all destroy`). Deleting the cluster releases the LB public IP — the GoDaddy **A record for `api.antkart.in` would then need repointing** at the new IP. Redis and Cosmos hold data; destroying them is irreversible.
 
 ---
 

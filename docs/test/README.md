@@ -4,6 +4,8 @@ This is the single entry point for AntKart's verification strategy. It indexes e
 
 The platform is verified at every layer. **Unit tests** confirm domain logic, validators, and handlers in isolation. **Integration tests** verify the orchestrated SAGA and event-bus flows on an in-memory transport. **End-to-end tests** exercise the running services through their public surface. **Security tests** probe authentication, authorization, and input handling. **Load and performance tests** confirm behaviour under high-volume transaction throughput against cloud services. The unit and integration suites are layer-agnostic — they run identically regardless of where the services are deployed — while the end-to-end, security, and performance tests run against running services and grow with the deployment topology.
 
+> **⛔ Local/localhost testing is SUPERSEDED.** Only tests executed **against cloud resources through the public HTTPS endpoint `https://api.antkart.in`** validate the delivered platform. The unit and in-memory integration suites (`dotnet test`) remain valid as layer-agnostic code checks and run in CI. But any manual end-to-end / security / load procedure that targets `localhost` or a local Docker Compose stack — including the [Developer Manual Test Guide](DevTestGuide.md) (Phase-1 local) — does **not** exercise the cloud platform and its results are not valid. The replacement Full-Cloud E2E, Security, and Load/Performance guides are planned (see the [Roadmap](../ROADMAP.md)).
+
 ---
 
 ## Unit Tests
@@ -45,14 +47,14 @@ The [Developer Testing Guide](DevTestGuide.md) walks every service end-to-end th
 
 To call the APIs you need a token. For the interactive sign-in that obtains a delegated user token from Entra ID via Postman (OAuth2 Authorization Code + PKCE), and the most common pitfalls (the audience claim and 401s), see [OAuth2 Authorization Code + PKCE Concepts](../guides/oauth2-pkce-concepts.md).
 
-- **Local-to-code verification (available now).** The guide validates the codebase end-to-end against its backing services.
-- **Full-cloud verification via the ingress (available now).** The platform is verified through the public HTTPS ingress — see the section below. Verification through **Azure API Management** follows once the managed edge is in place.
+- **Full-cloud verification via the ingress (the valid path).** The platform is verified through the public HTTPS ingress at **`https://api.antkart.in`** — see the section below. This is the only valid end-to-end path.
+- **Local-to-code verification (superseded).** The [Developer Manual Test Guide](DevTestGuide.md) is a Phase-1 local (Docker Compose) walkthrough — retained for reference, not a valid verification of the delivered cloud platform.
 
 ---
 
 ## Cluster End-to-End Verification (public ingress)
 
-The platform is verified against the **cluster** through its public HTTPS entry point — the ingress in front of the gateway — using a Postman collection that targets the **gateway routes** (not the individual services, which are internal `ClusterIP`). The base URL is the ingress hostname, `https://<public-ip>.nip.io` (a Let's Encrypt certificate terminates TLS; on the staging issuer the certificate is untrusted, so disable TLS verification in Postman or import the staging root).
+The platform is verified against the **cluster** through its public HTTPS entry point — the ingress in front of the gateway — using a Postman collection that targets the **gateway routes** (not the individual services, which are internal `ClusterIP`). The base URL is the custom domain **`https://api.antkart.in`** (GoDaddy A record → the ingress public IP), which terminates TLS with a **trusted Let's Encrypt production certificate** — no need to disable TLS verification in Postman.
 
 The verified journey:
 

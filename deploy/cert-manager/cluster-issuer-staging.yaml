@@ -20,7 +20,8 @@ spec:
       name: letsencrypt-staging-account-key
     solvers:
       # HTTP-01: cert-manager proves domain control by serving a token over HTTP on
-      # the ingress. Works with the public nip.io hostname pointed at the controller IP.
+      # the ingress. Works with the public hostname pointed at the controller IP
+      # (the custom domain api.antkart.in, or a <public-ip>.nip.io fallback).
       - http01:
           ingress:
             class: nginx
