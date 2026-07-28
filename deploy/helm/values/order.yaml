@@ -2,7 +2,6 @@
 name: ak-order
 serviceName: order
 workloadIdentityClientId: "4073b3dc-ca1e-4788-a58d-c2b4393ee7b9"
-
 env:
   # CRITICAL: override the localhost:5077 default with the in-cluster Products DNS.
   # Trailing slash retained, matching the appsettings default (http://localhost:5077/).
@@ -15,3 +14,5 @@ env:
   Entra__TenantId: "4cacc56a-0d38-46c4-ba20-429d51d7b449"
   Entra__Audience: "api://antkart-api-dev"
   Entra__ClientId: "ea22550b-a0ae-4847-a2e2-2524752d9522"
+image:
+  tag: ac42753
