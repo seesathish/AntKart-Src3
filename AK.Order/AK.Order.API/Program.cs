@@ -90,7 +90,6 @@ app.UseSwaggerInDevelopment("AK.Order API v1");
 app.UseEntraAuth();
 
 app.MapOrderEndpoints();
-app.MapGet("/version", () => new { service = "order", version = "cicd-test-order", deployedVia = "GitOps" });
 app.MapDefaultHealthChecks();
 
 app.Run();
