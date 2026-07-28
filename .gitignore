@@ -383,3 +383,10 @@ override.tf.json
 # builds (the infrastructure equivalent of pinned package versions), so every
 # run resolves the exact same providers.
 !**/.terraform.lock.hcl
+
+# Never commit certificate or key material
+*.pem
+*.key
+*.pfx
+*.crt
+*.p12
