@@ -21,6 +21,9 @@ spec:
     server: https://kubernetes.default.svc
     namespace: antkart
   syncPolicy:
+    automated:
+      selfHeal: true
+      prune: false
     syncOptions:
       - CreateNamespace=false
       - ServerSideApply=true

@@ -20,9 +20,12 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: antkart
-  # Manual sync to start (no `automated:` block). See ../README.md to enable
-  # automated / selfHeal / prune later.
+  # Auto-sync enabled: Argo CD deploys the CD workflow's image-tag bump with no
+  # manual sync. selfHeal reverts live drift back to Git; prune is off for safety.
   syncPolicy:
+    automated:
+      selfHeal: true
+      prune: false
     syncOptions:
       - CreateNamespace=false
       - ServerSideApply=true
