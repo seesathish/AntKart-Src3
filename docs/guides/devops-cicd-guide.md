@@ -2,7 +2,7 @@
 
 This guide explains how a code change becomes a running pod on the cluster, and how the pipelines are built. It is written for a reader learning CI/CD — every concept is explained rather than assumed. The design decisions behind it are recorded in [ADR-023](../adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md) (pipeline design and repository strategy) and [ADR-022](../adr/ADR-022-cicd-github-actions-oidc.md) (GitHub Actions + OIDC to Azure).
 
-The pattern is established with **one service — Products — first**, then templated to the others. Both halves are delivered and **proven end to end**: a `/version` change flowed through the full loop — PR → gate → merge → image build → ACR → Git image-tag bump → Argo CD auto-sync — and was served from a pod running the exact commit-SHA image tag, hands-free. The **CI (pull-request) quality gate** and the **CD (merge) delivery workflow** are both live.
+The pattern was established with **one service — Products — first** and **proven end to end**: a `/version` change flowed through the full loop — PR → gate → merge → image build → ACR → Git image-tag bump → Argo CD auto-sync — and was served from a pod running the exact commit-SHA image tag, hands-free. It is now **templated to all six services** — each has a `<service>-ci.yml` (pull-request quality gate) and a `<service>-cd.yml` (merge delivery), all copies of the Products pair with only the per-service specifics changed (see the [per-service table](#per-service-specifics)).
 
 ---
 
@@ -67,6 +67,27 @@ Workflows are **per service and path-filtered**, so a change to one service does
 | `<service>-ci.yml` | `pull_request` affecting that service | Quality gate: build, test, SonarCloud, Trivy | No |
 | `<service>-cd.yml` | push to `master` affecting that service | Build + push image, update image tag in Git | No — writes Git; Argo CD deploys |
 
+#### Per-service specifics
+
+All six services run the identical two-workflow pattern; only these facts differ per service. Everything else (the SHA-pinned action versions, `DOTNET_VERSION: '9.0.x'`, the SonarCloud org/project, the `HIGH,CRITICAL` Trivy gate, the OIDC auth, `CD_PUSH_TOKEN`, `[skip ci]` + path-filter loop prevention) is copied verbatim from Products.
+
+| Service | Deployable project | Image repo | Values file | Unit tests | Integration tests in CI | Ingress |
+|---------|--------------------|-----------|-------------|-----------|------------------------|---------|
+| Products | `AK.Products.API` | `antkart/products` | `products.yaml` | ✅ `AK.Products.Tests` | ✅ | — |
+| ShoppingCart (`cart`) | `AK.ShoppingCart.API` | **`antkart/shoppingcart`** | `cart.yaml` | ✅ `AK.ShoppingCart.Tests` | ✅ | — |
+| Order | `AK.Order.API` | `antkart/order` | `order.yaml` | ✅ `AK.Order.Tests` | ✅ | — |
+| Payments | `AK.Payments.API` | `antkart/payments` | `payments.yaml` | ✅ `AK.Payments.Tests` | ✅ | — |
+| Discount | **`AK.Discount.Grpc`** (gRPC) | `antkart/discount` | `discount.yaml` | ✅ `AK.Discount.Tests` | — (not referenced) | — |
+| Gateway | `AK.Gateway.API` | `antkart/gateway` | `gateway.yaml` | — (no test project) | — (not referenced) | ✅ (tag-bump untouched) |
+
+Three services need special handling, all reflected above:
+
+- **ShoppingCart → `antkart/shoppingcart`.** The image repository is **not** `antkart/cart`. `cart.yaml` sets `image.name: shoppingcart`, so `cart-cd.yml` builds, pushes, and tags `antkart/shoppingcart` and bumps `.image.tag` in `cart.yaml`.
+- **Discount is gRPC.** Its deployable is `AK.Discount.Grpc` (no `.API` project); CI builds that project and CD builds from `AK.Discount/AK.Discount.Grpc/Dockerfile`. It is **not** referenced by `AK.IntegrationTests`, so its CI runs unit tests only (no integration-test step, and `AK.IntegrationTests/**` is not in its path filter).
+- **Gateway has no test project and an ingress.** `AK.Gateway` is a thin Ocelot routing host with no unit suite, so `gateway-ci.yml`'s `build-test` job **builds only** and its `sonar` job runs **without a coverage report** (the job names stay `build-test`/`sonar`/`trivy` so the same four required checks are satisfied). `gateway-cd.yml` bumps **only** `.image.tag` in `gateway.yaml` — the gateway's ingress values (and the Argo CD Application's ingress parameters) are never touched, so a tag bump is safe.
+
+**Integration tests belong to the services `AK.IntegrationTests` actually references** — Products, ShoppingCart, Order, Payments. Those four include `AK.IntegrationTests/**` in their CI path filter and run it; Discount and Gateway do not (that project does not reference them).
+
 The Products CI workflow is [`.github/workflows/products-ci.yml`](../../.github/workflows/products-ci.yml). Its `pull_request` trigger is **path-filtered** to the paths that can affect Products:
 
 - `AK.Products/**` — the service itself
@@ -117,6 +138,8 @@ dotnet sonarscanner end /d:sonar.token=$SONAR_TOKEN
 - **`end`** uploads the analysis and coverage to SonarCloud, which posts the result on the PR.
 
 Configuration in the workflow: organization **`seesathish`**, project key **`seesathish_AntKart-Src3`** (the repository-level SonarCloud project; a single project key per repo — per-service Sonar projects are a future option in ADR-023), and the coverage path wired to the OpenCover reports so **SonarCloud shows real coverage**, not zero.
+
+**All six services analyse into this same SonarCloud project**, each CI run scanning the projects it builds. This is the intended replication — the same org/project key across every `<service>-ci.yml`, scoped by what each run compiles — not a per-service project. (Gateway has no tests, so its `sonar` run omits the coverage report and analyses code only.) The single-project trade-off is recorded in ADR-023; moving to per-service Sonar projects is the documented evolution if per-service granularity is later needed.
 
 - **`SONAR_TOKEN` is a GitHub Actions secret** — a SonarCloud token, not a cloud credential. It already exists in the repository secrets. It is the only secret CI needs.
 - **Fork PRs.** GitHub does not pass secrets to workflows triggered by PRs from forks, so the `sonar` job cannot authenticate on a fork PR. For an internal, same-repo branch flow this does not arise; handling fork contributions (e.g. a `pull_request_target` variant) is a later refinement.

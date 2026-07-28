@@ -115,3 +115,16 @@ The design above was implemented for **Products** and **proven end to end**. Thi
 **Delivery is auto-synced.** Argo CD **auto-sync** (`selfHeal: true`, `prune: false`) is enabled on the `ak-products` Application, so the tag-bump commit deploys with **no manual sync** — the full loop (code change → PR → gate → merge → build → ACR → Git tag bump → Argo CD auto-sync → running pod) runs hands-free.
 
 The remaining five services still run their manually-installed images; templating the two workflows (and enabling auto-sync) to them is the next step, and is intentionally out of scope for this first, proven pattern.
+
+---
+
+## Amendment (2026-07-28) — Templated to all six services
+
+The two workflows were templated from Products to the remaining five services (**ShoppingCart, Order, Payments, Discount, Gateway**) — each a verbatim copy of the Products pair (same SHA-pinned actions, same `9.0.x` SDK, same SonarCloud org/project, same Trivy gate, same OIDC auth, same `CD_PUSH_TOKEN` tag-bump, same loop prevention) with only per-service specifics changed:
+
+- **ShoppingCart** publishes to **`antkart/shoppingcart`**, not `antkart/cart` (`cart.yaml` sets `image.name: shoppingcart`); CD tags/pushes that repo and bumps `.image.tag` in `cart.yaml`.
+- **Discount is gRPC** — its deployable is `AK.Discount.Grpc` and CD builds from that Dockerfile; it is not referenced by `AK.IntegrationTests`, so CI runs unit tests only.
+- **Gateway has no test project** — its `build-test` job builds only and `sonar` runs without coverage (job names kept as `build-test`/`sonar`/`trivy` so the same four required checks are satisfied); CD bumps only `.image.tag`, leaving the gateway's ingress values untouched.
+- **Integration tests** run in CI only for the services `AK.IntegrationTests` references — Products, ShoppingCart, Order, Payments.
+
+Argo CD auto-sync is enabled per service as each adopts the loop (Products first). The single repository-level SonarCloud project is unchanged — every service analyses into it, scoped by what its run builds (the "one Sonar project" trade-off above).
