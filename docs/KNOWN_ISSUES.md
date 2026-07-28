@@ -15,6 +15,13 @@ Related: the [Platform Roadmap](ROADMAP.md) tracks delivered/in-progress/planned
 - **Current mitigation:** The service is **`ClusterIP`-only** (no ingress, never exposed outside the cluster) and is reached solely by the Products service over cluster DNS, so the vulnerable surface is not externally reachable. Read-only RPCs (the normal discount lookup) do not depend on this check.
 - **Planned resolution:** Replace the decode-only check with **proper token validation** (signature, issuer, audience, lifetime — the same Entra validation the REST services use via `AK.BuildingBlocks`) as part of the security workstream (see the [Roadmap security programme](ROADMAP.md#planned--future)).
 
+### KI-005 · No stock-release compensation on payment failure · Severity: Medium
+
+- **Component:** `AK.Order` saga / payment outcome path — `PaymentFailedConsumer` and the order saga.
+- **Impact:** When a payment **fails**, the order is moved to `PaymentFailed`, but the **stock reserved earlier by the saga is not released**. The reservation is retained indefinitely, so inventory stays held for an order that will not be paid — a slow leak of available stock as failed payments accumulate.
+- **Current mitigation:** None automated. The reservation can be released manually if needed; failed-payment volume is low in the current usage. Note this is separate from the order **state-machine** fix (Confirmed → Paid / PaymentFailed), which is resolved — this item is only about the **compensation** that should follow a failure.
+- **Planned resolution:** A deliberate design decision to defer to a dedicated **compensation workstream** — emit a stock-release/compensation event on `PaymentFailed` (and on cancellation) so the reservation is returned. Not implemented yet; tracked here so it is scheduled, not overlooked.
+
 ### KI-003 · Gateway CORS allows any origin · Severity: Medium
 
 - **Component:** `AK.Gateway/AK.Gateway.API/Program.cs` — the `AllowAll` CORS policy (`AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()`).

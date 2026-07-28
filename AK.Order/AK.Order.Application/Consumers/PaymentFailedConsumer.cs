@@ -15,7 +15,9 @@ public sealed class PaymentFailedConsumer(IUnitOfWork uow) : IConsumer<PaymentFa
         var order = await uow.Orders.GetByIdAsync(context.Message.OrderId, context.CancellationToken);
         if (order is null) return;
 
-        // PaymentFailed is a valid transition from Confirmed (see _allowedTransitions in Order entity).
+        // Move the order to PaymentFailed. UpdateStatus enforces the state machine
+        // (Order._allowedTransitions), which must permit Confirmed → PaymentFailed — the order is
+        // in Confirmed by the time a payment outcome is processed.
         order.UpdateStatus(OrderStatus.PaymentFailed);
         await uow.SaveChangesAsync(context.CancellationToken);
     }

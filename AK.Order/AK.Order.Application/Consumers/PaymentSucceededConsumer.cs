@@ -15,7 +15,8 @@ public sealed class PaymentSucceededConsumer(IUnitOfWork uow) : IConsumer<Paymen
         var order = await uow.Orders.GetByIdAsync(context.Message.OrderId, context.CancellationToken);
         if (order is null) return;
 
-        // UpdateStatus enforces the state machine — Confirmed → Paid is a valid transition.
+        // Move the order to Paid. UpdateStatus enforces the state machine (Order._allowedTransitions),
+        // which must permit Confirmed → Paid — the order is in Confirmed by the time payment is verified.
         order.UpdateStatus(OrderStatus.Paid);
         order.ConfirmPayment();  // also sets PaymentStatus = Paid on the order
         await uow.SaveChangesAsync(context.CancellationToken);

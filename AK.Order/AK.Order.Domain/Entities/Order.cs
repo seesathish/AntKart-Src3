@@ -74,16 +74,22 @@ public sealed class Order : Entity, IAggregateRoot
     // Attempting an invalid transition (e.g. Delivered → Pending) throws InvalidOperationException,
     // which the ExceptionHandlerMiddleware maps to HTTP 409 Conflict.
     // Empty HashSets for Delivered and Cancelled mark them as terminal (no further transitions).
+    //
+    // Payment outcomes: Confirmed is the state an order occupies when payment is attempted
+    // (OrderConfirmedConsumer sets Confirmed after the saga reserves stock), so BOTH payment
+    // outcomes — Paid and PaymentFailed — must be reachable from Confirmed. Paid moves FORWARD
+    // into fulfilment, never back to Confirmed. PaymentFailed can reach Paid so a customer retry
+    // can succeed.
     private static readonly Dictionary<OrderStatus, HashSet<OrderStatus>> _allowedTransitions = new()
     {
         [OrderStatus.Pending]       = [OrderStatus.Confirmed, OrderStatus.Cancelled, OrderStatus.PaymentFailed],
-        [OrderStatus.Confirmed]     = [OrderStatus.Processing, OrderStatus.Shipped, OrderStatus.Cancelled],
+        [OrderStatus.Confirmed]     = [OrderStatus.Paid, OrderStatus.PaymentFailed, OrderStatus.Processing, OrderStatus.Shipped, OrderStatus.Cancelled],
         [OrderStatus.Processing]    = [OrderStatus.Shipped, OrderStatus.Cancelled],
         [OrderStatus.Shipped]       = [OrderStatus.Delivered],
         [OrderStatus.Delivered]     = [],   // terminal — no further transitions allowed
         [OrderStatus.Cancelled]     = [],   // terminal
-        [OrderStatus.Paid]          = [OrderStatus.Confirmed, OrderStatus.Cancelled],
-        [OrderStatus.PaymentFailed] = [OrderStatus.Pending, OrderStatus.Cancelled],
+        [OrderStatus.Paid]          = [OrderStatus.Processing, OrderStatus.Shipped, OrderStatus.Cancelled],
+        [OrderStatus.PaymentFailed] = [OrderStatus.Paid, OrderStatus.Cancelled],
     };
 
     public void UpdateStatus(OrderStatus newStatus)
