@@ -19,10 +19,13 @@ ingress:
   className: nginx
   path: /
   pathType: Prefix
-  # Start on STAGING to validate the whole flow (Let's Encrypt PRODUCTION has strict
-  # rate limits — a failed loop can lock the account out for a week). Switch to
-  # letsencrypt-prod only after staging issues a certificate successfully.
-  clusterIssuer: letsencrypt-staging
+  # Staging validated the whole flow first (Let's Encrypt PRODUCTION has strict
+  # rate limits — a failed loop can lock the account out for a week); now switched
+  # to production for the real domain (api.antkart.in). This values file is the
+  # SOURCE OF TRUTH for the issuer; the ak-gateway Argo CD Application also sets
+  # ingress.clusterIssuer=letsencrypt-prod, which now agrees with this and is
+  # therefore redundant but harmless.
+  clusterIssuer: letsencrypt-prod
   annotations:
     # Max request body the gateway will accept (nginx default is 1m). 10m leaves room
     # for larger POST/PUT payloads without a 413.
