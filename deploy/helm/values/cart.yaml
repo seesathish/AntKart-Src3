@@ -6,8 +6,8 @@ serviceName: cart
 # the image path is overridden here. See antkart-service/values.yaml for the rationale.
 image:
   name: shoppingcart
+  tag: a61d1aa
 workloadIdentityClientId: "53d89789-5bfa-4bd8-b0ee-9ca382834a22"
-
 env:
   ServiceBus__FullyQualifiedNamespace: "sb-antkart-dev.servicebus.windows.net"
   RedisSettings__InstanceName: "AKCart:"
