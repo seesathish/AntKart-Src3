@@ -60,6 +60,7 @@ app.UseSwaggerInDevelopment("AK.ShoppingCart API v1");
 app.UseEntraAuth();
 
 app.MapCartEndpoints();
+app.MapGet("/version", () => new { service = "cart", version = "cicd-test-cart", deployedVia = "GitOps" });
 app.MapDefaultHealthChecks();
 
 app.Run();
