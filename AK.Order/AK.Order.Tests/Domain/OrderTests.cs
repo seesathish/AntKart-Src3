@@ -209,4 +209,83 @@ public class OrderTests
         order.ClearDomainEvents();
         order.DomainEvents.Should().BeEmpty();
     }
+
+    // --- Payment transition state machine ---
+    // Regression tests for the corrected _allowedTransitions table. By the time a payment
+    // outcome is processed the order is in Confirmed (OrderConfirmedConsumer set it after the
+    // saga reserved stock), so BOTH outcomes must be reachable from Confirmed. These fail
+    // against the previous table (Confirmed omitted Paid/PaymentFailed; the Paid row was reversed).
+
+    [Fact]
+    public void UpdateStatus_ConfirmedToPaid_Succeeds()
+    {
+        var order = TestDataFactory.CreateOrder();
+        order.UpdateStatus(OrderStatus.Confirmed);
+        order.UpdateStatus(OrderStatus.Paid);
+        order.Status.Should().Be(OrderStatus.Paid);
+    }
+
+    [Fact]
+    public void UpdateStatus_ConfirmedToPaid_ThenConfirmPayment_SetsPaymentStatusPaid()
+    {
+        var order = TestDataFactory.CreateOrder();
+        order.UpdateStatus(OrderStatus.Confirmed);
+        order.UpdateStatus(OrderStatus.Paid);
+        order.ConfirmPayment();
+        order.Status.Should().Be(OrderStatus.Paid);
+        order.PaymentStatus.Should().Be(PaymentStatus.Paid);
+    }
+
+    [Fact]
+    public void UpdateStatus_ConfirmedToPaymentFailed_Succeeds()
+    {
+        var order = TestDataFactory.CreateOrder();
+        order.UpdateStatus(OrderStatus.Confirmed);
+        order.UpdateStatus(OrderStatus.PaymentFailed);
+        order.Status.Should().Be(OrderStatus.PaymentFailed);
+    }
+
+    [Fact]
+    public void UpdateStatus_PaidToConfirmed_IsRejected()
+    {
+        // Paid moves FORWARD into fulfilment, never back to Confirmed. Guards against the
+        // reversed [Paid] = [Confirmed] row returning.
+        var order = TestDataFactory.CreateOrder();
+        order.UpdateStatus(OrderStatus.Confirmed);
+        order.UpdateStatus(OrderStatus.Paid);
+        var act = () => order.UpdateStatus(OrderStatus.Confirmed);
+        act.Should().Throw<InvalidOperationException>().WithMessage("*from Paid to Confirmed*");
+    }
+
+    [Fact]
+    public void UpdateStatus_PaymentFailedToPaid_Succeeds()
+    {
+        // Retry path: a customer whose first payment failed can pay again and succeed.
+        var order = TestDataFactory.CreateOrder();
+        order.UpdateStatus(OrderStatus.Confirmed);
+        order.UpdateStatus(OrderStatus.PaymentFailed);
+        order.UpdateStatus(OrderStatus.Paid);
+        order.Status.Should().Be(OrderStatus.Paid);
+    }
+
+    [Fact]
+    public void UpdateStatus_DeliveredIsTerminal_RejectsFurtherTransition()
+    {
+        var order = TestDataFactory.CreateOrder();
+        order.UpdateStatus(OrderStatus.Confirmed);
+        order.UpdateStatus(OrderStatus.Shipped);
+        order.UpdateStatus(OrderStatus.Delivered);
+        var act = () => order.UpdateStatus(OrderStatus.Processing);
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void UpdateStatus_CancelledIsTerminal_RejectsFurtherTransition()
+    {
+        var order = TestDataFactory.CreateOrder();
+        order.UpdateStatus(OrderStatus.Confirmed);
+        order.UpdateStatus(OrderStatus.Cancelled);
+        var act = () => order.UpdateStatus(OrderStatus.Paid);
+        act.Should().Throw<InvalidOperationException>();
+    }
 }
