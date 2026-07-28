@@ -67,13 +67,13 @@ Core Azure services in use: **Microsoft Entra ID**, **Azure Kubernetes Service**
 - All six services run on AKS via Helm — a single generic chart instantiated per service, with workload-identity ServiceAccounts, a startupProbe gating liveness (`/health/live`) and readiness (`/health/ready`) so Key-Vault-at-boot never restart-loops a pod, resource requests sized to the node pool, and ClusterIP services on 8080 (AK.Discount uses TCP probes for its h2c gRPC port) — [Helm charts](../deploy/helm/README.md) · [AKS Guide](guides/aks-guide.md#deploying-the-services-helm)
 
 **Ingress and TLS**
-- Public HTTPS entry point via self-managed ingress-nginx exposing the **gateway only**, with cert-manager (Let's Encrypt, staging→production) automated TLS and a nip.io hostname; the AKS subnet's custom NSG opens inbound 80/443 from the Internet tag (the bring-your-own-VNet requirement AKS does not handle automatically) — [AKS Guide](guides/aks-guide.md#ingress-and-tls) · [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md) (target-state managed edge)
+- Public HTTPS entry point via self-managed ingress-nginx exposing the **gateway only**, with cert-manager automated TLS. Cut over to the real domain **`api.antkart.in`** (GoDaddy A record → the ingress public IP) with a trusted Let's Encrypt **production** certificate (secret `ak-gateway-tls`, dnsNames `["api.antkart.in"]`); host and issuer are driven from Git and reconciled by Argo CD (a `helm upgrade` would be reverted by self-heal). The AKS subnet's custom NSG opens inbound 80/443 from the Internet tag (the bring-your-own-VNet requirement AKS does not handle automatically) — [AKS Guide](guides/aks-guide.md#ingress-and-tls)
 
 **GitOps delivery (Argo CD)**
 - The cluster is Git-driven by Argo CD: a dedicated `antkart` AppProject scopes the allowed repository, destination namespace, and resource scope; six Applications (with an ApplicationSet alternative) reconcile the **same** generic Helm chart per service. Adopted with manual-first sync (the only diff was Argo CD's tracking-id annotations, no workload change), and a `replicaCount` change proven to deploy via `git push` alone — [GitOps Guide](guides/gitops-guide.md) · [deploy/argocd/README](../deploy/argocd/README.md)
 
 **CI/CD with GitHub Actions (all six services)**
-- Per-service, path-filtered pipelines in two decoupled workflows (Pattern B): **CI** on pull request (build, unit + in-memory integration tests with coverage, SonarCloud, Trivy fs + Dockerfile scan; all actions pinned to immutable commit SHAs) is enforced by the `master-protection` ruleset (four required checks); **CD** on merge authenticates to Azure with **OIDC** (the `github-oidc` identity, AcrPush only, no cluster access, no secret), builds a **commit-SHA-tagged immutable image**, pushes it to ACR, and bumps `.image.tag` in Git for Argo CD to auto-sync. **Proven end to end** on Products — a change flowed from PR to a running pod on the new image tag, hands-free — then templated to **all six services** (Products, ShoppingCart, Order, Payments, Discount, Gateway), each a copy of the Products pair with only per-service specifics changed (image repo, Dockerfile, values file; Discount is gRPC, Gateway has no test project and keeps its ingress untouched) — [DevOps CI/CD Guide](guides/devops-cicd-guide.md) · [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md) · [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md)
+- Per-service, path-filtered pipelines in two decoupled workflows (Pattern B), **delivered and proven for all six services** (Products, ShoppingCart, Order, Payments, Discount, Gateway): **CI** on pull request (build, unit + in-memory integration tests with coverage, SonarCloud, Trivy fs + Dockerfile scan; all actions pinned to immutable commit SHAs) is enforced by the `master-protection` ruleset (four required checks); **CD** on merge authenticates to Azure with **OIDC** (the `github-oidc` identity, AcrPush only, no cluster access, no secret), builds a **commit-SHA-tagged immutable image**, pushes it to ACR, and bumps `.image.tag` in Git for Argo CD to auto-sync. A change flows from PR to a running pod on the new image tag, hands-free. Each service is a copy of the Products pair with only per-service specifics changed (image repo, Dockerfile, values file; Discount is gRPC, Gateway has no test project and keeps its ingress untouched). The custom-domain cutover to `api.antkart.in` was itself delivered through this GitOps path — a Git change reconciled by Argo CD, no manual cluster action — [DevOps CI/CD Guide](guides/devops-cicd-guide.md) · [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md) · [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md)
 
 **End-to-end verified on the cluster**
 - Verified through the public HTTPS endpoint: browse products, add to cart, and create an order — driving server-authoritative price revalidation, the orchestrated SAGA, stock reservation, order confirmation, cart clearing, and both notification emails delivered via Event Grid → Functions → ACS — [Cluster end-to-end verification](test/README.md#cluster-end-to-end-verification-public-ingress)
@@ -87,26 +87,35 @@ Core Azure services in use: **Microsoft Entra ID**, **Azure Kubernetes Service**
 
 ## In progress
 
-- **Azure API Management (managed external edge)** — adding Azure API Management in front of the delivered internal ingress as the managed edge in a **two-gateway model**: APIM owns edge concerns (TLS termination, JWT validation, rate limiting and quotas, subscription keys and products, developer portal, request/response transformation) while the cluster's internal ingress continues to route to services. These are **sequenced layers, not competing gateways** — the internal cluster ingress prerequisite is delivered; APIM is now added in front of it. In-service JWT validation is unchanged (defence in depth) — [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md).
+_Nothing is in active development right now — the near-term plan below is the immediate queue._
 
 ## Planned — near term
 
-- **Kubernetes depth** — storage, networking, policies, probes, resource requests/limits, and failure-diagnosis practices applied to the running fleet.
-- **Infrastructure provisioning and teardown pipelines** — automated apply and destroy of the environment as code.
-- **Observability** — OpenTelemetry instrumentation, Prometheus metrics, and Grafana dashboards, with Azure Monitor / Application Insights as the logging destination — [Observability design](design/OBSERVABILITY.md).
-- **Architecture and flow diagrams** — C4 plus Mermaid, including regeneration of the C4 model to match the current service set — [Architecture reference](architecture/C4Architecture.md).
-- **Concept deep-dive library** — a reference covering each pattern and Azure service in use, with rationale and trade-offs.
-- **Full rebuild runbook** — taking an operator from an empty subscription to the running platform.
-- **Development and test guides, and a navigable documentation index** — consolidating the procedures and cross-links — [Testing index](test/README.md).
+_Target: on or before 6 August 2026._
+
+- **Full saga end-to-end verification** — through the public HTTPS endpoint (`api.antkart.in`), exercising both the payment **success** and payment **failure** branches of the orchestrated saga — [Cluster end-to-end verification](test/README.md#cluster-end-to-end-verification-public-ingress).
+- **Deep-understanding consolidation** — of the delivered platform: Kubernetes, Helm, GitOps / Argo CD, CI/CD, OIDC federated credentials, workload identity, and action SHA pinning.
+- **Kubernetes depth at interview level** — probes, resources, configuration, storage, networking, policies, and failure diagnosis applied to the running fleet.
+- **Observability** — Serilog structured logging, OpenTelemetry tracing, Prometheus metrics, Grafana dashboards, and Application Insights / Log Analytics — [Observability design](design/OBSERVABILITY.md).
+- **API Management spike** — a time-boxed exploration: provision → wire one scenario (JWT validation at the edge) → test → delete. No standing APIM resource — [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md).
+- **Infrastructure provisioning and teardown pipelines** — automated apply and destroy of the environment as code, validated by a full teardown-and-rebuild — [infrastructure/README](../infrastructure/README.md).
+- **Architecture diagram set (~16), redrawn** — for the cloud-native platform. The existing C4 model and renders describe the earlier Phase 1 microservices platform and are **superseded** — [Architecture reference](architecture/C4Architecture.md).
+- **The Architect's Playbook** — a concise pre-interview quick-reference covering ~36 concepts, each linking to the ADR or concept guide that holds the detail.
 
 ## Planned — future
 
+_After 6 August 2026._
+
+- **Heroic rebuild runbook** — an empty-subscription-to-running-platform runbook, written up and validated by following it end to end.
+- **Test guide set** — Full-Cloud E2E, Security / ethical-hacking, and Load / Performance guides. Existing test documentation that describes local/localhost testing is **superseded** — only tests executed against cloud resources are valid going forward — [Testing index](test/README.md).
+- **README front door and documentation navigation index** — the public entry point and cross-link map, after the redrawn diagrams land.
+- **Job-hunt portfolio assets** — a public, history-free repository, its README, a CV, and LinkedIn.
+- **Open technical debt** — KI-002 Discount gRPC token validation; no stock-release compensation on payment failure; and Razorpay signature verification depending on SDK static state (breaks if Payments scales beyond one replica) — [Known Issues Register](KNOWN_ISSUES.md).
+- **Roadmap-level documentation** — FinOps / cost management, sovereign and regulated-cloud considerations, and performance and scalability validation.
+- **AZ-305 certification** — Azure Solutions Architect Expert.
 - **Hardened container base image** — a chiseled/distroless .NET base image published to ACR and consumed by all service images, reducing the attack surface and centralising runtime patching in one place — [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md) (recorded as future work).
-- **Security programme** — a cross-cutting programme across identity, network, runtime, supply chain, data, detection, and governance: DAST, Kubernetes network policies, pod-security admission, dependency and image scanning, cloud workload protection, policy enforcement, and audit logging with alerting; with image signing, customer-managed keys, secret rotation, and threat modelling documented. Open security defects awaiting this work — including the Discount gRPC token-validation gap — are tracked in the [Known Issues Register](KNOWN_ISSUES.md).
+- **Security programme** — a cross-cutting programme across identity, network, runtime, supply chain, data, detection, and governance: DAST, Kubernetes network policies, pod-security admission, dependency and image scanning, cloud workload protection, policy enforcement, and audit logging with alerting; with image signing, customer-managed keys, secret rotation, and threat modelling documented. Open security defects awaiting this work are tracked in the [Known Issues Register](KNOWN_ISSUES.md).
 - **ISO/IEC 27001 alignment** — implement the applicable controls and document the mapping from control to implementation.
-- **Sovereign and regulated-cloud considerations** — data residency, regional restrictions, and deployment constraints, documented for regulated-environment readiness.
-- **Cost management** — cost-optimisation practices documented and applied where practical, including right-sizing, idle-resource management, and cost visibility.
-- **Performance and scalability validation** — load and performance testing with horizontal pod autoscaling and cluster autoscaling, producing documented evidence that the platform scales.
 - **Multi-cloud delivery** — deploying the same application codebase to AWS through a separate infrastructure and delivery pipeline, demonstrating portability of the application layer.
 - **Service mesh with mutual TLS** — a mesh providing mTLS between services for authenticated, encrypted in-cluster traffic.
 - **Shared building blocks as a package feed** — publishing the cross-cutting library as a versioned package for consumption across services.
