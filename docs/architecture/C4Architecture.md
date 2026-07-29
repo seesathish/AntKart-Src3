@@ -1,5 +1,7 @@
 # AntKart — C4 Architecture
 
+> **⛔ SUPERSEDED — describes the Phase 1 platform running locally.** These diagrams (and the `c4-*.png` renders, `workspace.dsl`, and `workspace.json` alongside them) model the earlier **Phase 1** AntKart platform running **locally** (Docker Compose, local RabbitMQ/Keycloak/Mailhog, no Azure managed services, no AKS/GitOps). They do **not** reflect the delivered cloud-native platform. A full redraw is planned — see the **[Architecture Diagram Plan](DIAGRAM-PLAN.md)** (18 diagrams, locked visual language, C4 + Mermaid). These assets are **retained until each is replaced** by its cloud-native successor, so nothing is deleted yet.
+
 The [C4 model](https://c4model.com/) describes software architecture at four levels of zoom. Each level answers a different question for a different audience.
 
 > **Source of truth:** These diagrams are generated from [`docs/architecture/workspace.dsl`](workspace.dsl) using [Structurizr](https://structurizr.com), the reference C4 tooling by Simon Brown. Edit the DSL, re-export, and all diagrams stay consistent.

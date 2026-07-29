@@ -99,7 +99,7 @@ _Target: on or before 6 August 2026._
 - **Observability** — Serilog structured logging, OpenTelemetry tracing, Prometheus metrics, Grafana dashboards, and Application Insights / Log Analytics — [Observability design](design/OBSERVABILITY.md).
 - **API Management spike** — a time-boxed exploration: provision → wire one scenario (JWT validation at the edge) → test → delete. No standing APIM resource — [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md).
 - **Infrastructure provisioning and teardown pipelines** — automated apply and destroy of the environment as code, validated by a full teardown-and-rebuild — [infrastructure/README](../infrastructure/README.md).
-- **Architecture diagram set (~16), redrawn** — for the cloud-native platform. The existing C4 model and renders describe the earlier Phase 1 microservices platform and are **superseded** — [Architecture reference](architecture/C4Architecture.md).
+- **Architecture diagram set (18), redrawn** — for the cloud-native platform, with a locked visual language and a C4/Mermaid tooling split; Azure API Management appears in diagrams 02 (container), 07 (network/traffic path), and 10 (the APIM edge itself). The existing C4 model and renders describe the earlier Phase 1 microservices platform and are **superseded** — [Diagram Plan](architecture/DIAGRAM-PLAN.md) · [Architecture reference](architecture/C4Architecture.md).
 - **The Architect's Playbook** — a concise pre-interview quick-reference covering ~36 concepts, each linking to the ADR or concept guide that holds the detail.
 
 ## Planned — future
