@@ -34,6 +34,10 @@ on:
       - 'AK.IntegrationTests/**'
       - 'nuget.config'
       - '.github/workflows/products-ci.yml'
+      # Documentation-only changes inside a service folder (e.g. *.md) do NOT
+      # trigger the CI gate. The negation must be LAST — later patterns win in
+      # GitHub Actions path filters.
+      - '!**/*.md'
 
 # Least privilege: the gate only needs to read the repository. It never writes to
 # Git, the registry, or the cluster (that is CD's concern, with its own scoped

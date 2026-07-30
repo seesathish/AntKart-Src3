@@ -26,6 +26,10 @@ on:
     paths:
       - 'AK.ShoppingCart/**'
       - 'AK.BuildingBlocks/**'
+      # Documentation-only changes inside a service folder (e.g. *.md) do NOT
+      # trigger delivery. The negation must be LAST — later patterns win in
+      # GitHub Actions path filters.
+      - '!**/*.md'
 
 permissions:
   id-token: write

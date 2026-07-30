@@ -40,6 +40,14 @@ Related: the [Platform Roadmap](ROADMAP.md) tracks delivered/in-progress/planned
 
 ## Resolved
 
+### KI-006 · CD path filters lacked a markdown exclusion · Resolved
+
+- **Component:** `.github/workflows/*-cd.yml` (all six) and `*-ci.yml` — the `on: push`/`pull_request` **path filters**.
+- **Cause:** each workflow filtered on whole service folders (`AK.<Service>/**`) and the shared library (`AK.BuildingBlocks/**`) with **no exclusion for documentation**. Any file under those folders — including `*.md` — matched, so a documentation-only change triggered a full CD run (build image → push to ACR → bump `.image.tag` in Helm values). Because `AK.BuildingBlocks/**` is present in **all six** workflows, a single change to `AK.BuildingBlocks/BUILDING_BLOCKS.md` matched every service.
+- **Proof (not theoretical):** commit **`5261027`** changed **only markdown** (diagram docs + Phase-1 SUPERSEDED banners, touching `AK.*/…​.md` and `AK.BuildingBlocks/BUILDING_BLOCKS.md`). It triggered **five** CD pipelines, which each built and pushed an image and bumped the tag — commits **`c2ad36e`** (shoppingcart), **`0f97859`** (gateway), **`7b5280d`** (order), **`1be49cd`** (discount), **`5685cf2`** (payments), all `-> 5261027`.
+- **Fix:** append **`- '!**/*.md'`** as the **last** entry of every workflow's `paths` list (later patterns take precedence in GitHub Actions path filters, so the negation must come last). Documentation changes inside a service folder no longer trigger CD or the CI gate. The five already-pushed tag bumps were **left in place** — the images are functionally identical to what preceded them, and reverting would trigger another round of syncs.
+- **Lesson:** a positive path filter over a folder is over-broad by default; pair it with a negative pattern (`!**/*.md`, or narrower globs) so non-shipping files cannot drive delivery.
+
 | ID | Component | Resolution |
 |----|-----------|------------|
 | KI-001 | AK.Discount.Grpc | The gRPC `AuthInterceptor` read a nested, provider-specific role-claim structure, so the admin write RPCs would fail authorization once tokens carried roles in a flat `roles` claim. **Resolved in the identity migration to Microsoft Entra ID:** the interceptor now reads the flat top-level `roles` claim, consistent with the shared `AK.BuildingBlocks` authentication. (Note: correct role *reading* was restored; cryptographic token *validation* remains open — see KI-002.) |

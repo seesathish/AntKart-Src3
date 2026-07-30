@@ -32,6 +32,10 @@ on:
     paths:
       - 'AK.Products/**'
       - 'AK.BuildingBlocks/**'
+      # Documentation-only changes inside a service folder (e.g. *.md) do NOT
+      # trigger delivery. The negation must be LAST — later patterns win in
+      # GitHub Actions path filters.
+      - '!**/*.md'
 
 # --- Permissions (least privilege) --------------------------------------------
 # id-token: write  — mint the GitHub OIDC token azure/login exchanges for an Entra

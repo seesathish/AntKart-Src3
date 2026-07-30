@@ -19,6 +19,10 @@ on:
       - 'AK.IntegrationTests/**'
       - 'nuget.config'
       - '.github/workflows/payments-ci.yml'
+      # Documentation-only changes inside a service folder (e.g. *.md) do NOT
+      # trigger the CI gate. The negation must be LAST — later patterns win in
+      # GitHub Actions path filters.
+      - '!**/*.md'
 
 permissions:
   contents: read
