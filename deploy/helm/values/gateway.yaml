@@ -2,14 +2,12 @@
 name: ak-gateway
 serviceName: gateway
 workloadIdentityClientId: "a2b00f18-e8ff-4ab0-a399-5b194a2f05e1"
-
 env:
   # Microsoft Entra ID JWT validation at the edge (AddEntraAuthentication binds the Entra section).
   Entra__Instance: "https://login.microsoftonline.com"
   Entra__TenantId: "4cacc56a-0d38-46c4-ba20-429d51d7b449"
   Entra__Audience: "api://antkart-api-dev"
   Entra__ClientId: "ea22550b-a0ae-4847-a2e2-2524752d9522"
-
 # Ingress — the gateway is the ONLY service exposed externally. Enabled here is
 # kept false so a plain `helm install` does not create it before the controller
 # exists; the ak-gateway Argo CD Application sets enabled=true and the external
@@ -37,7 +35,6 @@ ingress:
     # Force HTTP -> HTTPS. nginx does this by default once a TLS block is present;
     # set explicitly so the intent is obvious and survives controller defaults changing.
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
-
 # ocelot.json is mounted from a ConfigMap over /app/ocelot.json so downstream
 # routing changes need only a values edit + `helm upgrade` (no image rebuild).
 # Downstream hosts are the in-cluster ak-* Service names on port 8080.
@@ -50,88 +47,88 @@ ocelot:
         DownstreamPathTemplate: "/api/v1/products/{everything}"
         DownstreamScheme: "http"
         DownstreamHostAndPorts:
-          - { Host: "ak-products", Port: 8080 }
-        AuthenticationOptions: { AuthenticationProviderKey: "Bearer" }
-        RateLimitOptions: { EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 20 }
-        QoSOptions: { ExceptionsAllowedBeforeBreaking: 5, DurationOfBreak: 30000, TimeoutValue: 10000 }
+          - {Host: "ak-products", Port: 8080}
+        AuthenticationOptions: {AuthenticationProviderKey: "Bearer"}
+        RateLimitOptions: {EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 20}
+        QoSOptions: {ExceptionsAllowedBeforeBreaking: 5, DurationOfBreak: 30000, TimeoutValue: 10000}
       - UpstreamPathTemplate: "/gateway/products"
         UpstreamHttpMethod: ["GET", "POST", "PUT", "DELETE"]
         DownstreamPathTemplate: "/api/v1/products"
         DownstreamScheme: "http"
         DownstreamHostAndPorts:
-          - { Host: "ak-products", Port: 8080 }
-        AuthenticationOptions: { AuthenticationProviderKey: "Bearer" }
-        RateLimitOptions: { EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 20 }
-        QoSOptions: { ExceptionsAllowedBeforeBreaking: 5, DurationOfBreak: 30000, TimeoutValue: 10000 }
+          - {Host: "ak-products", Port: 8080}
+        AuthenticationOptions: {AuthenticationProviderKey: "Bearer"}
+        RateLimitOptions: {EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 20}
+        QoSOptions: {ExceptionsAllowedBeforeBreaking: 5, DurationOfBreak: 30000, TimeoutValue: 10000}
       - UpstreamPathTemplate: "/gateway/cart/{everything}"
         UpstreamHttpMethod: ["GET", "POST", "PUT", "DELETE"]
         DownstreamPathTemplate: "/api/v1/cart/{everything}"
         DownstreamScheme: "http"
         DownstreamHostAndPorts:
-          - { Host: "ak-cart", Port: 8080 }
-        AuthenticationOptions: { AuthenticationProviderKey: "Bearer" }
-        RateLimitOptions: { EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 10 }
-        QoSOptions: { ExceptionsAllowedBeforeBreaking: 3, DurationOfBreak: 30000, TimeoutValue: 10000 }
+          - {Host: "ak-cart", Port: 8080}
+        AuthenticationOptions: {AuthenticationProviderKey: "Bearer"}
+        RateLimitOptions: {EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 10}
+        QoSOptions: {ExceptionsAllowedBeforeBreaking: 3, DurationOfBreak: 30000, TimeoutValue: 10000}
       - UpstreamPathTemplate: "/gateway/cart"
         UpstreamHttpMethod: ["GET", "POST", "PUT", "DELETE"]
         DownstreamPathTemplate: "/api/v1/cart"
         DownstreamScheme: "http"
         DownstreamHostAndPorts:
-          - { Host: "ak-cart", Port: 8080 }
-        AuthenticationOptions: { AuthenticationProviderKey: "Bearer" }
-        RateLimitOptions: { EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 10 }
-        QoSOptions: { ExceptionsAllowedBeforeBreaking: 3, DurationOfBreak: 30000, TimeoutValue: 10000 }
+          - {Host: "ak-cart", Port: 8080}
+        AuthenticationOptions: {AuthenticationProviderKey: "Bearer"}
+        RateLimitOptions: {EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 10}
+        QoSOptions: {ExceptionsAllowedBeforeBreaking: 3, DurationOfBreak: 30000, TimeoutValue: 10000}
       - UpstreamPathTemplate: "/gateway/orders/{everything}"
         UpstreamHttpMethod: ["GET", "POST", "PUT", "DELETE"]
         DownstreamPathTemplate: "/api/orders/{everything}"
         DownstreamScheme: "http"
         DownstreamHostAndPorts:
-          - { Host: "ak-order", Port: 8080 }
-        AuthenticationOptions: { AuthenticationProviderKey: "Bearer" }
-        RateLimitOptions: { EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 10 }
-        QoSOptions: { ExceptionsAllowedBeforeBreaking: 3, DurationOfBreak: 30000, TimeoutValue: 10000 }
+          - {Host: "ak-order", Port: 8080}
+        AuthenticationOptions: {AuthenticationProviderKey: "Bearer"}
+        RateLimitOptions: {EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 10}
+        QoSOptions: {ExceptionsAllowedBeforeBreaking: 3, DurationOfBreak: 30000, TimeoutValue: 10000}
       - UpstreamPathTemplate: "/gateway/orders"
         UpstreamHttpMethod: ["GET", "POST", "PUT", "DELETE"]
         DownstreamPathTemplate: "/api/orders"
         DownstreamScheme: "http"
         DownstreamHostAndPorts:
-          - { Host: "ak-order", Port: 8080 }
-        AuthenticationOptions: { AuthenticationProviderKey: "Bearer" }
-        RateLimitOptions: { EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 10 }
-        QoSOptions: { ExceptionsAllowedBeforeBreaking: 3, DurationOfBreak: 30000, TimeoutValue: 10000 }
+          - {Host: "ak-order", Port: 8080}
+        AuthenticationOptions: {AuthenticationProviderKey: "Bearer"}
+        RateLimitOptions: {EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 10}
+        QoSOptions: {ExceptionsAllowedBeforeBreaking: 3, DurationOfBreak: 30000, TimeoutValue: 10000}
       - UpstreamPathTemplate: "/gateway/payments/{everything}"
         UpstreamHttpMethod: ["GET", "POST", "PUT", "DELETE"]
         DownstreamPathTemplate: "/api/payments/{everything}"
         DownstreamScheme: "http"
         DownstreamHostAndPorts:
-          - { Host: "ak-payments", Port: 8080 }
-        AuthenticationOptions: { AuthenticationProviderKey: "Bearer" }
-        RateLimitOptions: { EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 30 }
-        QoSOptions: { ExceptionsAllowedBeforeBreaking: 5, DurationOfBreak: 30000, TimeoutValue: 10000 }
+          - {Host: "ak-payments", Port: 8080}
+        AuthenticationOptions: {AuthenticationProviderKey: "Bearer"}
+        RateLimitOptions: {EnableRateLimiting: true, Period: "1s", PeriodTimespan: 1, Limit: 30}
+        QoSOptions: {ExceptionsAllowedBeforeBreaking: 5, DurationOfBreak: 30000, TimeoutValue: 10000}
       - UpstreamPathTemplate: "/gateway/health/products"
         UpstreamHttpMethod: ["GET"]
         DownstreamPathTemplate: "/health"
         DownstreamScheme: "http"
         DownstreamHostAndPorts:
-          - { Host: "ak-products", Port: 8080 }
+          - {Host: "ak-products", Port: 8080}
       - UpstreamPathTemplate: "/gateway/health/cart"
         UpstreamHttpMethod: ["GET"]
         DownstreamPathTemplate: "/health"
         DownstreamScheme: "http"
         DownstreamHostAndPorts:
-          - { Host: "ak-cart", Port: 8080 }
+          - {Host: "ak-cart", Port: 8080}
       - UpstreamPathTemplate: "/gateway/health/orders"
         UpstreamHttpMethod: ["GET"]
         DownstreamPathTemplate: "/health"
         DownstreamScheme: "http"
         DownstreamHostAndPorts:
-          - { Host: "ak-order", Port: 8080 }
+          - {Host: "ak-order", Port: 8080}
       - UpstreamPathTemplate: "/gateway/health/payments"
         UpstreamHttpMethod: ["GET"]
         DownstreamPathTemplate: "/health"
         DownstreamScheme: "http"
         DownstreamHostAndPorts:
-          - { Host: "ak-payments", Port: 8080 }
+          - {Host: "ak-payments", Port: 8080}
     GlobalConfiguration:
       # Interim internal base URL; replaced with the external URL when ingress is added.
       BaseUrl: "http://ak-gateway:8080"
@@ -139,3 +136,5 @@ ocelot:
         DisableRateLimitHeaders: false
         QuotaExceededMessage: "Rate limit exceeded. Please slow down."
         HttpStatusCode: 429
+image:
+  tag: "5261027"
