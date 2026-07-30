@@ -1,30 +1,45 @@
 # C4 diagram renders
 
-This folder holds **exported PNG images of the six C4 views** defined in [`../workspace.dsl`](../workspace.dsl). The repository root [`README.md`](../../../README.md) embeds these images for the C4 diagrams (01–05, 11); the Mermaid diagrams (06–10, 12–18) render natively and are not exported here.
+This folder holds the **exported SVG images** of the eight hero diagrams. The repository root [`README.md`](../../../README.md) embeds them (light + dark). Each hero diagram is authored in its own Structurizr workspace under `docs/C4Renders/hero-*/`, so the diagrams can be edited and rendered independently.
 
-> **These images are produced during the C4 redraw and are not committed yet.** The cloud-native C4 views are still being (re)drawn in `workspace.dsl` (the current DSL is the superseded Phase-1 model — see [`../C4Architecture.md`](../C4Architecture.md) and the [Diagram Plan](../DIAGRAM-PLAN.md)). **Until the PNGs are exported, the root README will show broken image links for 01–05 and 11 — that is expected.**
+## The eight hero workspaces
 
-## How to produce them
+| Folder | View key | Exported files | Status |
+|--------|----------|----------------|--------|
+| [`../hero-system/`](../hero-system/) | `SystemOverview` | `SystemOverview.svg` · `SystemOverview-dark.svg` | Drawn |
+| [`../hero-platform/`](../hero-platform/) | `PlatformArchitecture` | `PlatformArchitecture.svg` · `PlatformArchitecture-dark.svg` | Scaffolded (DSL only) |
+| [`../hero-infrastructure/`](../hero-infrastructure/) | `InfrastructureAsCode` | `InfrastructureAsCode.svg` · `InfrastructureAsCode-dark.svg` | Scaffolded (DSL only) |
+| [`../hero-azure/`](../hero-azure/) | `AzureServices` | `AzureServices.svg` · `AzureServices-dark.svg` | Scaffolded (DSL only) |
+| [`../hero-kubernetes/`](../hero-kubernetes/) | `Kubernetes` | `Kubernetes.svg` · `Kubernetes-dark.svg` | Scaffolded (DSL only) |
+| [`../hero-devops/`](../hero-devops/) | `DevOps` | `DevOps.svg` · `DevOps-dark.svg` | Scaffolded (DSL only) |
+| [`../hero-observability/`](../hero-observability/) | `Observability` | `Observability.svg` · `Observability-dark.svg` | Scaffolded (DSL only) |
+| [`../hero-security/`](../hero-security/) | `Security` | `Security.svg` · `Security-dark.svg` | Scaffolded (DSL only) |
 
-Run **Structurizr Lite** against the `docs/C4Renders` folder (which contains `workspace.dsl`), from the repository root:
+"Scaffolded" means `workspace.dsl` exists with `autoLayout` still ON — the diagram has not been hand-arranged or exported yet.
 
-```bash
-docker run -it --rm -p 8080:8080 -v ${PWD}/docs/C4Renders:/usr/local/structurizr structurizr/lite
-```
+## The working loop (per hero folder)
 
-Then open **http://localhost:8080**, open each view, and use the diagram's **export control to save a PNG**. Structurizr Lite renders the official Azure and Kubernetes icon themes referenced by the workspace.
+Do this one folder at a time. Each `hero-*/workspace.dsl` header carries the exact `docker run` command for that folder.
 
-## View key → filename mapping
+1. **Create or edit the DSL** in `hero-<topic>/workspace.dsl`.
+2. **Run Structurizr Lite against that hero folder** (not the parent) — from the repository root, mounting the single folder:
+   ```bash
+   docker run -it --rm -p 8080:8080 \
+     -v ${PWD}/docs/C4Renders/hero-<topic>:/usr/local/structurizr \
+     structurizr/structurizr local
+   ```
+   Open **http://localhost:8080**.
+3. **Iterate with F5.** After every save, refresh the browser with **F5**. **Never restart the container** — it watches the file.
+4. **Tune with autoLayout ON** to get the rough shape (the flow and spacing).
+5. **Comment out `autoLayout` before dragging.** While `autoLayout` is present the engine recalculates on every load and discards hand placement. Comment out the `autoLayout` line, refresh, and only then start arranging.
+6. **Arrange by hand.** Placement autosaves into `workspace.json` in that hero folder every few seconds.
+7. **Export SVG in both themes.** Export the view once in the **light** theme and once in the **dark** theme.
+8. **Name the files** after the view key and drop them in this folder:
+   - light → `renders/<ViewKey>.svg`
+   - dark → `renders/<ViewKey>-dark.svg`
+9. **Commit the set together:** the hero folder's `workspace.dsl` **and** `workspace.json`, plus both SVGs in `renders/`.
 
-Structurizr names each export after the **view key** (typically `structurizr-<ViewKey>.png`), so **each export must be renamed** to the exact filename the root README expects:
+## What is and isn't committed
 
-| View key (in `workspace.dsl`) | Rename export to | Diagram |
-|-------------------------------|------------------|---------|
-| `SystemContext` | `01-system-context.png` | 01 · System context (L1) |
-| `Containers` | `02-containers.png` | 02 · Container view (L2) |
-| `OrderComponents` | `03-order-components.png` | 03 · Component view (L3) |
-| `OrderFlow` | `04-saga-flow.png` | 04 · Order saga (dynamic) |
-| `AzureTopology` | `05-azure-topology.png` | 05 · Azure resource topology |
-| `ClusterTopology` | `11-cluster-topology.png` | 11 · Cluster topology |
-
-The first four view keys exist in `workspace.dsl` today but describe the **Phase-1** model and are being redrawn for the cloud-native platform; `AzureTopology` and `ClusterTopology` are the two **deployment views to be added** during that redraw. Keep the view keys above so the exported filenames match, or adjust both the DSL keys and this table together.
+- **Commit:** `hero-*/workspace.dsl`, `hero-*/workspace.json` (generated when you hand-arrange — commit it so the layout is reproducible), and the two SVGs per diagram in this folder.
+- **Do not commit:** `hero-*/.structurizr/` — that is Structurizr Lite's generated cache (Lucene index + thumbnails). It is **gitignored** (`**/.structurizr/`).
