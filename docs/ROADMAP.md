@@ -4,7 +4,7 @@
 
 This is the single authoritative record of what the AntKart platform has **delivered**, what is **in progress**, and what is **planned**. It exists so that any reader can understand the full state of the platform from one file and then follow links into the detailed guides and Architecture Decision Records for depth. It summarises and links; it does not restate detail that already lives in the guides. Status is expressed only as **Delivered**, **In progress**, or **Planned**.
 
-**Start here:** the [Development Guide](../DevelopmentGuide.md) is the spine of the documentation (each delivery phase with its build guide, prerequisite concepts, and governing ADRs); the [Architecture (C4) reference](architecture/C4Architecture.md) and its [Structurizr workspace](architecture/workspace.dsl) hold the diagrams; the [AKS Guide](guides/aks-guide.md) covers containerization, the cluster, and workload identity.
+**Start here:** the [Development Guide](../DevelopmentGuide.md) is the spine of the documentation (each layer with its diagrams, build guides, and governing ADRs); the [C4 renders](C4Renders/) — authored in the [Structurizr workspace](C4Renders/workspace.dsl) — are the image source of truth; the [AKS Guide](guides/aks-guide.md) covers containerization, the cluster, and workload identity.
 
 ## Platform at a glance
 
@@ -99,7 +99,7 @@ _Target: on or before 6 August 2026._
 - **Observability** — Serilog structured logging, OpenTelemetry tracing, Prometheus metrics, Grafana dashboards, and Application Insights / Log Analytics — [Observability design](design/OBSERVABILITY.md).
 - **API Management spike** — a time-boxed exploration: provision → wire one scenario (JWT validation at the edge) → test → delete. No standing APIM resource — [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md).
 - **Infrastructure provisioning and teardown pipelines** — automated apply and destroy of the environment as code, validated by a full teardown-and-rebuild — [infrastructure/README](../infrastructure/README.md).
-- **Architecture diagram set (18), redrawn** — for the cloud-native platform, with a locked visual language and a C4/Mermaid tooling split; Azure API Management appears in diagrams 02 (container), 07 (network/traffic path), and 10 (the APIM edge itself). The existing C4 model and renders describe the earlier Phase 1 microservices platform and are **superseded** — [Diagram Plan](architecture/DIAGRAM-PLAN.md) · [Architecture reference](architecture/C4Architecture.md).
+- **Architecture diagram set, redrawn** — for the cloud-native platform, with a locked visual language and a C4/Mermaid tooling split; Azure API Management appears in the container view, the network/traffic-path diagram, and the APIM-edge diagram. The existing C4 model and renders describe the earlier Phase 1 microservices platform and are **superseded** — [Diagram Plan](C4Renders/DIAGRAM-PLAN.md) (private reference) · [C4 renders](C4Renders/).
 - **The Architect's Playbook** — a concise pre-interview quick-reference covering ~36 concepts, each linking to the ADR or concept guide that holds the detail.
 
 ## Planned — future

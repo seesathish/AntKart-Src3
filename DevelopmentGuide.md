@@ -1,65 +1,11 @@
 # Development Guide
 
-This guide is the entry point to how the AntKart platform is built and evolved through its cloud-native transformation. It gives the big picture and links out to focused deep-dive guides for each area.
+How AntKart is built, layer by layer. Each link opens one section — read them in order or jump to what you need.
 
-It is a **map, not the detail** — each delivery phase below has a dedicated guide that captures the concepts, the scripts, the execution, and the verification for that area. For the reasoning behind the architecture, see the [Architecture Decision Records index](docs/adr/README.md); for the architecture overview and diagrams, see the [README](README.md#architecture).
-
-> **How to use this guide.** This is the **spine** of the documentation. Each delivery phase below links to three things: the **build guide(s)** that walk through doing it, the **concept guides** to read first to understand it, and the **ADRs** that record the key decisions. Each phase is marked with its **status** so you know what is complete and what is in progress.
->
-> For a single-page view of everything delivered, in progress, and planned across the whole platform, see the [Platform Roadmap](docs/ROADMAP.md); for open defects and deferred fixes, see the [Known Issues Register](docs/KNOWN_ISSUES.md).
->
-> To run and operate the platform from the command line — every `az`, `kubectl`, `helm`, `terragrunt`, and `docker` command with its parameters explained — see the [Operations Command Reference](docs/guides/operations-command-reference.md).
-
----
-
-## Delivery Phases
-
-The platform is delivered as a series of phases. Each phase builds on the previous one and is documented in its own deep-dive guide.
-
-### 1. Foundation · _Status: complete_
-
-The clean application baseline: independently deployable .NET microservices built with Clean Architecture, Domain-Driven Design, CQRS, an event-driven SAGA, an API gateway, resilience, and structured observability. This phase establishes the architecture decisions and the repository structure that everything else builds on.
-
-- **Build guides:** [Architecture overview](README.md#architecture) · cross-cutting design docs — [Event Bus](docs/design/EVENTBUS.md), [Resilience](docs/design/RESILIENCE.md), [Observability](docs/design/OBSERVABILITY.md)
-- **Concepts to read first:** the cross-cutting design docs above (the application's own patterns)
-- **Decisions:** [ADR-001 through ADR-011](docs/adr/README.md) — microservices, Clean Architecture & DDD, fault tolerance, and the application patterns
-
-### 2. Cloud Infrastructure (IaC) · _Status: complete (dev environment)_
-
-All cloud resources are provisioned as code with Terraform and Terragrunt — networking, container registry, secrets, data stores, messaging, and supporting services — so the environment is reproducible, reviewable, and version-controlled.
-
-- **Build guides:** [Infrastructure Guide](docs/guides/infrastructure-guide.md) (step-by-step) · [infrastructure/README](infrastructure/README.md) (the IaC map)
-- **Concepts to read first:** [IaC fundamentals](docs/guides/iac-concepts.md) → [Networking & Kubernetes](docs/guides/networking-concepts.md) → [Identity](docs/guides/identity-concepts.md) (plus [Cosmos DB](docs/guides/cosmosdb-concepts.md), [Messaging](docs/guides/messaging-concepts.md), [Serverless & Eventing](docs/guides/serverless-eventing-concepts.md) for the resources it provisions)
-- **Decisions:** [ADR-012](docs/adr/ADR-012-iac-with-terraform-terragrunt.md) (IaC with Terraform/Terragrunt) · [ADR-013](docs/adr/ADR-013-key-vault-rbac-and-observability-foundation.md) (Key Vault RBAC + observability) · [ADR-014](docs/adr/ADR-014-cosmosdb-and-servicebus.md) (Cosmos DB + Service Bus)
-
-### 3. Cloud-Native Code · _Status: complete (dev environment)_
-
-The application is migrated from local infrastructure to managed cloud services — managed databases, messaging, identity, and secret storage — adopting token-based authentication and the patterns that make the services genuinely cloud-native. In the dev environment this is complete: secret-less configuration from Key Vault, messaging on Service Bus, the product catalogue on Cosmos DB, resilience and health hardening, Entra ID authentication (including OAuth2 Authorization Code + PKCE for interactive clients, delegated user tokens, and app roles), and the serverless Event Grid → Functions → Azure Communication Services notification path proven end to end.
-
-- **Build guide:** [Cloud Migration Guide](docs/guides/cloud-migration-guide.md)
-- **Concepts to read first:** [Cosmos DB](docs/guides/cosmosdb-concepts.md) · [Messaging](docs/guides/messaging-concepts.md) · [Serverless & Eventing](docs/guides/serverless-eventing-concepts.md) · [Identity](docs/guides/identity-concepts.md) · [OAuth2 Authorization Code + PKCE](docs/guides/oauth2-pkce-concepts.md)
-- **Decisions:** [ADR-015](docs/adr/ADR-015-messaging-migration-to-service-bus.md) (messaging → Service Bus) · [ADR-016](docs/adr/ADR-016-data-migration-cosmosdb-and-workload-identity.md) (Cosmos data migration + workload identity) · [ADR-017](docs/adr/ADR-017-entra-id-functions-eventgrid.md) (Entra ID + Functions + Event Grid) · [ADR-019](docs/adr/ADR-019-serverless-notification-functions-eventgrid.md) (serverless notification) · [ADR-020](docs/adr/ADR-020-api-management-managed-edge-gateway.md) (API Management edge) · [ADR-021](docs/adr/ADR-021-retire-identity-service-for-entra.md) (retire the identity service for Entra)
-
-### 4. Kubernetes Platform · _Status: in progress (Helm, ingress/TLS, workload identity and GitOps delivered — public HTTPS at api.antkart.in with a production certificate; Kubernetes depth pending)_
-
-The services are containerized and run on a managed Kubernetes (AKS) cluster, with ingress, health management, and workload identity. **Delivered:** containerization (multi-stage, non-root Dockerfiles on port 8080, a repository-root `.dockerignore`, images published to the Azure Container Registry); the **AKS cluster** `aks-antkart-dev` (Azure CNI Overlay, Azure RBAC, OIDC issuer, OMS agent, kubelet AcrPull); **per-service workload identity** (a federated user-assigned identity per service, least-privilege roles, reading Key Vault from a pod with no stored secret); **Helm deployment** of all six services (a single parameterised chart per service, ClusterIP on 8080, startupProbe-gated health); **ingress with cert-manager TLS** exposing the gateway only, now at the **custom domain `api.antkart.in`** (GoDaddy A record → the ingress public IP) with a **trusted Let's Encrypt production certificate** — **verified end to end through the public HTTPS endpoint** (browse, add to cart, order → SAGA → confirmation and notification emails); and **GitOps delivery with Argo CD** — the cluster is Git-driven (an `antkart` AppProject plus six Applications over the same Helm chart) with auto-sync + self-heal, proven to deploy via `git push`. **Still to come:** Kubernetes depth (storage, network policies, failure diagnosis) and base-image hardening.
-
-- **Build guide:** [AKS Guide](docs/guides/aks-guide.md) — container strategy, the provisioned cluster, operator access, workload identity, Helm deployment, ingress/TLS, and troubleshooting (only base-image hardening remains a placeholder)
-- **GitOps:** [GitOps Guide](docs/guides/gitops-guide.md) — driving the cluster's desired state from Git with Argo CD (AppProject + Applications/ApplicationSet over the same Helm chart), including the safe manual-sync adoption of the already-running services (manifests: [deploy/argocd/README](deploy/argocd/README.md))
-- **Reference:** [Container Configuration](docs/guides/container-configuration.md) — the runtime configuration keys each service requires (the source for the later Helm values) · [Operations Command Reference](docs/guides/operations-command-reference.md) — every `az`/`kubectl`/`helm`/`argocd` command with flags explained
-- **Concepts to read first:** [Networking & Kubernetes](docs/guides/networking-concepts.md) · [Identity](docs/guides/identity-concepts.md) (workload identity)
-- **Decisions:** [ADR-018](docs/adr/ADR-018-aks-workload-identity-base-image.md) (AKS cluster, workload identity, hardened base image)
-
-### 5. DevOps & DevSecOps · _Status: in progress_
-
-Continuous integration and delivery, security and compliance gates, and end-to-end observability tie the platform together and keep it shippable and safe. The CI/CD pattern is **delivered and proven for all six services** (Products, ShoppingCart, Order, Payments, Discount, Gateway) — **12 workflows**, a CI + CD pair each. Per-service, path-filtered, two decoupled workflows (CI on pull request, CD on merge), delivering through Git for Argo CD to reconcile so no cluster credentials live in CI. The CI quality gate (build, unit + in-memory integration tests with coverage, SonarCloud, Trivy; all actions pinned to **immutable commit SHAs**) is enforced by branch protection — the `master-protection` ruleset with **four required checks**. CD authenticates to Azure via **OIDC with no stored secret**, builds an **immutable commit-SHA-tagged image**, pushes it to ACR, and bumps `.image.tag` in Git for **Argo CD auto-sync**. End-to-end observability remains outstanding.
-
-- **Build guide:** [DevOps CI/CD Guide](docs/guides/devops-cicd-guide.md) — the journey from code change to running pod, the per-service workflow layout, SonarCloud/Trivy gates, branch protection, and OIDC/secrets handling _(DevOps Guide index: [devops-guide.md](docs/guides/devops-guide.md))_
-- **Concepts to read first:** [Observability design](docs/design/OBSERVABILITY.md) · [GitOps Guide](docs/guides/gitops-guide.md) (how delivery reaches the cluster)
-- **Decisions:** [ADR-022](docs/adr/ADR-022-cicd-github-actions-oidc.md) (CI/CD on GitHub Actions with OIDC federated credentials to Azure) · [ADR-023](docs/adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md) (pipeline design and repository strategy)
-
----
-
-## Scenario & End-to-End Testing
-
-Hands-on, end-to-end functional testing of the running platform — covering each service, the SAGA flows, and the compensation paths — is documented separately in the [Developer Test Guide](docs/test/DevTestGuide.md).
+- [Platform architecture](docs/development/0-platform-architecture.md) — how the code is built: Clean Architecture, CQRS, the orchestrated SAGA, and the outbox.
+- [Infrastructure as code](docs/development/1-infrastructure-as-code.md) — how the cloud gets built: Terraform modules and Terragrunt live units.
+- [Azure services](docs/development/2-azure-services.md) — where it runs: the managed services and the network path to the edge.
+- [Kubernetes](docs/development/3-kubernetes.md) — how it is orchestrated: AKS, the Helm chart, ingress/TLS, and workload identity.
+- [DevOps](docs/development/4-devops.md) — how it ships: the CI gate, the CD pipeline, and GitOps reconciliation.
+- [Observability](docs/development/5-observability.md) — how it is seen: structured logging today, metrics and tracing planned.
+- [Security](docs/development/6-security.md) — how it is trusted: the secret-less identity chain, defence in depth, and the planned edge.

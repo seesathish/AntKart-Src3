@@ -38,10 +38,12 @@ AntKart/
 ├── KNOWN-ISSUES.md       Pointer to the known-issues register (moved to docs/KNOWN_ISSUES.md, KI-NNN ids)
 ├── docs/
 │   ├── adr/              Architecture Decision Records
-│   ├── architecture/     C4 diagram images + Structurizr workspace
+│   ├── development/      Seven per-layer section docs (0-platform … 6-security) — indexed by /DevelopmentGuide.md
+│   ├── C4Renders/        C4 image source of truth + Structurizr workspace + DIAGRAM-PLAN.md (renamed from architecture/)
 │   ├── design/           Cross-cutting design docs (EVENTBUS, RESILIENCE, OBSERVABILITY)
-│   ├── skills/           Step-by-step development & maintenance guides
-│   └── test/             Manual test & security test guides (DevTestGuide, SECURITY_TESTS)
+│   ├── guides/           Concept & build guides linked from the section docs
+│   ├── skills/           Step-by-step development & maintenance guides (private — linked from nowhere)
+│   └── test/             Test section docs (1-test-from-service-code, 2-full-cloud-end-to-end) + SECURITY_TESTS — indexed by /DevTestGuide.md
 ├── nuget.config
 └── CLAUDE.md             ← this file
 ```

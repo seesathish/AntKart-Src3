@@ -1,112 +1,82 @@
 # AntKart — cloud-native e-commerce platform
 
-AntKart is a **.NET 9** e-commerce platform of **six microservices** plus a **serverless notifications app**, running on **Azure Kubernetes Service**, provisioned with **Terraform and Terragrunt**, and delivered by **GitHub Actions and Argo CD**. (An earlier Phase-1 build ran locally on Docker Compose in a separate repository; this repository is the cloud-native platform.)
+AntKart is a **.NET 9** e-commerce platform of **six microservices** plus a **serverless notifications app**, running on **Azure Kubernetes Service**, provisioned with **Terraform and Terragrunt**, and delivered by **GitHub Actions and Argo CD**. This page is the front door: one diagram per topic, each linking into the [Development Guide](DevelopmentGuide.md) for the detail.
 
-## At a glance
+**Live:** [https://api.antkart.in](https://api.antkart.in) — served over a trusted Let's Encrypt production TLS certificate. (An earlier Phase-1 build ran locally on Docker Compose in a separate repository; this repository is the cloud-native platform.)
 
-| | |
-|---|---|
-| **Language & runtime** | .NET 9 (C#) — six REST/gRPC microservices + a serverless notifications app (Azure Functions, isolated worker) |
-| **Cloud** | Microsoft Azure |
-| **Orchestration** | Azure Kubernetes Service (AKS) — Azure CNI Overlay, OIDC issuer, workload identity |
-| **Infrastructure as code** | Terraform modules composed by Terragrunt live units |
-| **CI/CD** | GitHub Actions — OIDC to Azure, no stored cloud secrets |
-| **GitOps** | Argo CD — auto-sync + self-heal from Git |
-| **Messaging** | Azure Service Bus via MassTransit (orchestrated SAGA) |
-| **Data stores** | Cosmos DB (MongoDB API), PostgreSQL Flexible Server, Azure Managed Redis |
-| **Identity** | Microsoft Entra ID — workload identity + federated credentials, no stored secrets |
-| **Edge** | ingress-nginx + cert-manager TLS at `api.antkart.in` (Azure API Management is **planned**) |
+## System overview
 
-**Live:** [https://api.antkart.in](https://api.antkart.in) — served over a trusted Let's Encrypt production TLS certificate.
+> **Diagram: System overview** — _not yet drawn_
+> **Must show:** who uses the platform, the six deployable services plus the serverless notification app, and every external system it depends on - Microsoft Entra ID, Razorpay, Azure Communication Services, Let's Encrypt and GoDaddy DNS. Answers the question "what is this thing".
 
-## System architecture
+Customers reach the platform through one public HTTPS endpoint; behind it, six services and a serverless notifications app coordinate over Azure Service Bus. Everything it touches — identity, payments, email, certificates, DNS — is a managed external system. Start with the [Development Guide](DevelopmentGuide.md) for how it is built, or read on for one topic at a time.
 
-### 01 · System context
-The users and external systems (Entra ID, Razorpay, ACS, GoDaddy) the platform depends on.
+## Platform architecture
 
-![01 · System context](docs/architecture/renders/01-system-context.png)
-_Rendered from workspace.dsl — see [renders/README.md](docs/architecture/renders/README.md)_
+> **Diagram: Platform architecture** — _not yet drawn_
+> **Must show:** the engineering foundation inside a service - Clean Architecture layers, CQRS with MediatR, the orchestrated saga, the transactional outbox, repository with specification and unit of work, minimal API endpoints, and the distinction between domain events and integration events. Answers "how is the code built".
 
-**Go deeper:** [full detail & decisions →](docs/architecture/diagrams/README.md#01--system-context-l1)
+Every service is the same inside: a dependency-free domain core, an application layer of CQRS handlers behind a validation pipeline, and a thin API host. Services never call each other synchronously for business flows — they coordinate through an orchestrated saga with a transactional outbox.
 
-### 02 · Containers
-The six services, the serverless notifications app, and the Azure managed services behind them.
+→ [Platform architecture](docs/development/0-platform-architecture.md)
 
-![02 · Containers](docs/architecture/renders/02-containers.png)
-_Rendered from workspace.dsl — see [renders/README.md](docs/architecture/renders/README.md)_
+## Infrastructure as code
 
-**Go deeper:** [full detail & decisions →](docs/architecture/diagrams/README.md#02--container-view-l2--services-azure-paas-apim)
+> **Diagram: Infrastructure as code** — _not yet drawn_
+> **Must show:** Terraform driven by Terragrunt - root.hcl generating backend, provider and versions into each of the eighteen units, units composed from shared modules, remote state isolated per unit in Azure Storage with blob-lease locking, and the dev environment with QA marked planned. Answers "how does the cloud get built".
 
-### 03 · Inside AK.Order
-One service's internals — API, application (CQRS/MediatR), domain, and infrastructure layers.
+Every Azure resource is provisioned as code: Terraform modules describe how a resource is built, and Terragrunt live units wire them together per environment. A shared `root.hcl` generates the backend and provider config into each unit, and remote state is isolated per unit with blob-lease locking.
 
-![03 · Inside AK.Order](docs/architecture/renders/03-order-components.png)
-_Rendered from workspace.dsl — see [renders/README.md](docs/architecture/renders/README.md)_
+→ [Infrastructure as code](docs/development/1-infrastructure-as-code.md)
 
-**Go deeper:** [full detail & decisions →](docs/architecture/diagrams/README.md#03--component-view-l3--inside-akorder)
+## Azure services
 
-## Cloud architecture
+> **Diagram: Azure services** — _not yet drawn_
+> **Must show:** the resource estate - resource group, region, virtual network, AKS, and the managed services: Cosmos DB, PostgreSQL Flexible Server, Managed Redis, Service Bus, Event Grid, Functions, Key Vault, Communication Services, Container Registry, Application Insights and Log Analytics, with API Management marked planned. Where useful, show which Phase 1 component each replaced. Answers "where does it run".
 
-### 05 · Azure topology
-The Azure resources that make up the environment and how they group.
+The platform runs entirely on managed Azure services — Cosmos DB, PostgreSQL, Managed Redis, Service Bus, Event Grid, Functions, Key Vault, and more. Each replaced a local Phase-1 component, adopting token-based authentication throughout. API Management, the managed edge, is planned.
 
-![05 · Azure topology](docs/architecture/renders/05-azure-topology.png)
-_Rendered from workspace.dsl — see [renders/README.md](docs/architecture/renders/README.md)_
+→ [Azure services](docs/development/2-azure-services.md)
 
-**Go deeper:** [full detail & decisions →](docs/architecture/diagrams/README.md#05--azure-resource-topology)
+## Kubernetes
 
-## Kubernetes architecture
+> **Diagram: Kubernetes** — _not yet drawn_
+> **Must show:** the cluster and node pool, the namespaces antkart, ingress-nginx, cert-manager and argocd, the deployments and their replica counts, which services are ClusterIP-only versus reachable through ingress, TLS termination, and the public path to api.antkart.in. Answers "how is it orchestrated".
 
-### 11 · Cluster topology
-How namespaces, workloads, and ingress are laid out inside AKS.
+The six services run on a managed AKS cluster with Azure CNI Overlay and an OIDC issuer, deployed from one generic Helm chart parameterised per service. Only the gateway is exposed through ingress with cert-manager TLS; the rest are ClusterIP-only. Pods reach Azure with no stored secret via workload identity.
 
-![11 · Cluster topology](docs/architecture/renders/11-cluster-topology.png)
-_Rendered from workspace.dsl — see [renders/README.md](docs/architecture/renders/README.md)_
+→ [Kubernetes](docs/development/3-kubernetes.md)
 
-**Go deeper:** [full detail & decisions →](docs/architecture/diagrams/README.md#11--cluster-topology)
+## DevOps
 
-## Delivery architecture
+> **Diagram: DevOps** — _not yet drawn_
+> **Must show:** commit to running pod - pull request, the quality gate of build, test, SonarCloud and Trivy with four required checks and branch protection, merge, CD authenticating to Azure by OIDC with no stored secret, an image tagged with the commit SHA, push to Container Registry, the tag bump committed back to Git, and Argo CD auto-sync with self-heal. Answers "how does it ship".
 
-### 19 · Commit to running pod
-The end-to-end delivery path from a developer commit to a running pod — CI gate, secret-less CD, GitOps reconciliation.
+Delivery is a CI quality gate on every pull request and a CD pipeline on merge. CD never touches the cluster — it authenticates to Azure by OIDC, pushes a commit-SHA-tagged image, and bumps the tag in Git for Argo CD to reconcile. No cluster credentials live in CI/CD.
 
-```mermaid
-flowchart TD
-    DEV["Developer commit"]:::external
-    PR["Pull request"]:::cicd
-    CI["CI quality gate<br/>build · test · SonarCloud · Trivy<br/>4 required checks + branch protection"]:::cicd
-    MERGE["Merge to master"]:::cicd
-    OIDC{{"CD authenticates to Azure<br/>OIDC federated credential · no stored secret"}}:::identity
-    BUILD["Build image · tag = commit SHA"]:::cicd
-    ACR["Push to Azure Container Registry"]:::cicd
-    BUMP["Bump image tag in Helm values in Git<br/>CD_PUSH_TOKEN · [skip ci]"]:::cicd
-    ARGO["Argo CD detects drift"]:::cicd
-    SYNC["Auto-sync + self-heal"]:::cicd
-    POD["New pod on AKS"]:::service
+→ [DevOps](docs/development/4-devops.md)
 
-    DEV --> PR --> CI --> MERGE --> OIDC --> BUILD --> ACR --> BUMP --> ARGO --> SYNC --> POD
+## Observability
 
-    classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
-    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
-    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
-    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
-    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
-    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
-    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
-    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
-```
+> **Diagram: Observability** — _not yet drawn_
+> **Must show:** Serilog structured logging and OpenTelemetry feeding Application Insights and Log Analytics, plus Prometheus scraping and Grafana dashboards. Mark clearly what is delivered and what is planned. Answers "how do you know it is working".
 
-**Go deeper:** [full detail & decisions →](docs/architecture/diagrams/README.md#19--delivery-architecture--commit-to-running-pod)
+Structured logging is delivered: every service and Function emits Serilog logs to the console, collected in the cloud by Application Insights and Log Analytics. Distributed tracing and metrics — OpenTelemetry, Prometheus, and Grafana — are planned, not yet wired.
 
-**[All 19 diagrams, including the thirteen not shown here →](docs/architecture/diagrams/README.md)**
+→ [Observability](docs/development/5-observability.md)
+
+## Security
+
+> **Diagram: Security** — _not yet drawn_
+> **Must show:** the secret-less chain end to end - Entra ID tokens validated at the edge, per-service workload identity with federated credentials, Key Vault, data-plane RBAC scoped to individual resources, OIDC federated credentials for CI/CD with no stored secrets, TLS termination, the trust boundary between public and ClusterIP-only services, and known gaps including KI-002. Answers "how is it secured".
+
+Security rests on no stored secrets anywhere and defence in depth on tokens: every identity authenticates through federation with least-privilege RBAC, and the Entra bearer token is validated at the edge and again inside each service. One tracked gap remains (KI-002), and the managed edge is a planned addition.
+
+→ [Security](docs/development/6-security.md)
 
 ## Explore
 
-- [Architecture, all 19 diagrams](docs/architecture/diagrams/README.md) — the full diagram set with questions and decisions.
-- [Build and run](DevelopmentGuide.md) — the delivery phases, build guides, and prerequisite concepts.
-- [Architecture decisions](docs/adr/README.md) — the 23 ADRs and why each choice was made.
-- [Testing](docs/test/README.md) — the verification strategy from unit to end-to-end.
-
-## Known issues
-
-See the [Known Issues Register](docs/KNOWN_ISSUES.md) — notably **KI-002** (Discount gRPC decodes tokens without cryptographic validation) and **KI-005** (no stock-release compensation on payment failure).
+- [Development Guide](DevelopmentGuide.md) — how the platform is built, layer by layer.
+- [Test Guide](DevTestGuide.md) — how it is verified, from service code to full-cloud end-to-end.
+- [Architecture decisions](docs/adr/README.md) — the ADRs and why each choice was made.
+- [Known Issues Register](docs/KNOWN_ISSUES.md) — open defects and deferred fixes, notably KI-002 and KI-005.

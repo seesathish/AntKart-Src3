@@ -6,10 +6,10 @@ This folder holds **exported PNG images of the six C4 views** defined in [`../wo
 
 ## How to produce them
 
-Run **Structurizr Lite** against the `docs/architecture` folder (which contains `workspace.dsl`), from the repository root:
+Run **Structurizr Lite** against the `docs/C4Renders` folder (which contains `workspace.dsl`), from the repository root:
 
 ```bash
-docker run -it --rm -p 8080:8080 -v ${PWD}/docs/architecture:/usr/local/structurizr structurizr/lite
+docker run -it --rm -p 8080:8080 -v ${PWD}/docs/C4Renders:/usr/local/structurizr structurizr/lite
 ```
 
 Then open **http://localhost:8080**, open each view, and use the diagram's **export control to save a PNG**. Structurizr Lite renders the official Azure and Kubernetes icon themes referenced by the workspace.

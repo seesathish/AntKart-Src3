@@ -1,6 +1,6 @@
 # AK.Payments — Technical Design
 
-> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../README.md) and the [architecture diagram index](../docs/architecture/diagrams/README.md).
+> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../README.md) and the [Development Guide](../DevelopmentGuide.md).
 
 > **Note (2026-07-23): parts of this document reference the Phase-1 baseline infrastructure.** Diagrams, configuration snippets, and data-field notes that mention **RabbitMQ** or a **Keycloak** user id describe the Phase-1 local stack. In the current cloud-native platform, messaging is **Azure Service Bus** (registered via `AddAzureServiceBusMassTransit`, Entra token auth) and identity is **Microsoft Entra ID** (the user id is the Entra `sub` claim); notification delivery is a serverless Azure Functions app, not a MassTransit consumer. For the authoritative current-state design, see the [Event Bus design](../docs/design/EVENTBUS.md), the [Cloud Migration Guide](../docs/guides/cloud-migration-guide.md), and the [ADRs](../docs/adr/README.md).
 

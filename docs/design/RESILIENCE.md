@@ -1,6 +1,6 @@
 # AntKart — Resilience & Circuit Breaker Technical Design
 
-> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [architecture diagram index](../architecture/diagrams/README.md).
+> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [Development Guide](../../DevelopmentGuide.md).
 
 ## Overview
 

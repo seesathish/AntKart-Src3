@@ -1,6 +1,6 @@
 # AK.BuildingBlocks — Technical Reference
 
-> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../README.md) and the [architecture diagram index](../docs/architecture/diagrams/README.md).
+> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../README.md) and the [Development Guide](../DevelopmentGuide.md).
 
 `AK.BuildingBlocks` is the single shared library consumed by every microservice in AntKart. It holds the cross-cutting contracts, base classes, and infrastructure helpers that would otherwise be copy-pasted across services. No business logic lives here — only mechanics.
 
