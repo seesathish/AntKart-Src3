@@ -31,7 +31,7 @@ flowchart TD
     classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
     classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
     classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
-    classDef issue fill:#FFFFFF,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
 ```
 
 ## What to notice
