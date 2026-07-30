@@ -412,7 +412,7 @@ Then run the Order service with an active `az login` session: `cd AK.Order/AK.Or
 
 ## Step 6 — Resilience and Health Hardening
 
-This step makes the services behave correctly under real cloud conditions — transient faults and throttling — and exposes health endpoints shaped for orchestrator probes. It has two themes: **resilience** (retry the right way, at the right place) and **health** (three probe surfaces, mapped safely). The cross-cutting design is recorded in [RESILIENCE](../design/RESILIENCE.md) and [OBSERVABILITY](../design/OBSERVABILITY.md).
+This step makes the services behave correctly under real cloud conditions — transient faults and throttling — and exposes health endpoints shaped for orchestrator probes. It has two themes: **resilience** (retry the right way, at the right place) and **health** (three probe surfaces, mapped safely). The cross-cutting design is recorded in [RESILIENCE](../guides/resilience-concepts.md) and [OBSERVABILITY](../guides/observability-concepts.md).
 
 ### Understand
 

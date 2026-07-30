@@ -26,7 +26,7 @@ The two eventing patterns this rests on — **domain events** (in-process) vs **
 
 ## How it was built
 
-- Application patterns and cross-cutting design: [Event Bus design](../design/EVENTBUS.md) · [Resilience design](../design/RESILIENCE.md).
+- Application patterns and cross-cutting design: [Event Bus design](../guides/eventbus-concepts.md) · [Resilience design](../guides/resilience-concepts.md).
 - Per-service internals: the service technical design documents — [AK.Products](../../AK.Products/PRODUCTS_TECHNICAL_DESIGN.md) · [AK.Order](../../AK.Order/ORDER_TECHNICAL_DESIGN.md) · [AK.Payments](../../AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md) · [AK.ShoppingCart](../../AK.ShoppingCart/SHOPPING_CART_TECHNICAL_DESIGN.md) · [AK.Discount](../../AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md) · [AK.Gateway](../../AK.Gateway/API_GATEWAY.md) · [AK.BuildingBlocks](../../AK.BuildingBlocks/BUILDING_BLOCKS.md). _(These describe the Phase-1 topology and carry a superseded banner; the patterns still hold.)_
 
 ## Decisions

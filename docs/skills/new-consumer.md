@@ -10,7 +10,7 @@
 - Examples: AK.Payments starts consuming `OrderCancelledIntegrationEvent` to auto-refund; AK.Products consumes `OrderCancelledIntegrationEvent` to release reserved stock
 
 ## Prerequisite Reading
-- [EVENTBUS.md](../design/EVENTBUS.md) — fan-out topology (integration-events topic + subscriptions), receive-endpoint naming, dead-lettering, and IaC-owned topology
+- [EVENTBUS.md](../guides/eventbus-concepts.md) — fan-out topology (integration-events topic + subscriptions), receive-endpoint naming, dead-lettering, and IaC-owned topology
 - [new-integration-event.md](new-integration-event.md) — if the event doesn't exist yet, create it first
 
 ---
@@ -162,9 +162,9 @@ dotnet test
 
 ---
 
-## Step 8 — Update docs/design/EVENTBUS.md
+## Step 8 — Update docs/guides/eventbus-concepts.md
 
-Update the **Events and their consumers** table in `docs/design/EVENTBUS.md` to add the service as a consumer of the event (and, if a new subscription/queue was required, note it as an infrastructure-as-code change).
+Update the **Events and their consumers** table in `docs/guides/eventbus-concepts.md` to add the service as a consumer of the event (and, if a new subscription/queue was required, note it as an infrastructure-as-code change).
 
 Also update the target service's `<SERVICE>_TECHNICAL_DESIGN.md` — add the event to its "Events Consumed" table.
 
@@ -189,5 +189,5 @@ Service Bus guarantees at-least-once delivery, so a message may be redelivered (
 - [ ] If a new subscription/queue was needed, it was added in infrastructure-as-code
 - [ ] MassTransit in-memory integration test written and passing
 - [ ] Handler is idempotent (safe to receive duplicate events)
-- [ ] `docs/design/EVENTBUS.md` Events-and-their-consumers table updated
+- [ ] `docs/guides/eventbus-concepts.md` Events-and-their-consumers table updated
 - [ ] Target service design doc "Events Consumed" table updated

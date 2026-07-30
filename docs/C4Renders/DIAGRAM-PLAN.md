@@ -65,7 +65,7 @@ The **13 Mermaid diagrams (06–10, 12–19) are now Drafted** — produced in `
 | 15 | CD pipeline | What happens on merge — build, push, tag-bump — and with what identity? | Mermaid | `docs/guides/devops-cicd-guide.md` | Drafted |
 | 16 | GitOps reconciliation loop | How does a Git change become a running pod via Argo CD? | Mermaid | `docs/guides/gitops-guide.md` | Drafted |
 | 17 | Environment promotion — dev vs QA | How does a change move from dev to QA, and what differs between them? | Mermaid | `docs/ROADMAP.md` (until an environments guide exists) | Drafted |
-| 18 | Observability pipeline | How do logs, metrics, and traces flow to their sinks and dashboards? | Mermaid | `docs/design/OBSERVABILITY.md` | Drafted |
+| 18 | Observability pipeline | How do logs, metrics, and traces flow to their sinks and dashboards? | Mermaid | `docs/guides/observability-concepts.md` | Drafted |
 | 19 | Delivery architecture — commit to running pod | How does a commit become a running pod? | Mermaid | `docs/architecture/diagrams/19-delivery-architecture.md` | Drafted |
 
 > **Diagram numbers are stable identifiers, not a sort order.** A number is assigned once and never reused; it does not imply the diagram's tier or reading order. For example **19** (a DevOps end-to-end overview, belonging with 14–17) is numbered after **18** (cross-cutting) simply because it was added later.

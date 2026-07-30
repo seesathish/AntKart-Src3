@@ -45,7 +45,7 @@ flowchart TD
 
 ## How it was built
 
-- The logging approach, the sinks, and the planned metrics/tracing work: [Observability design](../design/OBSERVABILITY.md).
+- The logging approach, the sinks, and the planned metrics/tracing work: [Observability design](../guides/observability-concepts.md).
 - Health-probe surfaces (`/health/live`, `/health/ready`, `/health/deps`) are a complementary signal — see the health-check wiring described in [AK.BuildingBlocks](../../AK.BuildingBlocks/BUILDING_BLOCKS.md).
 
 ## Decisions

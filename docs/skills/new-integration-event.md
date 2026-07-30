@@ -9,7 +9,7 @@
 - Examples: `OrderShippedIntegrationEvent` → Notification sends shipping email; `ReviewPostedIntegrationEvent` → Products updates average rating
 
 ## Prerequisite Reading
-- [EVENTBUS.md](../design/EVENTBUS.md) — fan-out topology (integration-events topic + subscriptions), receive-endpoint naming, IaC-owned topology, SAGA pattern
+- [EVENTBUS.md](../guides/eventbus-concepts.md) — fan-out topology (integration-events topic + subscriptions), receive-endpoint naming, IaC-owned topology, SAGA pattern
 - [AK.BuildingBlocks/Messaging/IntegrationEvents/](../../AK.BuildingBlocks/AK.BuildingBlocks/Messaging/IntegrationEvents/) — existing event records
 
 ---
@@ -143,9 +143,9 @@ The `AddAzureServiceBusMassTransit` helper in BuildingBlocks uses the service pr
 
 ---
 
-## Step 4 — Update the Events Map in docs/design/EVENTBUS.md
+## Step 4 — Update the Events Map in docs/guides/eventbus-concepts.md
 
-In `docs/design/EVENTBUS.md`, add the new event to the **Events and their consumers** table (publisher and consuming services):
+In `docs/guides/eventbus-concepts.md`, add the new event to the **Events and their consumers** table (publisher and consuming services):
 
 ```markdown
 | `OrderShippedIntegrationEvent` | AK.Order (on status → Shipped) | AK.Notification |
@@ -205,7 +205,7 @@ dotnet test           # all pass; new integration test included
 
 ## Step 7 — Update Documentation
 
-- `docs/design/EVENTBUS.md` — Events-and-their-consumers table updated (Step 4)
+- `docs/guides/eventbus-concepts.md` — Events-and-their-consumers table updated (Step 4)
 - Source service `<SERVICE>_TECHNICAL_DESIGN.md` — add event to "Integration Events Published" table
 - Target service `<SERVICE>_TECHNICAL_DESIGN.md` — add event to "Events Consumed" table
 - `CLAUDE.md` — update the BuildingBlocks `Messaging/IntegrationEvents/` list
@@ -221,7 +221,7 @@ dotnet test           # all pass; new integration test included
 - [ ] Consumer registered in target service `AddAzureServiceBusMassTransit` configure callback
 - [ ] If a new subscription/queue was needed, it was added in infrastructure-as-code
 - [ ] MassTransit in-memory integration test written and passing
-- [ ] `docs/design/EVENTBUS.md` Events-and-their-consumers table updated
+- [ ] `docs/guides/eventbus-concepts.md` Events-and-their-consumers table updated
 - [ ] Source service design doc "Published" table updated
 - [ ] Target service design doc "Consumed" table updated
 - [ ] BuildingBlocks section in `CLAUDE.md` updated

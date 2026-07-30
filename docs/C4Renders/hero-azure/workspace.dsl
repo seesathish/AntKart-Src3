@@ -15,11 +15,12 @@
  * colocated with it there (redis/terragrunt.hcl:46). Data calls from the cluster to
  * those two stores CROSS the region boundary — drawn as two arrows.
  *
- * NOTE ON TAGS — every Azure element carries a "Microsoft Azure - ..." theme tag so the
- * icons render from the microsoft-azure-2021.01.26 theme. The Azure Cosmos DB, Azure
- * Database PostgreSQL Server, Cache Redis, Service Bus and Kubernetes Services strings
- * are confirmed; the rest follow the same theme's naming. If any icon does not appear,
- * adjust that one string; the box still renders either way.
+ * NOTE ON TAGS — Azure elements carry a "Microsoft Azure - ..." tag whose string is
+ * VERIFIED against the microsoft-azure-2021.01.26 theme.json, so the icons render. Three
+ * elements deliberately carry NO Azure tag (styled generic boxes instead): the
+ * subscription / resource-group / vnet BOUNDARIES (Infra), Azure Communication Services
+ * (this theme has no ACS tag), and Log Analytics (no verified tag). An unmatched theme
+ * tag renders no icon and looks like a bug, so those are left as clean styled boxes.
  *
  * RENDER
  *   docker run -it --rm -p 8080:8080 \
@@ -46,18 +47,18 @@ workspace "AntKart — Azure services" "Where it runs: the managed Azure estate 
 
         deploymentEnvironment "Dev" {
 
-            entra = deploymentNode "Microsoft Entra ID" "Tenant-level identity, not inside the resource group. Issues the tokens every service validates. Replaced Keycloak." "OAuth2 / OIDC" "Identity"
+            entra = deploymentNode "Microsoft Entra ID" "Tenant-level identity, not inside the resource group. Issues the tokens every service validates. Replaced Keycloak." "OAuth2 / OIDC" "Microsoft Azure - Azure Active Directory"
 
-            subscription = deploymentNode "Azure Subscription" "Single subscription for the dev environment." "Azure" "Microsoft Azure - Subscriptions" {
+            subscription = deploymentNode "Azure Subscription" "Single subscription for the dev environment." "Azure" "Infra" {
 
                 // ONE resource group, TWO regions. A resource group is a LOGICAL container
                 // and is not region-bound, so both regions sit inside this single group —
                 // there is no second resource group.
-                rg = deploymentNode "rg-antkart-dev-eastus" "Application resource group — a logical, NOT region-bound container. Terraform state lives in a SEPARATE resource group (rg-antkart-tfstate)." "Resource group" "Microsoft Azure - Resource Groups" {
+                rg = deploymentNode "rg-antkart-dev-eastus" "Application resource group — a logical, NOT region-bound container. Terraform state lives in a SEPARATE resource group (rg-antkart-tfstate)." "Resource group" "Infra" {
 
                     eastus = deploymentNode "Region: East US (eastus)" "Primary region — AKS and every managed service except the two offer-restricted data stores." "Azure region" {
 
-                        vnet = deploymentNode "vnet-antkart-dev-eastus" "Virtual network — aks, private-endpoints and gateway subnets." "VNet" "Microsoft Azure - Virtual Networks" {
+                        vnet = deploymentNode "vnet-antkart-dev-eastus" "Virtual network — aks, private-endpoints and gateway subnets." "VNet" "Infra" {
                             aks = deploymentNode "AKS — aks-antkart-dev" "Azure CNI Overlay, OIDC issuer, workload identity. Node pool: 2 x Standard_D2s_v3. Runs the six services and the serverless wiring." "AKS" "Microsoft Azure - Kubernetes Services"
                         }
 
@@ -66,11 +67,11 @@ workspace "AntKart — Azure services" "Where it runs: the managed Azure estate 
                         eventgrid = infrastructureNode "Event Grid" "Fire-and-forget notification events." "evgt-antkart-dev" "Microsoft Azure - Event Grid Topics"
                         functions = infrastructureNode "Azure Functions" "Serverless notification handlers. Replaced the notification microservice." "func-antkart-notifications-dev" "Microsoft Azure - Function Apps"
                         keyvault = infrastructureNode "Key Vault" "Secrets, read at runtime via managed identity." "RBAC data plane" "Microsoft Azure - Key Vaults"
-                        acs = infrastructureNode "Azure Communication Services" "Transactional customer email. Replaced Mailhog." "Email" "Microsoft Azure - Azure Communication Services"
+                        acs = infrastructureNode "Azure Communication Services" "Transactional customer email. Replaced Mailhog. (No icon — this theme has no ACS tag.)" "Email" "Managed"
                         acr = infrastructureNode "Container Registry" "Service container images." "acrantkartdev" "Microsoft Azure - Container Registries"
                         appInsights = infrastructureNode "Application Insights" "Telemetry collection for the services and Functions." "Azure Monitor" "Microsoft Azure - Application Insights"
-                        logAnalytics = infrastructureNode "Log Analytics" "Central log store, queried with KQL." "log-antkart-dev" "Microsoft Azure - Log Analytics Workspaces"
-                        apim = infrastructureNode "API Management" "PLANNED managed edge (ADR-020) — not yet provisioned." "planned" "Planned"
+                        logAnalytics = infrastructureNode "Log Analytics" "Central log store, queried with KQL. (No icon — no verified Log Analytics tag in this theme.)" "log-antkart-dev" "Managed"
+                        apim = infrastructureNode "API Management" "PLANNED managed edge (ADR-020) — not yet provisioned." "planned" "Microsoft Azure - API Management Services,Planned"
                     }
 
                     eastus2 = deploymentNode "Region: East US 2 (eastus2)" "Paired region — holds the two data stores that could not be provisioned in East US." "Azure region" {

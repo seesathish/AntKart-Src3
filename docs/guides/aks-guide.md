@@ -14,7 +14,7 @@ Every deployable service is packaged as a container image built the same way, so
 
 **Non-root, on port 8080.** Each runtime image sets `USER $APP_UID` (the .NET base image's non-root user) before the entry point, so containers never run as root. Because a non-root user cannot bind privileged ports (below 1024), every service listens on **port 8080** — the .NET base image's default (`ASPNETCORE_HTTP_PORTS=8080`) — and each `Dockerfile` declares `EXPOSE 8080`. Kubernetes Services target port 8080.
 
-**Health and readiness endpoints.** Every service exposes the three health surfaces provided by the shared building blocks, shaped for orchestrator probes (see the [Observability design](../design/OBSERVABILITY.md) and the resilience/health step of the [Cloud Migration Guide](cloud-migration-guide.md)):
+**Health and readiness endpoints.** Every service exposes the three health surfaces provided by the shared building blocks, shaped for orchestrator probes (see the [Observability design](../guides/observability-concepts.md) and the resilience/health step of the [Cloud Migration Guide](cloud-migration-guide.md)):
 
 - **`GET /health/live`** — shallow liveness. Makes no external calls, so a dependency blip cannot trigger a restart storm. This is the **liveness probe** target.
 - **`GET /health/ready`** — tolerant readiness (a degraded shared dependency still returns HTTP 200). This is the **readiness probe** target.

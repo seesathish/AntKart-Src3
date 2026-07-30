@@ -33,7 +33,7 @@ Use this matrix to determine what to check based on what you are changing:
 | `AuthenticationExtensions` / `EntraSettings` | All services calling `AddEntraAuthentication` |
 | `MassTransitExtensions.AddAzureServiceBusMassTransit` | All services using MassTransit (Order, Payments, Cart, Products) — notification is a separate serverless Azure Functions app, not a MassTransit consumer |
 | `PagedResult<T>` or `Result<T>` | All handlers and endpoints returning these types |
-| `ocelot.json` route change | Gateway, affected downstream service, ocelot.Development.json, docs/design/EVENTBUS.md if routing changes |
+| `ocelot.json` route change | Gateway, affected downstream service, ocelot.Development.json, docs/guides/eventbus-concepts.md if routing changes |
 | Integration event field added (non-breaking) | All consumers — verify they compile; new optional field with default is safe |
 | Integration event field removed or renamed (breaking) | All publishers + all consumers must update simultaneously |
 | Entra ID app registration change (app roles, optional claims) | All services using JWT claims, `docs/test/SECURITY_TESTS.md` |

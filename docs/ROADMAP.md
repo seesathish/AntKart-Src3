@@ -31,11 +31,11 @@ Core Azure services in use: **Microsoft Entra ID**, **Azure Kubernetes Service**
 - Clean Architecture and Domain-Driven Design per service — [ADR-002](adr/ADR-002-clean-architecture-and-ddd.md)
 - CQRS with a mediator pipeline and validation behaviour — [ADR-010](adr/ADR-010-CQRS-and-MediatR.md)
 - Repository, Specification, and Unit of Work persistence abstractions — [ADR-011](adr/ADR-011-Repository-Specification-and-Unit-of-Work.md)
-- Orchestrated SAGA with a transactional outbox for at-least-once, dual-write-safe eventing — [ADR-005](adr/ADR-005-saga-orchestration.md) · [Event Bus design](design/EVENTBUS.md)
+- Orchestrated SAGA with a transactional outbox for at-least-once, dual-write-safe eventing — [ADR-005](adr/ADR-005-saga-orchestration.md) · [Event Bus design](guides/eventbus-concepts.md)
 - Domain events (in-process) and integration events (cross-service) as two distinct patterns — [ADR-009](adr/ADR-009-domain-events-vs-integration-events.md)
 - In-cluster API gateway (Ocelot) — routing, JWT passthrough, per-route rate limiting and QoS; the internal gateway in the two-gateway edge model — [ADR-006](adr/ADR-006-ocelot-api-gateway.md)
 - gRPC for synchronous service-to-service calls (the discount lookup) — [AK.Discount design](../AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md)
-- Polly-based resilience (retry, circuit breaker, timeout) on outbound dependencies — [ADR-003](adr/ADR-003-fault-tolerance-with-polly.md) · [Resilience design](design/RESILIENCE.md)
+- Polly-based resilience (retry, circuit breaker, timeout) on outbound dependencies — [ADR-003](adr/ADR-003-fault-tolerance-with-polly.md) · [Resilience design](guides/resilience-concepts.md)
 - Polyglot persistence — one store per service, each chosen to fit its workload — [ADR-004](adr/ADR-004-polyglot-persistence.md)
 - Shared cross-cutting library (DDD base types, auth, messaging, resilience, middleware) — [ADR-008](adr/ADR-008-shared-ddd-contracts-in-buildingblocks.md) · [Building Blocks](../AK.BuildingBlocks/BUILDING_BLOCKS.md)
 
@@ -96,7 +96,7 @@ _Target: on or before 6 August 2026._
 - **Full saga end-to-end verification** — through the public HTTPS endpoint (`api.antkart.in`), exercising both the payment **success** and payment **failure** branches of the orchestrated saga — [Cluster end-to-end verification](test/README.md#cluster-end-to-end-verification-public-ingress).
 - **Deep-understanding consolidation** — of the delivered platform: Kubernetes, Helm, GitOps / Argo CD, CI/CD, OIDC federated credentials, workload identity, and action SHA pinning.
 - **Kubernetes depth at interview level** — probes, resources, configuration, storage, networking, policies, and failure diagnosis applied to the running fleet.
-- **Observability** — Serilog structured logging, OpenTelemetry tracing, Prometheus metrics, Grafana dashboards, and Application Insights / Log Analytics — [Observability design](design/OBSERVABILITY.md).
+- **Observability** — Serilog structured logging, OpenTelemetry tracing, Prometheus metrics, Grafana dashboards, and Application Insights / Log Analytics — [Observability design](guides/observability-concepts.md).
 - **API Management spike** — a time-boxed exploration: provision → wire one scenario (JWT validation at the edge) → test → delete. No standing APIM resource — [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md).
 - **Infrastructure provisioning and teardown pipelines** — automated apply and destroy of the environment as code, validated by a full teardown-and-rebuild — [infrastructure/README](../infrastructure/README.md).
 - **Architecture diagram set, redrawn** — for the cloud-native platform, with a locked visual language and a C4/Mermaid tooling split; Azure API Management appears in the container view, the network/traffic-path diagram, and the APIM-edge diagram. The existing C4 model and renders describe the earlier Phase 1 microservices platform and are **superseded** — [Diagram Plan](C4Renders/DIAGRAM-PLAN.md) (private reference) · [C4 renders](C4Renders/).

@@ -1,5 +1,7 @@
 # AntKart — Event Bus Technical Design
 
+> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [Development Guide](../../DevelopmentGuide.md).
+
 ## Overview
 
 Async communication between microservices uses **MassTransit 8.3.6** over **Azure Service Bus** as the transport. The order flow implements an **orchestrated SAGA** (a MassTransit state machine) with an **EF Core Outbox** to guarantee at-least-once delivery and prevent dual-write problems.
