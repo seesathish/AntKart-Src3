@@ -2,19 +2,24 @@
  * AntKart — Azure services (hero diagram)
  *
  * Question: where does it run, and what replaced what?
- * A DEPLOYMENT VIEW of the managed estate — subscription, region, resource group,
- * virtual network, AKS, and the managed services. Sourced from the Terragrunt units
- * (infrastructure/environments/dev) and deploy/helm. Each element notes which Phase 1
- * component it replaced where one did. API Management is marked planned.
+ * A DEPLOYMENT VIEW of the managed estate — subscription, ONE resource group spanning
+ * TWO regions, virtual network, AKS, and the managed services. Sourced from the
+ * Terragrunt units (infrastructure/environments/dev) and deploy/helm. Each element notes
+ * which Phase 1 component it replaced where one did. API Management is marked planned.
  *
- * NOTE ON REGION — the repository provisions a SINGLE region, East US (eastus), in the
- * resource group rg-antkart-dev-eastus. There is no East US 2 in the code, so only one
- * region is drawn; a second region/QA is planned (see hero-infrastructure).
+ * NOTE ON REGION — the repository provisions TWO regions inside the SAME resource group
+ * (rg-antkart-dev-eastus, a logical container that is not region-bound). East US holds
+ * AKS and everything else; East US 2 holds PostgreSQL Flexible Server and Azure Managed
+ * Redis. PostgreSQL is in East US 2 because East US is offer-restricted for Flexible
+ * Server (infrastructure/environments/dev/postgresql/terragrunt.hcl:46); Redis is
+ * colocated with it there (redis/terragrunt.hcl:46). Data calls from the cluster to
+ * those two stores CROSS the region boundary — drawn as two arrows.
  *
  * NOTE ON TAGS — every Azure element carries a "Microsoft Azure - ..." theme tag so the
- * icons render from the microsoft-azure-2021.01.26 theme. If any icon does not appear,
- * the tag string does not match the theme exactly — adjust that one string; the box
- * still renders either way.
+ * icons render from the microsoft-azure-2021.01.26 theme. The Azure Cosmos DB, Azure
+ * Database PostgreSQL Server, Cache Redis, Service Bus and Kubernetes Services strings
+ * are confirmed; the rest follow the same theme's naming. If any icon does not appear,
+ * adjust that one string; the box still renders either way.
  *
  * RENDER
  *   docker run -it --rm -p 8080:8080 \
@@ -33,7 +38,7 @@
  *   workspace.json (generated — do not hand-edit; .structurizr/ is gitignored cache).
  */
 
-workspace "AntKart — Azure services" "Where it runs: the managed Azure estate, single region East US" {
+workspace "AntKart — Azure services" "Where it runs: the managed Azure estate across East US and East US 2" {
 
     !identifiers hierarchical
 
@@ -45,18 +50,19 @@ workspace "AntKart — Azure services" "Where it runs: the managed Azure estate,
 
             subscription = deploymentNode "Azure Subscription" "Single subscription for the dev environment." "Azure" "Microsoft Azure - Subscriptions" {
 
-                region = deploymentNode "East US (eastus)" "Single region. A second region / QA is planned, not built." "Azure region" {
+                // ONE resource group, TWO regions. A resource group is a LOGICAL container
+                // and is not region-bound, so both regions sit inside this single group —
+                // there is no second resource group.
+                rg = deploymentNode "rg-antkart-dev-eastus" "Application resource group — a logical, NOT region-bound container. Terraform state lives in a SEPARATE resource group (rg-antkart-tfstate)." "Resource group" "Microsoft Azure - Resource Groups" {
 
-                    rg = deploymentNode "rg-antkart-dev-eastus" "Application resource group. Terraform state lives in a SEPARATE resource group (rg-antkart-tfstate)." "Resource group" "Microsoft Azure - Resource Groups" {
+                    eastus = deploymentNode "Region: East US (eastus)" "Primary region — AKS and every managed service except the two offer-restricted data stores." "Azure region" {
 
                         vnet = deploymentNode "vnet-antkart-dev-eastus" "Virtual network — aks, private-endpoints and gateway subnets." "VNet" "Microsoft Azure - Virtual Networks" {
                             aks = deploymentNode "AKS — aks-antkart-dev" "Azure CNI Overlay, OIDC issuer, workload identity. Node pool: 2 x Standard_D2s_v3. Runs the six services and the serverless wiring." "AKS" "Microsoft Azure - Kubernetes Services"
                         }
 
                         cosmos = infrastructureNode "Cosmos DB (MongoDB API)" "Product catalogue. Replaced local MongoDB." "antkart-products" "Microsoft Azure - Azure Cosmos DB"
-                        postgres = infrastructureNode "PostgreSQL Flexible Server" "Order, Payments and Discount databases." "AKOrdersDb / AKPaymentsDb / AKDiscountDb" "Microsoft Azure - Azure Database PostgreSQL Server"
-                        redis = infrastructureNode "Azure Managed Redis" "Shopping cart store. Replaced local Redis." "AKCart:cart:{userId}" "Microsoft Azure - Azure Cache Redis"
-                        servicebus = infrastructureNode "Azure Service Bus" "Orchestrated SAGA transport (MassTransit, Entra auth). Replaced RabbitMQ." "Service Bus namespace" "Microsoft Azure - Azure Service Bus"
+                        servicebus = infrastructureNode "Azure Service Bus" "Orchestrated SAGA transport (MassTransit, Entra auth). Replaced RabbitMQ." "Service Bus namespace" "Microsoft Azure - Service Bus"
                         eventgrid = infrastructureNode "Event Grid" "Fire-and-forget notification events." "evgt-antkart-dev" "Microsoft Azure - Event Grid Topics"
                         functions = infrastructureNode "Azure Functions" "Serverless notification handlers. Replaced the notification microservice." "func-antkart-notifications-dev" "Microsoft Azure - Function Apps"
                         keyvault = infrastructureNode "Key Vault" "Secrets, read at runtime via managed identity." "RBAC data plane" "Microsoft Azure - Key Vaults"
@@ -66,8 +72,18 @@ workspace "AntKart — Azure services" "Where it runs: the managed Azure estate,
                         logAnalytics = infrastructureNode "Log Analytics" "Central log store, queried with KQL." "log-antkart-dev" "Microsoft Azure - Log Analytics Workspaces"
                         apim = infrastructureNode "API Management" "PLANNED managed edge (ADR-020) — not yet provisioned." "planned" "Planned"
                     }
+
+                    eastus2 = deploymentNode "Region: East US 2 (eastus2)" "Paired region — holds the two data stores that could not be provisioned in East US." "Azure region" {
+                        postgres = infrastructureNode "PostgreSQL Flexible Server" "Order, Payments and Discount databases. Provisioned in East US 2 because East US is offer-restricted for Flexible Server." "AKOrdersDb / AKPaymentsDb / AKDiscountDb" "Microsoft Azure - Azure Database PostgreSQL Server"
+                        redis = infrastructureNode "Azure Managed Redis" "Shopping cart store. Colocated with PostgreSQL in East US 2." "AKCart:cart:{userId}" "Microsoft Azure - Cache Redis"
+                    }
                 }
             }
+
+            // Cross-region data calls — these two arrows leave the East US boundary and
+            // enter East US 2, so a reader sees that the cluster's data hop crosses regions.
+            subscription.rg.eastus.vnet.aks -> subscription.rg.eastus2.postgres "Order / Payments / Discount data (crosses region)"
+            subscription.rg.eastus.vnet.aks -> subscription.rg.eastus2.redis "Cart data (crosses region)"
         }
     }
 
@@ -75,7 +91,7 @@ workspace "AntKart — Azure services" "Where it runs: the managed Azure estate,
 
         themes https://static.structurizr.com/themes/microsoft-azure-2021.01.26/theme.json
 
-        deployment * "Dev" "AzureServices" "Where does it run, and what replaced what? The managed Azure estate in a single region." {
+        deployment * "Dev" "AzureServices" "Where does it run, and what replaced what? The managed Azure estate across East US and East US 2." {
             include *
             // PHASE ONE: autoLayout is ON. Before hand-arranging, COMMENT OUT the next
             // line, refresh, then drag. Leave it commented once you start dragging.
