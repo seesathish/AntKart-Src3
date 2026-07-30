@@ -5,7 +5,7 @@
 Delivered today: Serilog → Console → Application Insights / Log Analytics. Metrics and tracing are **planned**.
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph DELIVERED["Delivered"]
         SVC["Services + Functions<br/>Serilog structured logs"]:::service
         CON["Console sink"]:::cicd

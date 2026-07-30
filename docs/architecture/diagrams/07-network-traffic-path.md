@@ -5,15 +5,13 @@
 The real path today, plus Azure API Management shown as the **planned** edge (not yet provisioned).
 
 ```mermaid
-flowchart LR
+flowchart TD
     User["Client / Browser"]:::external
     DNS["GoDaddy DNS<br/>api.antkart.in A record"]:::external
     IP["Ingress LoadBalancer<br/>public IP 20.246.197.150"]:::edge
     NGINX["ingress-nginx controller"]:::edge
     TLS["TLS termination<br/>cert-manager · secret ak-gateway-tls<br/>Let's Encrypt prod"]:::edge
     GW["AK.Gateway · Ocelot"]:::service
-    APIM["Azure API Management<br/>planned edge"]:::edge
-    GAP["Not yet provisioned (ADR-020)"]:::issue
 
     subgraph ROUTES["Ocelot /gateway routes"]
         P["products to ak-products"]:::service
@@ -22,6 +20,9 @@ flowchart LR
         PAY["payments to ak-payments"]:::service
         H["health/* to each service"]:::service
     end
+
+    APIM["Azure API Management<br/>planned edge"]:::edge
+    GAP["Not yet provisioned (ADR-020)"]:::issue
 
     User --> DNS --> IP --> NGINX --> TLS --> GW --> ROUTES
     User -. "planned" .-> APIM -. "planned" .-> IP

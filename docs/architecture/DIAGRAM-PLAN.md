@@ -29,6 +29,8 @@ Every element type has one fixed encoding, used identically across **all** diagr
 - a **one-line statement of the question it answers** (placed directly under the title);
 - a **legend** mapping the colours/shapes used in that diagram back to this table.
 
+**Orientation.** Any Mermaid flowchart with **more than three nodes MUST use a vertical layout (`flowchart TD`)**. Horizontal layouts push wide on a monitor and force the reader to zoom or scroll sideways before they can grasp the shape, which defeats the purpose of a first-level diagram. Only use `flowchart LR` when the diagram has **three nodes or fewer**, or when **left-to-right IS the meaning** (a strictly linear pipeline of **at most four stages**). `sequenceDiagram` is **exempt** — it is vertical by nature.
+
 ## 3. Tooling split — and why
 
 Two tools, chosen per diagram type so each renders where it is read best.

@@ -3,7 +3,7 @@
 > **Question:** How does a Git change become a running pod via Argo CD?
 
 ```mermaid
-flowchart LR
+flowchart TD
     GIT[("Git · master<br/>deploy/helm/values/service.yaml")]:::cicd
     ARGO["Argo CD Application controller<br/>(in-cluster)"]:::cicd
     LIVE["Live cluster state<br/>Deployments / Services"]:::paas

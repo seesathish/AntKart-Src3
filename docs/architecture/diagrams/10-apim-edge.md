@@ -5,7 +5,7 @@
 **Target state per [ADR-020](../../adr/ADR-020-api-management-managed-edge-gateway.md) — Azure API Management is NOT yet provisioned.**
 
 ```mermaid
-flowchart LR
+flowchart TD
     Client["Client"]:::external
 
     subgraph TARGET["Target state — ADR-020 · not yet provisioned"]

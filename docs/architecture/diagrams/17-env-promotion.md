@@ -5,7 +5,7 @@
 **QA does not exist yet — `environments/qa` is planned.** This shows the state-isolation concern it must solve.
 
 ```mermaid
-flowchart LR
+flowchart TD
     MODULES["infrastructure/modules<br/>(shared, environment-agnostic)"]:::cicd
 
     subgraph DEV["environments/dev — delivered"]

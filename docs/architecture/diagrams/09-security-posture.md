@@ -3,7 +3,7 @@
 > **Question:** What is exposed vs internal, and where do the known gaps sit?
 
 ```mermaid
-flowchart LR
+flowchart TD
     Client["Client"]:::external
 
     subgraph PUBLIC["Public — internet-facing"]
