@@ -6,18 +6,16 @@ AntKart is a **.NET 9** e-commerce platform of **six microservices** plus a **se
 
 ## System overview
 
-> **Diagram: System overview** — _not yet drawn_
-> **Must show:** who uses the platform, the six deployable services plus the serverless notification app, and every external system it depends on - Microsoft Entra ID, Razorpay, Azure Communication Services, Let's Encrypt and GoDaddy DNS. Answers the question "what is this thing".
-
-Customers reach the platform through one public HTTPS endpoint; behind it, six services and a serverless notifications app coordinate over Azure Service Bus. Everything it touches — identity, payments, email, certificates, DNS — is a managed external system. Start with the [Development Guide](DevelopmentGuide.md) for how it is built, or read on for one topic at a time.
-
-## Platform architecture
-
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/C4Renders/renders/SystemOverview-dark.svg">
   <img alt="AntKart system overview: two actors reaching six services and a serverless notification app through a single API gateway, with Microsoft Entra ID, Razorpay and Azure Communication Services as external dependencies" src="docs/C4Renders/renders/SystemOverview.svg">
 </picture>
 
+Customers reach the platform through one public HTTPS endpoint; behind it, six services and a serverless notifications app coordinate over Azure Service Bus. Everything it touches — identity, payments, email, certificates, DNS — is a managed external system. Start with the [Development Guide](DevelopmentGuide.md) for how it is built, or read on for one topic at a time.
+
+## Platform architecture
+
+> **Diagram: System overview** — _not yet drawn_
 > **Must show:** the engineering foundation inside a service - Clean Architecture layers, CQRS with MediatR, the orchestrated saga, the transactional outbox, repository with specification and unit of work, minimal API endpoints, and the distinction between domain events and integration events. Answers "how is the code built".
 
 Every service is the same inside: a dependency-free domain core, an application layer of CQRS handlers behind a validation pipeline, and a thin API host. Services never call each other synchronously for business flows — they coordinate through an orchestrated saga with a transactional outbox.

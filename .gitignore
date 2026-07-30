@@ -366,8 +366,8 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
-# Structurizr CLI local cache (Lucene index + thumbnails — generated tooling state)
-docs/architecture/.structurizr/
+# Structurizr Lite local cache (Lucene index + thumbnails — generated tooling state)
+**/.structurizr/
 
 # Terraform / Terragrunt working files — never commit these
 **/.terraform/
