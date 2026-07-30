@@ -1,215 +1,234 @@
-# AntKart
+# AntKart — cloud-native e-commerce platform
 
-AntKart is a cloud-native e-commerce platform implemented as six independently deployable .NET 9 microservices (Products, ShoppingCart, Order, Payments, Gateway, and the Discount gRPC service) plus a serverless notifications application (Azure Functions). It is engineered as a reference implementation: each service applies Clean Architecture and Domain-Driven Design, services coordinate through an event-driven SAGA rather than synchronous service-to-service calls, and the platform is provisioned for the cloud entirely as code.
+AntKart is a **.NET 9** e-commerce platform of **six microservices** plus a **serverless notifications app**, running on **Azure Kubernetes Service**, provisioned with **Terraform and Terragrunt**, and delivered by **GitHub Actions and Argo CD**. It is reachable at **[https://api.antkart.in](https://api.antkart.in)** over a trusted TLS certificate. (An earlier Phase-1 build ran locally on Docker Compose in a separate repository; this repository is the cloud-native platform.)
 
-The system is defined at two layers. The **application baseline** runs the services against self-hosted backing infrastructure — Keycloak, RabbitMQ, per-service databases, and ELK — and builds and runs locally. The **cloud-native target** maps the same services onto managed Azure services — Microsoft Entra ID, Azure Service Bus, and Azure Cosmos DB — under a secret-less, identity-based security posture. Application code is largely identical across both layers; only the infrastructure it binds to changes.
+This README explains the platform **through its 18 architecture diagrams**, in order, with the decisions (ADRs) and guides linked under each so you can go deeper.
 
-The codebase is accompanied by architecture decision records, concept primers, and step-by-step build guides that record the rationale behind each design and infrastructure decision.
+## At a glance
 
----
+| | |
+|---|---|
+| **Language & runtime** | .NET 9 (C#) — six REST/gRPC microservices + a serverless notifications app (Azure Functions, isolated worker) |
+| **Cloud** | Microsoft Azure |
+| **Orchestration** | Azure Kubernetes Service (AKS) — Azure CNI Overlay, OIDC issuer, workload identity |
+| **Infrastructure as code** | Terraform modules composed by Terragrunt live units |
+| **CI/CD** | GitHub Actions — OIDC to Azure, no stored cloud secrets |
+| **GitOps** | Argo CD — auto-sync + self-heal from Git |
+| **Messaging** | Azure Service Bus via MassTransit (orchestrated SAGA) |
+| **Data stores** | Cosmos DB (MongoDB API), PostgreSQL Flexible Server, Azure Managed Redis |
+| **Identity** | Microsoft Entra ID — workload identity + federated credentials, no stored secrets |
+| **Edge** | ingress-nginx + cert-manager TLS at `api.antkart.in` (Azure API Management is **planned**) |
 
-## Architecture
+## Contents
 
-The architecture is modelled with the [C4 model](https://c4model.com) and rendered from a single Structurizr DSL workspace. The images below are generated artifacts: [`docs/architecture/workspace.dsl`](docs/architecture/workspace.dsl) is the single source of truth, and [`docs/architecture/C4Architecture.md`](docs/architecture/C4Architecture.md) is the detailed reference.
-
-> **Note:** The rendered diagrams reflect the **pre-migration topology** (including the now-retired application identity service and the former identity provider) and are **(to be updated post-migration)**, once the migration round is complete. The service catalogue and structure below reflect the current state.
-
-### Level 1 — System Context
-
-![C4 Level 1 — System Context](docs/architecture/c4-level1-system-context.png)
-
-AntKart as a single system with two actors — Customer and Administrator — and its external dependencies for identity, payments, email, messaging, and observability. Establishes the system boundary and the integrations that cross it.
-
-### Level 2 — Container
-
-![C4 Level 2 — Container](docs/architecture/c4-level2-container.png)
-
-The microservices behind the Ocelot API gateway, each owning its own data store. Inter-service communication is asynchronous over the message broker via MassTransit; AK.Discount is the single synchronous gRPC dependency, invoked by AK.Order.
-
-### Level 3 — Component (AK.Order)
-
-![C4 Level 3 — AK.Order Components](docs/architecture/c4-level3-order-components.png)
-
-The internal structure of AK.Order, the most elaborate service: Minimal API endpoints, the MediatR command/query pipeline with a FluentValidation behaviour, the domain aggregate and its enforced state machine, and the EF Core repository and transactional outbox that feed the MassTransit saga.
-
-### Dynamic View — Order Flow
-
-![C4 Dynamic View — Order Flow](docs/architecture/c4-order-flow-dynamic.png)
-
-The end-to-end order journey orchestrated by the saga: order creation with outbox publication, stock reservation, payment initiation and signature verification, and the status transitions and notifications emitted at each stage. No step is a direct service-to-service HTTP call.
-
-### Cloud-Native Deployment Architecture
-
-> **Forthcoming.** The managed-Azure deployment topology — AKS, managed data and messaging services, identity, and networking — will be added as a Structurizr-generated diagram once that part of the platform is delivered.
-
-### CI/CD (DevOps) Architecture
-
-> **Forthcoming.** The build, test, and release pipeline will be added as a Structurizr-generated diagram once the DevOps phase is delivered.
-
-### Architecture Highlights
-
-**Application-layer patterns**
-
-- **Clean Architecture and DDD per service** — Domain, Application, Infrastructure, and API layers with strict inward dependency rules; domain entities expose private setters and factory methods and carry no framework concerns.
-- **CQRS with MediatR** — commands and queries are fully separated, and a `ValidationBehavior<TRequest, TResponse>` pipeline validates every request through FluentValidation before it reaches a handler.
-- **SAGA orchestration via MassTransit** — the `OrderSaga` in AK.Order transitions through `Initial → StockPending → Confirmed/Cancelled`, coordinating Products, ShoppingCart, Payments, and Notification over the broker with no direct service-to-service HTTP calls.
-- **Transactional outbox** — in Order and Payments, integration events are written in the same database transaction as the business data, guaranteeing at-least-once delivery and eliminating dual-write inconsistency.
-- **`Result<T>` error modelling** — expected outcomes (`CancelOrder`, `UpdateOrderStatus`) return `Result<T>`; genuinely exceptional paths (`CreateOrder`) use exceptions — a deliberate contrast documented in the design notes.
-- **Polly-based resilience** — `AddHttpResilienceWithCircuitBreaker()`, `AddRedisResilience()`, and `AddNpgsqlResilience()` from AK.BuildingBlocks wrap every outbound dependency with exponential-backoff retry and a half-open circuit breaker.
-
-**Cloud-native platform posture**
-
-- **Infrastructure as code** — Terraform modules define resource shape; Terragrunt live units compose them per environment over a shared remote-state backend, with a reviewed `plan` preceding every `apply`.
-- **Entra-only, secret-less data planes** — shared-key and local authentication are disabled (`local_auth_enabled = false`); data planes accept Microsoft Entra identities only, leaving no connection-string secrets in configuration.
-- **Least-privilege RBAC with managed identities** — each service receives its own managed identity scoped to only the data-plane roles it requires; workload identity federation authenticates cluster workloads with no stored credential.
-- **Centralized observability** — structured Serilog logs carry an end-to-end `X-Correlation-Id`, shipped to ELK in the baseline and to Azure Monitor / Application Insights in the cloud-native target.
-
-Significant design and infrastructure decisions are recorded as [Architecture Decision Records](docs/adr/README.md).
+- [System — what it is](#system--what-it-is) · diagrams 01–04
+- [Cloud — where it lives](#cloud--where-it-lives) · diagrams 05–07
+- [Security & identity](#security--identity) · diagrams 08–10
+- [Kubernetes — how it runs](#kubernetes--how-it-runs) · diagrams 11–13
+- [DevOps — how it ships](#devops--how-it-ships) · diagrams 14–17
+- [Cross-cutting](#cross-cutting) · diagram 18
+- [Running and rebuilding the platform](#running-and-rebuilding-the-platform)
+- [Documentation map](#documentation-map)
+- [Known issues](#known-issues)
 
 ---
 
-## Technology Stack
+## System — what it is
 
-| Concern | Application baseline | Cloud-native equivalent |
-|---------|----------------------|-------------------------|
-| Language / framework | .NET 9 · ASP.NET Core Minimal APIs · gRPC | Unchanged |
-| Architecture & patterns | Clean Architecture · DDD · CQRS (MediatR 12) · SAGA · EF Core Outbox · `Result<T>` · FluentValidation | Unchanged |
-| API gateway | Ocelot ([ADR-006](docs/adr/ADR-006-ocelot-api-gateway.md)) | Azure API Management — managed edge ([ADR-020](docs/adr/ADR-020-api-management-managed-edge-gateway.md)) |
-| Identity | Keycloak (OIDC / JWT) | Microsoft Entra ID |
-| Messaging | RabbitMQ + MassTransit | Azure Service Bus + MassTransit |
-| Product store | MongoDB | Azure Cosmos DB (MongoDB API) |
-| Relational / cache | PostgreSQL · Redis | Managed Azure data services |
-| Email | MailKit · SMTP / Mailhog | SMTP / managed email |
-| Payments | Razorpay (sandbox) | Razorpay |
-| Resilience | Polly v8 (retry · circuit breaker · timeout) | Unchanged |
-| Infrastructure as code | — | Terraform + Terragrunt |
-| Container / orchestration | Docker | Azure Kubernetes Service + Azure Container Registry (target) |
-| Serverless / eventing | — | Azure Functions + Event Grid (target) |
-| Secrets / access | Connection strings | Key Vault + managed identities (no secrets) |
-| Observability | Serilog → Elasticsearch → Kibana | Azure Monitor / Application Insights |
-| Testing | xUnit · Moq · FluentAssertions (641 tests) | Unchanged |
+The application shape: who uses it, the deployable pieces, one service's internals, and the order saga.
 
----
+### 01 · System context (L1)
+> **Question:** Who uses AntKart and what external systems does it depend on?
 
-## Documentation
+![01 · System context](docs/architecture/renders/01-system-context.png)
+_Rendered from workspace.dsl — see [docs/architecture/renders/README.md](docs/architecture/renders/README.md)_
 
-| Document | Scope |
-|----------|-------|
-| [Platform Roadmap](docs/ROADMAP.md) | The single authoritative record of what is delivered, in progress, and planned — the best entry point for understanding the full state of the platform. |
-| [Development Guide](DevelopmentGuide.md) | Master index of the build: each delivery phase with its build guide, prerequisite concepts, and governing ADRs. |
-| [Architecture (C4)](docs/architecture/C4Architecture.md) | Detailed C4 model reference; diagrams generated from [`workspace.dsl`](docs/architecture/workspace.dsl). |
-| [Infrastructure Guide](docs/guides/infrastructure-guide.md) | Step-by-step provisioning of the cloud platform — each resource as Understand → Build → Execute → Verify. |
-| [Operations Command Reference](docs/guides/operations-command-reference.md) | Every `az` / `kubectl` / `helm` / `terragrunt` / `docker` command to build, inspect, troubleshoot, and operate the platform — each parameter explained. |
-| [infrastructure/README](infrastructure/README.md) | Layout and operating model of the Terraform/Terragrunt code. |
-| Concept primers | First-principles references for the cloud-native domains: [IaC](docs/guides/iac-concepts.md), [Networking & Kubernetes](docs/guides/networking-concepts.md), [Identity](docs/guides/identity-concepts.md), [OAuth2 + PKCE](docs/guides/oauth2-pkce-concepts.md), [Messaging](docs/guides/messaging-concepts.md), [Serverless & Eventing](docs/guides/serverless-eventing-concepts.md), [Cosmos DB](docs/guides/cosmosdb-concepts.md). |
-| Cross-cutting design notes | [Event Bus](docs/design/EVENTBUS.md), [Resilience](docs/design/RESILIENCE.md), and [Observability](docs/design/OBSERVABILITY.md) — the design of the messaging, resilience, and logging concerns. |
-| [Building Blocks](AK.BuildingBlocks/BUILDING_BLOCKS.md) | The shared cross-cutting library: DDD base types, authentication, messaging, resilience, and middleware. |
-| [Architecture Decision Records](docs/adr/README.md) | The rationale behind each significant design and infrastructure decision. |
-| [Known Issues Register](docs/KNOWN_ISSUES.md) | Open defects and deferred fixes — severity, impact, mitigation, and planned resolution — plus the resolved history. |
-| [Integration Tests](AK.IntegrationTests/INTEGRATION_TESTS.md) | SAGA and event-bus tests on the MassTransit in-memory harness. |
-| [Developer Testing Guide](docs/test/DevTestGuide.md) | End-to-end manual verification across Postman, messaging, the SAGA, and payments. |
-| [Security Test Guide](docs/test/SECURITY_TESTS.md) | Black-box and grey-box security testing methodology. |
-| [Development & maintenance guides](docs/skills/) | Step-by-step procedures for common development and maintenance tasks. |
+**Go deeper:** [ADR-001 — Microservices Architecture](docs/adr/ADR-001-microservices-architecture.md) · [ADR-021 — Retire the Dedicated Identity Service for Microsoft Entra ID](docs/adr/ADR-021-retire-identity-service-for-entra.md) · [ADR-017 — Entra ID, Azure Functions, and Event Grid](docs/adr/ADR-017-entra-id-functions-eventgrid.md)
+
+### 02 · Container view (L2) — services, Azure PaaS, APIM
+> **Question:** What are the deployable pieces and the managed services behind the edge?
+
+![02 · Container view](docs/architecture/renders/02-containers.png)
+_Rendered from workspace.dsl — see [docs/architecture/renders/README.md](docs/architecture/renders/README.md)_
+
+**Go deeper:** [ADR-001 — Microservices Architecture](docs/adr/ADR-001-microservices-architecture.md) · [ADR-004 — Polyglot Persistence](docs/adr/ADR-004-polyglot-persistence.md) · [ADR-006 — Ocelot API Gateway over YARP](docs/adr/ADR-006-ocelot-api-gateway.md) · [ADR-014 — Cosmos DB and Azure Service Bus](docs/adr/ADR-014-cosmosdb-and-servicebus.md) · [ADR-019 — Serverless Notification with Azure Functions and Event Grid](docs/adr/ADR-019-serverless-notification-functions-eventgrid.md) · [ADR-020 — API Management as the Managed Edge Gateway](docs/adr/ADR-020-api-management-managed-edge-gateway.md) _(APIM planned)_
+
+### 03 · Component view (L3) — inside AK.Order
+> **Question:** How is AK.Order structured internally (API → application → domain → infrastructure)?
+
+![03 · Component view](docs/architecture/renders/03-order-components.png)
+_Rendered from workspace.dsl — see [docs/architecture/renders/README.md](docs/architecture/renders/README.md)_
+
+**Go deeper:** [ADR-002 — Clean Architecture and Domain-Driven Design](docs/adr/ADR-002-clean-architecture-and-ddd.md) · [ADR-010 — CQRS and MediatR](docs/adr/ADR-010-CQRS-and-MediatR.md) · [ADR-011 — Repository, Specification, and Unit of Work](docs/adr/ADR-011-Repository-Specification-and-Unit-of-Work.md) · [ADR-005 — SAGA Orchestration over 2PC and Choreography](docs/adr/ADR-005-saga-orchestration.md) · [ADR-009 — Domain Events vs Integration Events](docs/adr/ADR-009-domain-events-vs-integration-events.md)
+
+### 04 · Order saga — dynamic flow to Paid
+> **Question:** How does an order flow through the orchestrated saga to a Paid state?
+
+![04 · Order saga](docs/architecture/renders/04-saga-flow.png)
+_Rendered from workspace.dsl — see [docs/architecture/renders/README.md](docs/architecture/renders/README.md)_
+
+**Go deeper:** [ADR-005 — SAGA Orchestration over 2PC and Choreography](docs/adr/ADR-005-saga-orchestration.md) · [ADR-007 — MassTransit over Raw RabbitMQ Client](docs/adr/ADR-007-masstransit-over-raw-rabbitmq.md) · [ADR-015 — Messaging Migration to Azure Service Bus](docs/adr/ADR-015-messaging-migration-to-service-bus.md) · [Event Bus design](docs/design/EVENTBUS.md)
 
 ---
 
-## Application Baseline and Cloud-Native Target
+## Cloud — where it lives
 
-AntKart is defined at two layers. The **application baseline** — the eight services running against self-hosted backing infrastructure for identity, messaging, per-service databases, and logging — lives in the public AntKart (Phase 1) repository. This repository is the **cloud-native target**: the same services mapped onto managed Azure equivalents under a secret-less, identity-based posture, with the infrastructure defined as code. The application code is largely unchanged across the two; what differs is the infrastructure it binds to. The full concern-by-concern mapping is in the [Technology Stack](#technology-stack) above.
+The Azure resources, how they are provisioned as code, and how traffic reaches them.
 
----
+### 05 · Azure resource topology
+> **Question:** What Azure resources exist and how are they grouped/related?
 
-## Developer Challenge
+![05 · Azure resource topology](docs/architecture/renders/05-azure-topology.png)
+_Rendered from workspace.dsl — see [docs/architecture/renders/README.md](docs/architecture/renders/README.md)_
 
-AntKart is published as a professional reference — for architectural review and for hands-on reconstruction. It supports two complementary tracks.
+**Go deeper:** [ADR-012 — Infrastructure as Code with Terraform and Terragrunt](docs/adr/ADR-012-iac-with-terraform-terragrunt.md) · [ADR-018 — Managed Kubernetes, Workload Identity, and Hardened Base Image](docs/adr/ADR-018-aks-workload-identity-base-image.md) · [Infrastructure Guide](docs/guides/infrastructure-guide.md) · [IaC Concepts](docs/guides/iac-concepts.md)
 
-**Study the architecture from the documentation and test artefacts.** Work through the cloud-native architecture, concepts, and implementation entirely from this repository's documentation and tests: the C4 model, the concept primers, the Architecture Decision Records, the Infrastructure Guide, and the integration and manual test suites. This track builds a complete understanding of how the platform is designed and verified without provisioning anything.
+### 06 · Terragrunt unit dependency graph
+> **Question:** In what order do the IaC units apply, and what depends on what?
 
-**Rebuild and validate the cloud-native platform.** Clone the public AntKart (Phase 1) microservices repository and undertake the cloud-native build and validation by following the [Development Guide](DevelopmentGuide.md) and the [Developer Testing Guide](docs/test/DevTestGuide.md): provision the infrastructure as code, map each baseline component to its managed equivalent, adopt the secret-less identity model, and verify each step end to end.
+View diagram → [06-terragrunt-dependencies.md](docs/architecture/diagrams/06-terragrunt-dependencies.md)
 
-The relationship between the repositories is **Phase 1 (AntKart — microservices) → Phase 2 (AntKart-CloudNative — the cloud-native build derived from Phase 1)**.
+**Go deeper:** [ADR-012 — Infrastructure as Code with Terraform and Terragrunt](docs/adr/ADR-012-iac-with-terraform-terragrunt.md) · [IaC Concepts](docs/guides/iac-concepts.md) · [Infrastructure Guide](docs/guides/infrastructure-guide.md)
 
----
+### 07 · Network & traffic path
+> **Question:** How does a request physically reach a service, and where is TLS terminated?
 
-## Solution Structure
+View diagram → [07-network-traffic-path.md](docs/architecture/diagrams/07-network-traffic-path.md)
 
-```
-AntKart/
-├── AK.Products/          REST Minimal API — product catalogue (MongoDB / Cosmos DB)
-├── AK.Discount/          gRPC service — discount coupons (PostgreSQL)
-├── AK.ShoppingCart/      REST Minimal API — shopping cart (Redis)
-├── AK.Order/             REST Minimal API — order management (PostgreSQL + SAGA)
-├── AK.Gateway/           API Gateway — Ocelot single entry point
-├── AK.Payments/          REST Minimal API — payment processing (PostgreSQL + Razorpay)
-├── AK.Notification/      Serverless notifications — AK.Notification.Core (reusable library) + AK.Notification.Functions (.NET 9 isolated Azure Functions, Event Grid-triggered)
-├── AK.BuildingBlocks/    Shared library (messaging, resilience, logging, auth)
-├── AK.IntegrationTests/  SAGA + event bus tests (MassTransit in-memory harness)
-├── AntKart.postman_collection.json
-├── docs/
-│   ├── adr/              Architecture Decision Records
-│   ├── architecture/     C4 diagram images + Structurizr workspace
-│   ├── design/           Cross-cutting design docs (EVENTBUS, RESILIENCE, OBSERVABILITY)
-│   ├── guides/           Concept primers + the Infrastructure Guide
-│   ├── skills/           Step-by-step development & maintenance guides
-│   └── test/             Manual test & security test guides (DevTestGuide, SECURITY_TESTS)
-├── infrastructure/       Terraform modules + Terragrunt live units
-└── nuget.config
-```
+**Go deeper:** [Networking & Kubernetes Concepts](docs/guides/networking-concepts.md) · [AKS Guide](docs/guides/aks-guide.md) · [ADR-006 — Ocelot API Gateway over YARP](docs/adr/ADR-006-ocelot-api-gateway.md)
 
 ---
 
-## Microservices
+## Security & identity
 
-| Service | Transport | Data store | Design Doc |
-|---------|-----------|------------|------------|
-| [AK.Products](AK.Products/AK.Products.API) | REST Minimal API | MongoDB / Cosmos DB | [Products Design](AK.Products/PRODUCTS_TECHNICAL_DESIGN.md) |
-| [AK.Discount](AK.Discount/AK.Discount.Grpc) | gRPC | PostgreSQL | [Discount Design](AK.Discount/DISCOUNT_TECHNICAL_DESIGN.md) |
-| [AK.ShoppingCart](AK.ShoppingCart/AK.ShoppingCart.API) | REST Minimal API | Redis | [ShoppingCart Design](AK.ShoppingCart/SHOPPING_CART_TECHNICAL_DESIGN.md) |
-| [AK.Order](AK.Order/AK.Order.API) | REST Minimal API | PostgreSQL | [Order Design](AK.Order/ORDER_TECHNICAL_DESIGN.md) |
-| [AK.Payments](AK.Payments/AK.Payments.API) | REST Minimal API | PostgreSQL + Razorpay | [Payments Design](AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md) |
-| [AK.Notification](AK.Notification/AK.Notification.Core) | Serverless (Event Grid + Azure Functions) | PostgreSQL (history) + ACS Email | [Cloud Migration Guide §7](docs/guides/cloud-migration-guide.md) |
-| [AK.Gateway](AK.Gateway/AK.Gateway.API) | Ocelot API Gateway | — | [Gateway Design](AK.Gateway/API_GATEWAY.md) |
+The secret-less trust chain, the public/internal boundaries, and the planned managed edge.
 
-Cloud ingress and API Management endpoints for each service are **(to be updated)** as the deployment topology is finalized.
+### 08 · Identity & trust chain
+> **Question:** How does trust flow from provisioning to runtime, secret-lessly?
 
-Identity is **Entra-native**: Microsoft Entra ID issues tokens and each service validates them directly, so there is no application identity service in the catalogue (see [ADR-021](docs/adr/ADR-021-retire-identity-service-for-entra.md)).
+View diagram → [08-identity-chain.md](docs/architecture/diagrams/08-identity-chain.md)
 
----
+**Go deeper:** [ADR-016 — Cosmos DB Data Migration and Workload Identity Foundation](docs/adr/ADR-016-data-migration-cosmosdb-and-workload-identity.md) · [ADR-022 — CI/CD on GitHub Actions with OIDC Federated Credentials](docs/adr/ADR-022-cicd-github-actions-oidc.md) · [Identity Concepts](docs/guides/identity-concepts.md)
 
-## Authorization
+### 09 · Security posture & trust boundaries
+> **Question:** What is exposed vs internal, and where do the known gaps sit?
 
-| Service | GET / Read | Write / Mutation |
-|---------|-----------|-----------------|
-| AK.Products | Anonymous | Admin only |
-| AK.Discount (gRPC) | Anonymous | Admin only (JWT in `authorization` metadata) |
-| AK.ShoppingCart | Authenticated | Authenticated |
-| AK.Order | Authenticated (`/me` = own orders) | Authenticated; status update = Admin only |
-| AK.Payments | Authenticated (`/me` = own payments) | Authenticated |
-| AK.Notification.Functions | No HTTP surface (Event Grid-triggered) | Serverless side-effect — no client-facing endpoints |
-| AK.Gateway | Proxied from downstream | JWT validated at gateway and downstream |
+View diagram → [09-security-posture.md](docs/architecture/diagrams/09-security-posture.md)
 
-**Roles:** `user` (standard), `admin` (full access).
+**Go deeper:** [Known Issues Register](docs/KNOWN_ISSUES.md) · [Identity Concepts](docs/guides/identity-concepts.md) · [Security Test Guide](docs/test/SECURITY_TESTS.md)
 
-**Identity provider:** Microsoft Entra ID — **identity is Entra-native, with no application identity service**. Entra issues access tokens directly to clients via standard OAuth/OIDC flows; each service validates them (issuer, audience, lifetime, signature) and authorizes from the flat `roles` claim. User and app-role administration is performed in Entra / Microsoft Graph. Cloud endpoint and token-acquisition specifics are **(to be updated)** as the deployment topology is finalized.
+### 10 · APIM edge & two-gateway model (target state)
+> **Question:** What does the managed edge do before traffic reaches the cluster ingress?
+
+View diagram → [10-apim-edge.md](docs/architecture/diagrams/10-apim-edge.md)
+
+_Azure API Management is **planned**, not yet provisioned._
+
+**Go deeper:** [ADR-020 — API Management as the Managed Edge Gateway](docs/adr/ADR-020-api-management-managed-edge-gateway.md) · [ADR-006 — Ocelot API Gateway over YARP](docs/adr/ADR-006-ocelot-api-gateway.md)
 
 ---
 
-## Getting Started
+## Kubernetes — how it runs
 
-**Study the codebase.** Clone the public AntKart (Phase 1) microservices repository and validate the build and tests:
+The cluster layout, how pods authenticate without secrets, and how one chart deploys six services.
 
-```bash
-git clone https://github.com/seesathish/AntKart.git
-cd AntKart
-dotnet restore   # run from the repository root so nuget.config is applied
-dotnet build
-dotnet test      # run the full test suite
-```
+### 11 · Cluster topology
+> **Question:** How are namespaces, workloads, and ingress laid out inside AKS?
 
-**Provision the cloud-native platform.** Follow the [Infrastructure Guide](docs/guides/infrastructure-guide.md) to provision the managed Azure resources as code — Terraform modules and Terragrunt live units, with a reviewed `plan` before each `apply` — and the [Development Guide](DevelopmentGuide.md) for the delivery phases. With the managed services in place, each service runs locally against live cloud services, directly or via cloud port-forwarding. Service endpoints and ports are **(to be updated)** as the deployment topology is finalized.
+![11 · Cluster topology](docs/architecture/renders/11-cluster-topology.png)
+_Rendered from workspace.dsl — see [docs/architecture/renders/README.md](docs/architecture/renders/README.md)_
+
+**Go deeper:** [ADR-018 — Managed Kubernetes, Workload Identity, and Hardened Base Image](docs/adr/ADR-018-aks-workload-identity-base-image.md) · [AKS Guide](docs/guides/aks-guide.md)
+
+### 12 · Workload identity token flow
+> **Question:** How does a pod get an Entra token with no stored secret?
+
+View diagram → [12-workload-identity-token-flow.md](docs/architecture/diagrams/12-workload-identity-token-flow.md)
+
+**Go deeper:** [ADR-016 — Cosmos DB Data Migration and Workload Identity Foundation](docs/adr/ADR-016-data-migration-cosmosdb-and-workload-identity.md) · [ADR-018 — Managed Kubernetes, Workload Identity, and Hardened Base Image](docs/adr/ADR-018-aks-workload-identity-base-image.md) · [Identity Concepts](docs/guides/identity-concepts.md)
+
+### 13 · Helm chart & values precedence
+> **Question:** How does one generic chart become six services, and which values win?
+
+View diagram → [13-helm-chart-values.md](docs/architecture/diagrams/13-helm-chart-values.md)
+
+**Go deeper:** [AKS Guide](docs/guides/aks-guide.md) · [Container Configuration](docs/guides/container-configuration.md) · [GitOps Guide](docs/guides/gitops-guide.md)
 
 ---
 
-## Testing
+## DevOps — how it ships
 
-The platform is verified across unit, integration, end-to-end, security, and load/performance testing, backed by a comprehensive automated suite. The full strategy, the per-project breakdown, and links to each test type are consolidated in the [Testing index](docs/test/README.md).
+The pull-request gate, the merge delivery, the GitOps loop that runs it, and environment promotion.
+
+### 14 · CI pipeline
+> **Question:** What runs on a pull request, and what gates the merge?
+
+View diagram → [14-ci-pipeline.md](docs/architecture/diagrams/14-ci-pipeline.md)
+
+**Go deeper:** [ADR-022 — CI/CD on GitHub Actions with OIDC Federated Credentials](docs/adr/ADR-022-cicd-github-actions-oidc.md) · [ADR-023 — CI/CD Pipeline Design and Repository Strategy](docs/adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md) · [DevOps CI/CD Guide](docs/guides/devops-cicd-guide.md)
+
+### 15 · CD pipeline
+> **Question:** What happens on merge — build, push, tag-bump — and with what identity?
+
+View diagram → [15-cd-pipeline.md](docs/architecture/diagrams/15-cd-pipeline.md)
+
+**Go deeper:** [ADR-022 — CI/CD on GitHub Actions with OIDC Federated Credentials](docs/adr/ADR-022-cicd-github-actions-oidc.md) · [ADR-023 — CI/CD Pipeline Design and Repository Strategy](docs/adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md) · [DevOps CI/CD Guide](docs/guides/devops-cicd-guide.md)
+
+### 16 · GitOps reconciliation loop
+> **Question:** How does a Git change become a running pod via Argo CD?
+
+View diagram → [16-gitops-reconciliation.md](docs/architecture/diagrams/16-gitops-reconciliation.md)
+
+**Go deeper:** [ADR-023 — CI/CD Pipeline Design and Repository Strategy](docs/adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md) · [GitOps Guide](docs/guides/gitops-guide.md)
+
+### 17 · Environment promotion — dev vs QA
+> **Question:** How does a change move from dev to QA, and what differs between them?
+
+View diagram → [17-env-promotion.md](docs/architecture/diagrams/17-env-promotion.md)
+
+_The QA environment is **planned**; only `dev` exists today._
+
+**Go deeper:** [ADR-012 — Infrastructure as Code with Terraform and Terragrunt](docs/adr/ADR-012-iac-with-terraform-terragrunt.md) · [Infrastructure Guide](docs/guides/infrastructure-guide.md) · [Roadmap](docs/ROADMAP.md)
+
+---
+
+## Cross-cutting
+
+How the platform is observed.
+
+### 18 · Observability pipeline
+> **Question:** How do logs, metrics, and traces flow to their sinks and dashboards?
+
+View diagram → [18-observability.md](docs/architecture/diagrams/18-observability.md)
+
+_Structured logging to Application Insights / Log Analytics is **delivered**; metrics and tracing (OpenTelemetry, Prometheus, Grafana) are **planned**._
+
+**Go deeper:** [ADR-013 — Key Vault RBAC and Observability Foundation](docs/adr/ADR-013-key-vault-rbac-and-observability-foundation.md) · [Observability design](docs/design/OBSERVABILITY.md)
+
+---
+
+## Running and rebuilding the platform
+
+- **[Infrastructure Guide](docs/guides/infrastructure-guide.md)** — provision the Azure resources as code, unit by unit (Understand → Build → Execute → Verify).
+- **[AKS Guide](docs/guides/aks-guide.md)** — containers, the cluster, workload identity, Helm deployment, ingress/TLS, and troubleshooting.
+- **[Operations Command Reference](docs/guides/operations-command-reference.md)** — every `az` / `kubectl` / `helm` / `terragrunt` / `argocd` command to build, inspect, and operate the platform, each flag explained.
+
+## Documentation map
+
+| Document | What it is for |
+|----------|----------------|
+| [Development Guide](DevelopmentGuide.md) | The spine — each delivery phase with its build guide, prerequisite concepts, and governing ADRs. |
+| [Roadmap](docs/ROADMAP.md) | The single record of what is delivered, in progress, and planned. |
+| [ADR index](docs/adr/README.md) | The full set of Architecture Decision Records and why each choice was made. |
+| [Diagram Plan](docs/architecture/DIAGRAM-PLAN.md) | The plan and contract for the 18-diagram set (visual language, tooling, status). |
+| [Known Issues Register](docs/KNOWN_ISSUES.md) | Acknowledged defects and deferred fixes, each with a planned resolution. |
+| [Testing index](docs/test/README.md) | The verification strategy — unit, integration, end-to-end, and security tests. |
+
+## Known issues
+
+Open defects are tracked in the **[Known Issues Register](docs/KNOWN_ISSUES.md)**. The two headline items:
+
+- **KI-002 (High)** — the Discount gRPC service **decodes** the bearer token without verifying its signature/issuer/audience; mitigated only by being ClusterIP-only (not externally reachable).
+- **KI-005 (Medium)** — **no stock-release compensation on payment failure**: stock reserved by the saga is retained indefinitely when a payment fails, pending a compensation workstream.
+
+The register also tracks **KI-003** (permissive gateway CORS) and **KI-004** (mutable image tag can serve a stale image).
