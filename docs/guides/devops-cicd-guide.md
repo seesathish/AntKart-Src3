@@ -190,6 +190,31 @@ So both classes are gated; they are gated by the mechanism that fits each. The a
 - **`SONAR_TOKEN`** — a GitHub Actions repository secret (SonarCloud token). It **must exist** for the `sonar` job to authenticate; it already does. This is the only secret CI uses.
 - **Azure authentication uses OIDC — no stored secret.** The CD workflow authenticates to Azure (to push the image) by exchanging a short-lived **GitHub OIDC token** for an Entra token via a **federated credential**, scoped to this repository and the `refs/heads/master` ref. The `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID` it uses are repository **variables** — identifiers, not secrets — so nothing long-lived is stored in GitHub (ADR-022). CI, being a pure quality gate, needs no Azure access at all.
 
+### Workflow-level vs job-level permissions
+
+The `GITHUB_TOKEN` that every workflow run receives is scoped by a `permissions:` block. Where that block sits matters:
+
+- **Workflow level** — the grant applies to **every job** in the workflow, whether or not a job needs it.
+- **Job level** — the grant applies to **only that job**. This is least privilege: each job gets exactly the token scopes its steps use, and nothing else.
+
+**Prefer job level for any `write` scope.** A write permission declared at workflow level is over-broad — it hands, say, `contents: write` to jobs that only read. SonarCloud flags this ("Move this write permission from workflow level to job level"), and it is correct.
+
+The CD workflows are the worked example. Each has two jobs with different needs, so permissions are declared **per job**:
+
+```yaml
+# no workflow-level permissions block
+jobs:
+  build-and-push:
+    permissions:
+      id-token: write   # mint the OIDC token azure/login exchanges (secret-less Azure auth)
+      contents: read    # checkout only
+  update-gitops:
+    permissions:
+      contents: read    # the git push uses the CD_PUSH_TOKEN PAT, not GITHUB_TOKEN
+```
+
+Note `update-gitops` needs only `contents: read`, not `write`: its checkout and `git push` authenticate with the **`CD_PUSH_TOKEN`** PAT (see [Branch protection and the CD tag-bump](#branch-protection-and-the-cd-tag-bump)), so the `GITHUB_TOKEN` never performs the write — there is no `contents: write` anywhere in CD. The CI workflows keep a single workflow-level `permissions: contents: read`: it is **read-only** (not a write, so not flagged) and is genuinely needed by all three jobs (each checks out), so workflow level is the correct shared scope there.
+
 ---
 
 ## CD — delivery on merge to master

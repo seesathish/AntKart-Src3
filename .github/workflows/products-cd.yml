@@ -32,15 +32,16 @@ on:
     paths:
       - 'AK.Products/**'
       - 'AK.BuildingBlocks/**'
+      # Documentation-only changes inside a service folder (e.g. *.md) do NOT
+      # trigger delivery. The negation must be LAST — later patterns win in
+      # GitHub Actions path filters.
+      - '!**/*.md'
 
-# --- Permissions (least privilege) --------------------------------------------
-# id-token: write  — mint the GitHub OIDC token azure/login exchanges for an Entra
-#                    token (this is what makes the Azure auth secret-less).
-# contents: write  — commit the image-tag bump back to master.
-# Nothing else — CD needs no packages, no pages, no cluster access.
-permissions:
-  id-token: write
-  contents: write
+# Permissions are scoped PER JOB (least privilege), not at workflow level —
+# surfaced by SonarCloud (a workflow-level write grants it to every job).
+# build-and-push needs id-token: write for the Azure OIDC login; update-gitops
+# pushes with the CD_PUSH_TOKEN PAT (not GITHUB_TOKEN), so contents: read
+# suffices. See each job's permissions below.
 
 # One delivery at a time; do NOT cancel a run in progress (a half-done push is
 # worse than waiting).
@@ -66,6 +67,9 @@ jobs:
   build-and-push:
     name: build-and-push
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC token for azure/login (secret-less Azure auth)
+      contents: read    # checkout only
     outputs:
       image_tag: ${{ steps.meta.outputs.tag }}
     steps:
@@ -126,6 +130,8 @@ jobs:
     name: update-gitops
     needs: build-and-push
     runs-on: ubuntu-latest
+    permissions:
+      contents: read    # git push uses the CD_PUSH_TOKEN PAT, not GITHUB_TOKEN
     steps:
       # Check out master with the CD_PUSH_TOKEN persisted, so the later push is
       # authenticated as the repo-admin account that owns the token (NOT the
