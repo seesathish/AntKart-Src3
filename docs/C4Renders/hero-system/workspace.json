@@ -1,0 +1,504 @@
+{
+  "configuration" : { },
+  "description" : "What the platform is, who uses it, and what it depends on",
+  "documentation" : { },
+  "id" : 1,
+  "lastModifiedAgent" : "structurizr/diagrams/75083780-2f6f-4ab5-a2f9-3765000c429d",
+  "lastModifiedDate" : "2026-07-30T16:08:24Z",
+  "lastModifiedUser" : "1570804671",
+  "model" : {
+    "people" : [ {
+      "description" : "Browses the catalogue, builds a cart, places orders and pays.",
+      "group" : "Users",
+      "id" : "1",
+      "name" : "Customer",
+      "properties" : {
+        "structurizr.dsl.identifier" : "customer"
+      },
+      "relationships" : [ {
+        "description" : "Shops and pays",
+        "destinationId" : "5",
+        "id" : "14",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Shops and pays",
+        "destinationId" : "4",
+        "id" : "15",
+        "linkedRelationshipId" : "14",
+        "sourceId" : "1"
+      } ],
+      "tags" : "Element,Person"
+    }, {
+      "description" : "Manages the catalogue and order status. Holds the admin app role.",
+      "group" : "Users",
+      "id" : "2",
+      "name" : "Administrator",
+      "properties" : {
+        "structurizr.dsl.identifier" : "administrator"
+      },
+      "relationships" : [ {
+        "description" : "Manages catalogue",
+        "destinationId" : "5",
+        "id" : "16",
+        "sourceId" : "2",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Manages catalogue",
+        "destinationId" : "4",
+        "id" : "17",
+        "linkedRelationshipId" : "16",
+        "sourceId" : "2"
+      } ],
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "description" : "Issues the delegated access tokens the platform validates on every request.",
+      "documentation" : { },
+      "group" : "Identity",
+      "id" : "3",
+      "name" : "Microsoft Entra ID",
+      "properties" : {
+        "structurizr.dsl.identifier" : "entra"
+      },
+      "tags" : "Element,Software System,Identity"
+    }, {
+      "containers" : [ {
+        "description" : "Single entry point. Validates the bearer token and routes each path to the service that owns it.",
+        "documentation" : { },
+        "group" : "Edge",
+        "id" : "5",
+        "name" : "API gateway",
+        "properties" : {
+          "structurizr.dsl.identifier" : "antkart.gateway"
+        },
+        "relationships" : [ {
+          "description" : "Validates the access token",
+          "destinationId" : "3",
+          "id" : "18",
+          "sourceId" : "5",
+          "tags" : "Relationship",
+          "technology" : "OpenID Connect"
+        }, {
+          "description" : "Catalogue requests",
+          "destinationId" : "6",
+          "id" : "20",
+          "sourceId" : "5",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Cart requests",
+          "destinationId" : "8",
+          "id" : "21",
+          "sourceId" : "5",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Order requests",
+          "destinationId" : "9",
+          "id" : "22",
+          "sourceId" : "5",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Payment requests",
+          "destinationId" : "10",
+          "id" : "23",
+          "sourceId" : "5",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Service",
+        "technology" : "Ocelot · .NET 9"
+      }, {
+        "description" : "Product catalogue, enriched with discounts and reserving stock when an order is placed.",
+        "documentation" : { },
+        "group" : "Services",
+        "id" : "6",
+        "name" : "Products",
+        "properties" : {
+          "structurizr.dsl.identifier" : "antkart.products"
+        },
+        "relationships" : [ {
+          "description" : "Discount by SKU",
+          "destinationId" : "7",
+          "id" : "24",
+          "sourceId" : "6",
+          "tags" : "Relationship",
+          "technology" : "gRPC"
+        } ],
+        "tags" : "Element,Container,Service",
+        "technology" : "Minimal API · .NET 9"
+      }, {
+        "description" : "Discount lookup by SKU. gRPC only, never reachable from outside the cluster.",
+        "documentation" : { },
+        "group" : "Services",
+        "id" : "7",
+        "name" : "Discount",
+        "properties" : {
+          "structurizr.dsl.identifier" : "antkart.discount"
+        },
+        "tags" : "Element,Container,Service",
+        "technology" : "gRPC · .NET 9"
+      }, {
+        "description" : "Cart operations. The user identity comes from the token, never from the URL.",
+        "documentation" : { },
+        "group" : "Services",
+        "id" : "8",
+        "name" : "Shopping cart",
+        "properties" : {
+          "structurizr.dsl.identifier" : "antkart.cart"
+        },
+        "tags" : "Element,Container,Service",
+        "technology" : "Minimal API · .NET 9"
+      }, {
+        "description" : "Order lifecycle and the orchestrated saga that reserves stock and reacts to payment.",
+        "documentation" : { },
+        "group" : "Services",
+        "id" : "9",
+        "name" : "Order",
+        "properties" : {
+          "structurizr.dsl.identifier" : "antkart.order"
+        },
+        "relationships" : [ {
+          "description" : "Reserves stock",
+          "destinationId" : "6",
+          "id" : "25",
+          "sourceId" : "9",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Order events",
+          "destinationId" : "11",
+          "id" : "27",
+          "sourceId" : "9",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Service",
+        "technology" : "Minimal API · .NET 9"
+      }, {
+        "description" : "Payment initiation and signature verification.",
+        "documentation" : { },
+        "group" : "Services",
+        "id" : "10",
+        "name" : "Payments",
+        "properties" : {
+          "structurizr.dsl.identifier" : "antkart.payments"
+        },
+        "relationships" : [ {
+          "description" : "Payment outcome",
+          "destinationId" : "9",
+          "id" : "26",
+          "sourceId" : "10",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Payment events",
+          "destinationId" : "11",
+          "id" : "28",
+          "sourceId" : "10",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Creates and verifies payments",
+          "destinationId" : "12",
+          "id" : "29",
+          "sourceId" : "10",
+          "tags" : "Relationship",
+          "technology" : "HTTPS"
+        } ],
+        "tags" : "Element,Container,Service",
+        "technology" : "Minimal API · .NET 9"
+      }, {
+        "description" : "Serverless handlers that turn platform events into customer email.",
+        "documentation" : { },
+        "group" : "Services",
+        "id" : "11",
+        "name" : "Notifications",
+        "properties" : {
+          "structurizr.dsl.identifier" : "antkart.notifications"
+        },
+        "relationships" : [ {
+          "description" : "Sends customer email",
+          "destinationId" : "13",
+          "id" : "31",
+          "sourceId" : "11",
+          "tags" : "Relationship",
+          "technology" : "Managed identity"
+        } ],
+        "tags" : "Element,Container,Serverless",
+        "technology" : "Azure Functions · .NET 9"
+      } ],
+      "description" : "Cloud-native .NET 9 e-commerce platform on Azure Kubernetes Service, reachable at https://api.antkart.in",
+      "documentation" : { },
+      "id" : "4",
+      "name" : "AntKart",
+      "properties" : {
+        "structurizr.dsl.identifier" : "antkart"
+      },
+      "relationships" : [ {
+        "description" : "Validates the access token",
+        "destinationId" : "3",
+        "id" : "19",
+        "linkedRelationshipId" : "18",
+        "sourceId" : "4",
+        "technology" : "OpenID Connect"
+      }, {
+        "description" : "Creates and verifies payments",
+        "destinationId" : "12",
+        "id" : "30",
+        "linkedRelationshipId" : "29",
+        "sourceId" : "4",
+        "technology" : "HTTPS"
+      }, {
+        "description" : "Sends customer email",
+        "destinationId" : "13",
+        "id" : "32",
+        "linkedRelationshipId" : "31",
+        "sourceId" : "4",
+        "technology" : "Managed identity"
+      } ],
+      "tags" : "Element,Software System"
+    }, {
+      "description" : "Payment gateway. Creates payment orders and defines the signature the platform verifies.",
+      "documentation" : { },
+      "group" : "External services",
+      "id" : "12",
+      "name" : "Razorpay",
+      "properties" : {
+        "structurizr.dsl.identifier" : "razorpay"
+      },
+      "tags" : "Element,Software System,External"
+    }, {
+      "description" : "Delivers transactional email to customers.",
+      "documentation" : { },
+      "group" : "External services",
+      "id" : "13",
+      "name" : "Azure Communication Services",
+      "properties" : {
+        "structurizr.dsl.identifier" : "acs"
+      },
+      "relationships" : [ {
+        "description" : "Delivers order and payment email",
+        "destinationId" : "1",
+        "id" : "33",
+        "sourceId" : "13",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,Managed"
+    } ]
+  },
+  "name" : "AntKart — system overview",
+  "properties" : {
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.error" : "17",
+    "structurizr.inspection.warning" : "0",
+    "structurizr.dsl" : "LyoKICogQW50S2FydCDigJQgU3lzdGVtIG92ZXJ2aWV3IChoZXJvIGRpYWdyYW0pCiAqCiAqIEFuc3dlcnMgb25lIHF1ZXN0aW9uOiB3aGF0IGlzIHRoaXMgdGhpbmcsIHdobyB1c2VzIGl0LCBhbmQgd2hhdCBkb2VzIGl0IGRlcGVuZCBvbj8KICogRGVsaWJlcmF0ZWx5IGV4Y2x1ZGVzIGRhdGFiYXNlcywgbWVzc2FnZSBicm9rZXJzLCBpbmdyZXNzLCBjZXJ0LW1hbmFnZXIgYW5kIEFyZ28gQ0QuCiAqIFRob3NlIGJlbG9uZyB0byB0aGUgQXp1cmUsIEt1YmVybmV0ZXMgYW5kIERldk9wcyBkaWFncmFtcy4KICoKICogUkVOREVSCiAqICAgZG9ja2VyIHJ1biAtaXQgLS1ybSAtcCA4MDgwOjgwODAgXAogKiAgICAgLXYgIkM6XFVzZXJzXHNlZXNhXE9uZURyaXZlXERlc2t0b3BcQW50Q2FydFxBbnRLYXJ0LVNyYzNcZG9jc1xDNFJlbmRlcnNcaGVyby1zeXN0ZW06L3Vzci9sb2NhbC9zdHJ1Y3R1cml6ciIgXAogKiAgICAgc3RydWN0dXJpenIvc3RydWN0dXJpenIgbG9jYWwKICogICBPcGVuIGh0dHA6Ly9sb2NhbGhvc3Q6ODA4MC4gRWRpdCwgc2F2ZSwgcHJlc3MgRjUuIE5ldmVyIHJlc3RhcnQgdGhlIGNvbnRhaW5lci4KICoKICogVEFSR0VUIExBWU9VVCAobGVmdCB0byByaWdodCkKICogICBVc2VycyAgLT4gIEFQSSBnYXRld2F5ICAtPiAgU2VydmljZXMgIC0+ICBSYXpvcnBheSBhbmQgQ29tbXVuaWNhdGlvbiBTZXJ2aWNlcwogKiAgIEVudHJhIHNpdHMgQUJPVkUgdGhlIGdhdGV3YXkuIENvbW11bmljYXRpb24gU2VydmljZXMgc2VuZHMgZW1haWwgYmFjayB0byB0aGUgdXNlciwKICogICB3aGljaCBjbG9zZXMgdGhlIGxvb3Agb24gdGhlIHJpZ2h0LgogKgogKiBJTVBPUlRBTlQg4oCUIGF1dG9MYXlvdXQgY2Fubm90IHByb2R1Y2UgdGhhdCBhcnJhbmdlbWVudC4gSXQgcmFua3MgZWxlbWVudHMgYnkKICogcmVsYXRpb25zaGlwIGRpcmVjdGlvbiwgc28gRW50cmEgd2lsbCBsYW5kIHRvIHRoZSBSSUdIVCBvZiB0aGUgZ2F0ZXdheSByYXRoZXIgdGhhbgogKiBhYm92ZSBpdCwgYW5kIHRoZSByaWdodC1oYW5kIGNvbHVtbiB3aWxsIG5vdCBob2xkIGl0cyBwb3NpdGlvbi4gVXNlIGF1dG9MYXlvdXQgb25seQogKiB0byBnZXQgdGhlIGxlZnQtdG8tcmlnaHQgZmxvdyBhbmQgcm91Z2ggc3BhY2luZywgdGhlbjoKICoKICogICAxLiBDT01NRU5UIE9VVCB0aGUgYXV0b0xheW91dCBsaW5lIGJlbG93CiAqICAgMi4gUmVmcmVzaCB0aGUgYnJvd3NlcgogKiAgIDMuIERyYWcgRW50cmEgYWJvdmUgdGhlIGdhdGV3YXksIHB1bGwgUmF6b3JwYXkgYW5kIENvbW11bmljYXRpb24gU2VydmljZXMgdG8gdGhlCiAqICAgICAgcmlnaHQgZWRnZSwgYW5kIHN0YWNrIHRoZSBmaXZlIHNlcnZpY2VzIHRvcCB0byBib3R0b20KICoKICogUGxhY2VtZW50IGF1dG9zYXZlcyBpbnRvIHdvcmtzcGFjZS5qc29uIGluIHRoaXMgZm9sZGVyIGV2ZXJ5IGZpdmUgc2Vjb25kcy4gV2hpbGUKICogYXV0b0xheW91dCBpcyBwcmVzZW50IHRoZSBlbmdpbmUgcmVjYWxjdWxhdGVzIG9uIGV2ZXJ5IGxvYWQgYW5kIGRpc2NhcmRzIHlvdXIgd29yaywKICogc28gb25jZSB5b3Ugc3RhcnQgZHJhZ2dpbmcsIGxlYXZlIGl0IGNvbW1lbnRlZCBvdXQgcGVybWFuZW50bHkuCiAqLwoKd29ya3NwYWNlICJBbnRLYXJ0IOKAlCBzeXN0ZW0gb3ZlcnZpZXciICJXaGF0IHRoZSBwbGF0Zm9ybSBpcywgd2hvIHVzZXMgaXQsIGFuZCB3aGF0IGl0IGRlcGVuZHMgb24iIHsKCiAgICAhaWRlbnRpZmllcnMgaGllcmFyY2hpY2FsCgogICAgbW9kZWwgewoKICAgICAgICAvLyDilIDilIAgTGVmdDogdGhlIHBlb3BsZSDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKICAgICAgICBncm91cCAiVXNlcnMiIHsKICAgICAgICAgICAgY3VzdG9tZXIgPSBwZXJzb24gIkN1c3RvbWVyIiAiQnJvd3NlcyB0aGUgY2F0YWxvZ3VlLCBidWlsZHMgYSBjYXJ0LCBwbGFjZXMgb3JkZXJzIGFuZCBwYXlzLiIgewogICAgICAgICAgICAgICAgdGFncyAiUGVyc29uIgogICAgICAgICAgICB9CiAgICAgICAgICAgIGFkbWluaXN0cmF0b3IgPSBwZXJzb24gIkFkbWluaXN0cmF0b3IiICJNYW5hZ2VzIHRoZSBjYXRhbG9ndWUgYW5kIG9yZGVyIHN0YXR1cy4gSG9sZHMgdGhlIGFkbWluIGFwcCByb2xlLiIgewogICAgICAgICAgICAgICAgdGFncyAiUGVyc29uIgogICAgICAgICAgICB9CiAgICAgICAgfQoKICAgICAgICAvLyDilIDilIAgQWJvdmUgdGhlIGdhdGV3YXk6IGlkZW50aXR5IOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgAogICAgICAgIGdyb3VwICJJZGVudGl0eSIgewogICAgICAgICAgICBlbnRyYSA9IHNvZnR3YXJlU3lzdGVtICJNaWNyb3NvZnQgRW50cmEgSUQiICJJc3N1ZXMgdGhlIGRlbGVnYXRlZCBhY2Nlc3MgdG9rZW5zIHRoZSBwbGF0Zm9ybSB2YWxpZGF0ZXMgb24gZXZlcnkgcmVxdWVzdC4iIHsKICAgICAgICAgICAgICAgIHRhZ3MgIklkZW50aXR5IgogICAgICAgICAgICB9CiAgICAgICAgfQoKICAgICAgICAvLyDilIDilIAgQ2VudHJlOiB0aGUgcGxhdGZvcm0g4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACiAgICAgICAgYW50a2FydCA9IHNvZnR3YXJlU3lzdGVtICJBbnRLYXJ0IiAiQ2xvdWQtbmF0aXZlIC5ORVQgOSBlLWNvbW1lcmNlIHBsYXRmb3JtIG9uIEF6dXJlIEt1YmVybmV0ZXMgU2VydmljZSwgcmVhY2hhYmxlIGF0IGh0dHBzOi8vYXBpLmFudGthcnQuaW4iIHsKCiAgICAgICAgICAgIGdyb3VwICJFZGdlIiB7CiAgICAgICAgICAgICAgICBnYXRld2F5ID0gY29udGFpbmVyICJBUEkgZ2F0ZXdheSIgIlNpbmdsZSBlbnRyeSBwb2ludC4gVmFsaWRhdGVzIHRoZSBiZWFyZXIgdG9rZW4gYW5kIHJvdXRlcyBlYWNoIHBhdGggdG8gdGhlIHNlcnZpY2UgdGhhdCBvd25zIGl0LiIgIk9jZWxvdCDCtyAuTkVUIDkiIHsKICAgICAgICAgICAgICAgICAgICB0YWdzICJTZXJ2aWNlIgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICB9CgogICAgICAgICAgICAvLyBEZWNsYXJlZCBpbiB0aGUgb3JkZXIgdGhleSBzaG91bGQgc3RhY2ssIHRvcCB0byBib3R0b20uCiAgICAgICAgICAgIGdyb3VwICJTZXJ2aWNlcyIgewogICAgICAgICAgICAgICAgcHJvZHVjdHMgPSBjb250YWluZXIgIlByb2R1Y3RzIiAiUHJvZHVjdCBjYXRhbG9ndWUsIGVucmljaGVkIHdpdGggZGlzY291bnRzIGFuZCByZXNlcnZpbmcgc3RvY2sgd2hlbiBhbiBvcmRlciBpcyBwbGFjZWQuIiAiTWluaW1hbCBBUEkgwrcgLk5FVCA5IiB7CiAgICAgICAgICAgICAgICAgICAgdGFncyAiU2VydmljZSIKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgIGRpc2NvdW50ID0gY29udGFpbmVyICJEaXNjb3VudCIgIkRpc2NvdW50IGxvb2t1cCBieSBTS1UuIGdSUEMgb25seSwgbmV2ZXIgcmVhY2hhYmxlIGZyb20gb3V0c2lkZSB0aGUgY2x1c3Rlci4iICJnUlBDIMK3IC5ORVQgOSIgewogICAgICAgICAgICAgICAgICAgIHRhZ3MgIlNlcnZpY2UiCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICBjYXJ0ID0gY29udGFpbmVyICJTaG9wcGluZyBjYXJ0IiAiQ2FydCBvcGVyYXRpb25zLiBUaGUgdXNlciBpZGVudGl0eSBjb21lcyBmcm9tIHRoZSB0b2tlbiwgbmV2ZXIgZnJvbSB0aGUgVVJMLiIgIk1pbmltYWwgQVBJIMK3IC5ORVQgOSIgewogICAgICAgICAgICAgICAgICAgIHRhZ3MgIlNlcnZpY2UiCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICBvcmRlciA9IGNvbnRhaW5lciAiT3JkZXIiICJPcmRlciBsaWZlY3ljbGUgYW5kIHRoZSBvcmNoZXN0cmF0ZWQgc2FnYSB0aGF0IHJlc2VydmVzIHN0b2NrIGFuZCByZWFjdHMgdG8gcGF5bWVudC4iICJNaW5pbWFsIEFQSSDCtyAuTkVUIDkiIHsKICAgICAgICAgICAgICAgICAgICB0YWdzICJTZXJ2aWNlIgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgcGF5bWVudHMgPSBjb250YWluZXIgIlBheW1lbnRzIiAiUGF5bWVudCBpbml0aWF0aW9uIGFuZCBzaWduYXR1cmUgdmVyaWZpY2F0aW9uLiIgIk1pbmltYWwgQVBJIMK3IC5ORVQgOSIgewogICAgICAgICAgICAgICAgICAgIHRhZ3MgIlNlcnZpY2UiCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICBub3RpZmljYXRpb25zID0gY29udGFpbmVyICJOb3RpZmljYXRpb25zIiAiU2VydmVybGVzcyBoYW5kbGVycyB0aGF0IHR1cm4gcGxhdGZvcm0gZXZlbnRzIGludG8gY3VzdG9tZXIgZW1haWwuIiAiQXp1cmUgRnVuY3Rpb25zIMK3IC5ORVQgOSIgewogICAgICAgICAgICAgICAgICAgIHRhZ3MgIlNlcnZlcmxlc3MiCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0KICAgICAgICB9CgogICAgICAgIC8vIOKUgOKUgCBSaWdodDogd2hhdCB0aGUgcGxhdGZvcm0gcmVhY2hlcyBvdXQgdG8g4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACiAgICAgICAgZ3JvdXAgIkV4dGVybmFsIHNlcnZpY2VzIiB7CiAgICAgICAgICAgIHJhem9ycGF5ID0gc29mdHdhcmVTeXN0ZW0gIlJhem9ycGF5IiAiUGF5bWVudCBnYXRld2F5LiBDcmVhdGVzIHBheW1lbnQgb3JkZXJzIGFuZCBkZWZpbmVzIHRoZSBzaWduYXR1cmUgdGhlIHBsYXRmb3JtIHZlcmlmaWVzLiIgewogICAgICAgICAgICAgICAgdGFncyAiRXh0ZXJuYWwiCiAgICAgICAgICAgIH0KICAgICAgICAgICAgYWNzID0gc29mdHdhcmVTeXN0ZW0gIkF6dXJlIENvbW11bmljYXRpb24gU2VydmljZXMiICJEZWxpdmVycyB0cmFuc2FjdGlvbmFsIGVtYWlsIHRvIGN1c3RvbWVycy4iIHsKICAgICAgICAgICAgICAgIHRhZ3MgIk1hbmFnZWQiCiAgICAgICAgICAgIH0KICAgICAgICB9CgogICAgICAgIC8vIEdvRGFkZHkgRE5TIGFuZCBMZXQncyBFbmNyeXB0IHJlbW92ZWQg4oCUIEROUyBhbmQgY2VydGlmaWNhdGVzIGFyZSBhCiAgICAgICAgLy8gS3ViZXJuZXRlcyBjb25jZXJuLCBub3QgcGFydCBvZiAid2hhdCBpcyB0aGlzIHRoaW5nIi4gVG8gcmVzdG9yZSwgYWRkOgogICAgICAgIC8vICAgZ29kYWRkeSA9IHNvZnR3YXJlU3lzdGVtICJHb0RhZGR5IEROUyIgIi4uLiIgeyB0YWdzICJFeHRlcm5hbCIgfQogICAgICAgIC8vICAgbGV0c2VuY3J5cHQgPSBzb2Z0d2FyZVN5c3RlbSAiTGV0J3MgRW5jcnlwdCIgIi4uLiIgeyB0YWdzICJFeHRlcm5hbCIgfQogICAgICAgIC8vICAgY3VzdG9tZXIgLT4gZ29kYWRkeSAiUmVzb2x2ZXMgYXBpLmFudGthcnQuaW4iCiAgICAgICAgLy8gICBhbnRrYXJ0IC0+IGxldHNlbmNyeXB0ICJUTFMgY2VydGlmaWNhdGUiCgogICAgICAgIC8vIOKUgOKUgCBSZWxhdGlvbnNoaXBzIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgAogICAgICAgIC8vIFRlY2hub2xvZ3kgc2hvd24gb25seSB3aGVyZSBpdCBpcyBhbiBhcmNoaXRlY3R1cmFsIGZhY3Qgd29ydGggcmVhZGluZy4KICAgICAgICBjdXN0b21lciAtPiBhbnRrYXJ0LmdhdGV3YXkgIlNob3BzIGFuZCBwYXlzIgogICAgICAgIGFkbWluaXN0cmF0b3IgLT4gYW50a2FydC5nYXRld2F5ICJNYW5hZ2VzIGNhdGFsb2d1ZSIKCiAgICAgICAgYW50a2FydC5nYXRld2F5IC0+IGVudHJhICJWYWxpZGF0ZXMgdGhlIGFjY2VzcyB0b2tlbiIgIk9wZW5JRCBDb25uZWN0IgoKICAgICAgICBhbnRrYXJ0LmdhdGV3YXkgLT4gYW50a2FydC5wcm9kdWN0cyAiQ2F0YWxvZ3VlIHJlcXVlc3RzIgogICAgICAgIGFudGthcnQuZ2F0ZXdheSAtPiBhbnRrYXJ0LmNhcnQgIkNhcnQgcmVxdWVzdHMiCiAgICAgICAgYW50a2FydC5nYXRld2F5IC0+IGFudGthcnQub3JkZXIgIk9yZGVyIHJlcXVlc3RzIgogICAgICAgIGFudGthcnQuZ2F0ZXdheSAtPiBhbnRrYXJ0LnBheW1lbnRzICJQYXltZW50IHJlcXVlc3RzIgogICAgICAgIGFudGthcnQucHJvZHVjdHMgLT4gYW50a2FydC5kaXNjb3VudCAiRGlzY291bnQgYnkgU0tVIiAiZ1JQQyIKCiAgICAgICAgYW50a2FydC5vcmRlciAtPiBhbnRrYXJ0LnByb2R1Y3RzICJSZXNlcnZlcyBzdG9jayIKICAgICAgICBhbnRrYXJ0LnBheW1lbnRzIC0+IGFudGthcnQub3JkZXIgIlBheW1lbnQgb3V0Y29tZSIKICAgICAgICBhbnRrYXJ0Lm9yZGVyIC0+IGFudGthcnQubm90aWZpY2F0aW9ucyAiT3JkZXIgZXZlbnRzIgogICAgICAgIGFudGthcnQucGF5bWVudHMgLT4gYW50a2FydC5ub3RpZmljYXRpb25zICJQYXltZW50IGV2ZW50cyIKCiAgICAgICAgYW50a2FydC5wYXltZW50cyAtPiByYXpvcnBheSAiQ3JlYXRlcyBhbmQgdmVyaWZpZXMgcGF5bWVudHMiICJIVFRQUyIKICAgICAgICBhbnRrYXJ0Lm5vdGlmaWNhdGlvbnMgLT4gYWNzICJTZW5kcyBjdXN0b21lciBlbWFpbCIgIk1hbmFnZWQgaWRlbnRpdHkiCgogICAgICAgIC8vIENsb3NlcyB0aGUgbG9vcCBvbiB0aGUgcmlnaHQ6IHRoZSBwbGF0Zm9ybSByZWFjaGVzIHRoZSBjdXN0b21lciBhZ2Fpbi4KICAgICAgICBhY3MgLT4gY3VzdG9tZXIgIkRlbGl2ZXJzIG9yZGVyIGFuZCBwYXltZW50IGVtYWlsIgogICAgfQoKICAgIHZpZXdzIHsKCiAgICAgICAgdGhlbWVzIGh0dHBzOi8vc3RhdGljLnN0cnVjdHVyaXpyLmNvbS90aGVtZXMvbWljcm9zb2Z0LWF6dXJlLTIwMjEuMDEuMjYvdGhlbWUuanNvbgoKICAgICAgICBjb250YWluZXIgYW50a2FydCAiU3lzdGVtT3ZlcnZpZXciICJXaGF0IGlzIEFudEthcnQsIHdobyB1c2VzIGl0LCBhbmQgd2hhdCBkb2VzIGl0IGRlcGVuZCBvbj8iIHsKICAgICAgICAgICAgaW5jbHVkZSAqCiAgICAgICAgICAgIC8vYXV0b0xheW91dCBsciAzMDAgMTUwCiAgICAgICAgfQoKICAgICAgICBzdHlsZXMgewogICAgICAgICAgICAvLyBIaWRlIGRlc2NyaXB0aW9ucy4gS2VlcCBtZXRhZGF0YSDigJQgdGhhdCBpcyB0aGUgdGVjaG5vbG9neSBsaW5lLgogICAgICAgICAgICBlbGVtZW50ICJFbGVtZW50IiB7CiAgICAgICAgICAgICAgICBkZXNjcmlwdGlvbiB0cnVlCiAgICAgICAgICAgICAgICBtZXRhZGF0YSB0cnVlCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiR3JvdXAiIHsKICAgICAgICAgICAgICAgIHN0cm9rZVdpZHRoIDQKICAgICAgICAgICAgICAgIGNvbG9yICM1RjVFNUEKICAgICAgICAgICAgICAgIGZvbnRTaXplIDI0CiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiUGVyc29uIiB7CiAgICAgICAgICAgICAgICBzaGFwZSBQZXJzb24KICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzVGNUU1QQogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgZm9udFNpemUgMjYKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJTb2Z0d2FyZSBTeXN0ZW0iIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzg4ODc4MAogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIkV4dGVybmFsIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM4ODg3ODAKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJJZGVudGl0eSIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjQkE3NTE3CiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiTWFuYWdlZCIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjMzc4QURECiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiU2VydmljZSIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjMUQ5RTc1CiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgICAgICBzaGFwZSBSb3VuZGVkQm94CiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiU2VydmVybGVzcyIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjMEY2RTU2CiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgICAgICBzaGFwZSBSb3VuZGVkQm94CiAgICAgICAgICAgIH0KICAgICAgICAgICAgcmVsYXRpb25zaGlwICJSZWxhdGlvbnNoaXAiIHsKICAgICAgICAgICAgICAgIGRhc2hlZCBmYWxzZQogICAgICAgICAgICAgICAgdGhpY2tuZXNzIDIKICAgICAgICAgICAgICAgIGZvbnRTaXplIDIyCiAgICAgICAgICAgIH0KICAgICAgICB9CiAgICB9Cn0="
+  },
+  "views" : {
+    "configuration" : {
+      "lastSavedView" : "SystemOverview",
+      "metadataSymbols" : "SquareBrackets",
+      "styles" : {
+        "elements" : [ {
+          "description" : true,
+          "metadata" : true,
+          "tag" : "Element"
+        }, {
+          "background" : "#888780",
+          "color" : "#ffffff",
+          "tag" : "External"
+        }, {
+          "color" : "#5f5e5a",
+          "fontSize" : 24,
+          "strokeWidth" : 4,
+          "tag" : "Group"
+        }, {
+          "background" : "#ba7517",
+          "color" : "#ffffff",
+          "tag" : "Identity"
+        }, {
+          "background" : "#378add",
+          "color" : "#ffffff",
+          "tag" : "Managed"
+        }, {
+          "background" : "#5f5e5a",
+          "color" : "#ffffff",
+          "fontSize" : 26,
+          "shape" : "Person",
+          "tag" : "Person"
+        }, {
+          "background" : "#0f6e56",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Serverless"
+        }, {
+          "background" : "#1d9e75",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Service"
+        }, {
+          "background" : "#888780",
+          "color" : "#ffffff",
+          "tag" : "Software System"
+        } ],
+        "relationships" : [ {
+          "dashed" : false,
+          "fontSize" : 22,
+          "tag" : "Relationship",
+          "thickness" : 2
+        } ]
+      },
+      "terminology" : { },
+      "themes" : [ "https://static.structurizr.com/themes/microsoft-azure-2021.01.26/theme.json" ]
+    },
+    "containerViews" : [ {
+      "description" : "What is AntKart, who uses it, and what does it depend on?",
+      "dimensions" : {
+        "height" : 2561,
+        "width" : 5050
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 155,
+        "y" : 1065
+      }, {
+        "id" : "2",
+        "x" : 135,
+        "y" : 550
+      }, {
+        "id" : "3",
+        "x" : 945,
+        "y" : 155
+      }, {
+        "id" : "5",
+        "x" : 950,
+        "y" : 930
+      }, {
+        "id" : "6",
+        "x" : 3050,
+        "y" : 895
+      }, {
+        "id" : "7",
+        "x" : 3580,
+        "y" : 895
+      }, {
+        "id" : "8",
+        "x" : 1830,
+        "y" : 637
+      }, {
+        "id" : "9",
+        "x" : 2485,
+        "y" : 1055
+      }, {
+        "id" : "10",
+        "x" : 1830,
+        "y" : 1248
+      }, {
+        "id" : "11",
+        "x" : 3055,
+        "y" : 1265
+      }, {
+        "id" : "12",
+        "x" : 1840,
+        "y" : 1720
+      }, {
+        "id" : "13",
+        "x" : 3060,
+        "y" : 1910
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "key" : "SystemOverview",
+      "name" : "Container View: AntKart",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "14",
+        "vertices" : [ {
+          "x" : 560,
+          "y" : 1350
+        } ]
+      }, {
+        "id" : "16",
+        "vertices" : [ {
+          "x" : 535,
+          "y" : 825
+        } ]
+      }, {
+        "id" : "18",
+        "vertices" : [ {
+          "x" : 1175,
+          "y" : 470
+        } ]
+      }, {
+        "id" : "20",
+        "vertices" : [ {
+          "x" : 1440,
+          "y" : 987
+        }, {
+          "x" : 3035,
+          "y" : 987
+        } ]
+      }, {
+        "id" : "21",
+        "vertices" : [ {
+          "x" : 1440,
+          "y" : 787
+        } ]
+      }, {
+        "id" : "22",
+        "vertices" : [ {
+          "x" : 1440,
+          "y" : 1117
+        }, {
+          "x" : 2460,
+          "y" : 1117
+        } ]
+      }, {
+        "id" : "23",
+        "vertices" : [ {
+          "x" : 1440,
+          "y" : 1398
+        } ]
+      }, {
+        "id" : "24"
+      }, {
+        "id" : "25",
+        "vertices" : [ {
+          "x" : 3050,
+          "y" : 1090
+        } ]
+      }, {
+        "id" : "26",
+        "vertices" : [ {
+          "x" : 2455,
+          "y" : 1280
+        } ]
+      }, {
+        "id" : "27",
+        "vertices" : [ {
+          "x" : 2935,
+          "y" : 1235
+        } ]
+      }, {
+        "id" : "28",
+        "vertices" : [ {
+          "x" : 3045,
+          "y" : 1398
+        } ]
+      }, {
+        "id" : "29",
+        "vertices" : [ {
+          "x" : 2065,
+          "y" : 1555
+        } ]
+      }, {
+        "id" : "31",
+        "vertices" : [ {
+          "x" : 3280,
+          "y" : 1710
+        } ]
+      }, {
+        "id" : "33",
+        "vertices" : [ {
+          "x" : 355,
+          "y" : 2048
+        } ]
+      } ],
+      "softwareSystemId" : "4"
+    } ]
+  }
+}

@@ -13,7 +13,7 @@ Customers reach the platform through one public HTTPS endpoint; behind it, six s
 
 ## Platform architecture
 
-> **Diagram: Platform architecture** — _not yet drawn_
+![System overview](docs/C4Renders/renders/system-overview.svg)
 > **Must show:** the engineering foundation inside a service - Clean Architecture layers, CQRS with MediatR, the orchestrated saga, the transactional outbox, repository with specification and unit of work, minimal API endpoints, and the distinction between domain events and integration events. Answers "how is the code built".
 
 Every service is the same inside: a dependency-free domain core, an application layer of CQRS handlers behind a validation pipeline, and a thin API host. Services never call each other synchronously for business flows — they coordinate through an orchestrated saga with a transactional outbox.
