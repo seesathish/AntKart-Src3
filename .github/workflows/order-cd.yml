@@ -23,9 +23,11 @@ on:
       # GitHub Actions path filters.
       - '!**/*.md'
 
-permissions:
-  id-token: write
-  contents: write
+# Permissions are scoped PER JOB (least privilege), not at workflow level —
+# surfaced by SonarCloud (a workflow-level write grants it to every job).
+# build-and-push needs id-token: write for the Azure OIDC login; update-gitops
+# pushes with the CD_PUSH_TOKEN PAT (not GITHUB_TOKEN), so contents: read
+# suffices. See each job's permissions below.
 
 concurrency:
   group: order-cd
@@ -42,6 +44,9 @@ jobs:
   build-and-push:
     name: build-and-push
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC token for azure/login (secret-less Azure auth)
+      contents: read    # checkout only
     outputs:
       image_tag: ${{ steps.meta.outputs.tag }}
     steps:
@@ -83,6 +88,8 @@ jobs:
     name: update-gitops
     needs: build-and-push
     runs-on: ubuntu-latest
+    permissions:
+      contents: read    # git push uses the CD_PUSH_TOKEN PAT, not GITHUB_TOKEN
     steps:
       - name: Checkout master
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
