@@ -1,6 +1,6 @@
 # Architecture Diagram Plan
 
-> **The plan and contract for the cloud-native diagram set** (visual language, tooling, the list, source of truth). The **12 Mermaid diagrams are now Drafted** in [`diagrams/`](diagrams/); the **6 C4 diagrams remain Planned** (awaiting the `workspace.dsl` redraw). Statuses are tracked in §4.
+> **The plan and contract for the cloud-native diagram set** (visual language, tooling, the list, source of truth). The **13 Mermaid diagrams are now Drafted** in [`diagrams/`](diagrams/); the **6 C4 diagrams remain Planned** (awaiting the `workspace.dsl` redraw). Statuses are tracked in §4.
 
 ## 1. Purpose
 
@@ -42,9 +42,9 @@ Two tools, chosen per diagram type so each renders where it is read best.
 - a single **`classDef` block** (encoding the §2 table) is defined once and **reused in every Mermaid diagram**;
 - a **`styles` block** plus **both icon themes** (Azure + Kubernetes) live in **`workspace.dsl`** for the C4 views.
 
-## 4. The diagram set (18)
+## 4. The diagram set (19)
 
-The **12 Mermaid diagrams (06–10, 12–18) are now Drafted** — produced in `docs/architecture/diagrams/`, pending review. The **6 C4 diagrams (01–05, 11) remain Planned** (authored in `workspace.dsl`, not yet redrawn). "Source of truth in this repo" is where the diagram is authored/kept.
+The **13 Mermaid diagrams (06–10, 12–19) are now Drafted** — produced in `docs/architecture/diagrams/`, pending review. The **6 C4 diagrams (01–05, 11) remain Planned** (authored in `workspace.dsl`, not yet redrawn). "Source of truth in this repo" is where the diagram is authored/kept.
 
 | # | Name | Question it answers | Tool | Source of truth in repo | Status |
 |---|------|---------------------|------|-------------------------|--------|
@@ -66,10 +66,13 @@ The **12 Mermaid diagrams (06–10, 12–18) are now Drafted** — produced in `
 | 16 | GitOps reconciliation loop | How does a Git change become a running pod via Argo CD? | Mermaid | `docs/guides/gitops-guide.md` | Drafted |
 | 17 | Environment promotion — dev vs QA | How does a change move from dev to QA, and what differs between them? | Mermaid | `docs/ROADMAP.md` (until an environments guide exists) | Drafted |
 | 18 | Observability pipeline | How do logs, metrics, and traces flow to their sinks and dashboards? | Mermaid | `docs/design/OBSERVABILITY.md` | Drafted |
+| 19 | Delivery architecture — commit to running pod | How does a commit become a running pod? | Mermaid | `docs/architecture/diagrams/19-delivery-architecture.md` | Drafted |
+
+> **Diagram numbers are stable identifiers, not a sort order.** A number is assigned once and never reused; it does not imply the diagram's tier or reading order. For example **19** (a DevOps end-to-end overview, belonging with 14–17) is numbered after **18** (cross-cutting) simply because it was added later.
 
 ## 5. Status
 
-**12 Drafted, 6 Planned.** The 12 Mermaid diagrams (06–10, 12–18) are drafted in [`diagrams/`](diagrams/) (indexed in [diagrams/README.md](diagrams/README.md)); the 6 C4 diagrams (01–05, 11) remain Planned pending the `workspace.dsl` redraw. This file is updated as each diagram advances (Planned → Drafted → produced) and as each superseded old asset is removed.
+**13 Drafted, 6 Planned.** The 13 Mermaid diagrams (06–10, 12–19) are drafted in [`diagrams/`](diagrams/) (indexed in [diagrams/README.md](diagrams/README.md)); the 6 C4 diagrams (01–05, 11) remain Planned pending the `workspace.dsl` redraw. This file is updated as each diagram advances (Planned → Drafted → produced) and as each superseded old asset is removed.
 
 ## See also
 

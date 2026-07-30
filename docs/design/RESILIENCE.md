@@ -1,5 +1,7 @@
 # AntKart — Resilience & Circuit Breaker Technical Design
 
+> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [architecture diagram index](../architecture/diagrams/README.md).
+
 ## Overview
 
 All inter-service HTTP calls and infrastructure connections use **Polly v8** (`Microsoft.Extensions.Http.Resilience 9.0.0` and `Microsoft.Extensions.Resilience 9.0.0`) for retry, circuit breaker, and timeout policies.

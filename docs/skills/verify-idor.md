@@ -1,5 +1,7 @@
 # Skill: Verify IDOR Safety
 
+> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [architecture diagram index](../architecture/diagrams/README.md).
+
 **Purpose:** Audit all endpoints in a service (or a single new endpoint) to confirm they follow AntKart's IDOR-safe patterns: no `userId` in route paths or request DTOs, JWT-derived identity, ownership checks on single-resource operations, and admin-only policy on admin routes.
 
 ---

@@ -1,8 +1,6 @@
 # AntKart — cloud-native e-commerce platform
 
-AntKart is a **.NET 9** e-commerce platform of **six microservices** plus a **serverless notifications app**, running on **Azure Kubernetes Service**, provisioned with **Terraform and Terragrunt**, and delivered by **GitHub Actions and Argo CD**. It is reachable at **[https://api.antkart.in](https://api.antkart.in)** over a trusted TLS certificate. (An earlier Phase-1 build ran locally on Docker Compose in a separate repository; this repository is the cloud-native platform.)
-
-This README explains the platform **through its 18 architecture diagrams**, in order, with the decisions (ADRs) and guides linked under each so you can go deeper.
+AntKart is a **.NET 9** e-commerce platform of **six microservices** plus a **serverless notifications app**, running on **Azure Kubernetes Service**, provisioned with **Terraform and Terragrunt**, and delivered by **GitHub Actions and Argo CD**. (An earlier Phase-1 build ran locally on Docker Compose in a separate repository; this repository is the cloud-native platform.)
 
 ## At a glance
 
@@ -19,216 +17,96 @@ This README explains the platform **through its 18 architecture diagrams**, in o
 | **Identity** | Microsoft Entra ID — workload identity + federated credentials, no stored secrets |
 | **Edge** | ingress-nginx + cert-manager TLS at `api.antkart.in` (Azure API Management is **planned**) |
 
-## Contents
+**Live:** [https://api.antkart.in](https://api.antkart.in) — served over a trusted Let's Encrypt production TLS certificate.
 
-- [System — what it is](#system--what-it-is) · diagrams 01–04
-- [Cloud — where it lives](#cloud--where-it-lives) · diagrams 05–07
-- [Security & identity](#security--identity) · diagrams 08–10
-- [Kubernetes — how it runs](#kubernetes--how-it-runs) · diagrams 11–13
-- [DevOps — how it ships](#devops--how-it-ships) · diagrams 14–17
-- [Cross-cutting](#cross-cutting) · diagram 18
-- [Running and rebuilding the platform](#running-and-rebuilding-the-platform)
-- [Documentation map](#documentation-map)
-- [Known issues](#known-issues)
+## System architecture
 
----
-
-## System — what it is
-
-The application shape: who uses it, the deployable pieces, one service's internals, and the order saga.
-
-### 01 · System context (L1)
-> **Question:** Who uses AntKart and what external systems does it depend on?
+### 01 · System context
+The users and external systems (Entra ID, Razorpay, ACS, GoDaddy) the platform depends on.
 
 ![01 · System context](docs/architecture/renders/01-system-context.png)
-_Rendered from workspace.dsl — see [docs/architecture/renders/README.md](docs/architecture/renders/README.md)_
+_Rendered from workspace.dsl — see [renders/README.md](docs/architecture/renders/README.md)_
 
-**Go deeper:** [ADR-001 — Microservices Architecture](docs/adr/ADR-001-microservices-architecture.md) · [ADR-021 — Retire the Dedicated Identity Service for Microsoft Entra ID](docs/adr/ADR-021-retire-identity-service-for-entra.md) · [ADR-017 — Entra ID, Azure Functions, and Event Grid](docs/adr/ADR-017-entra-id-functions-eventgrid.md)
+**Go deeper:** [full detail & decisions →](docs/architecture/diagrams/README.md#01--system-context-l1)
 
-### 02 · Container view (L2) — services, Azure PaaS, APIM
-> **Question:** What are the deployable pieces and the managed services behind the edge?
+### 02 · Containers
+The six services, the serverless notifications app, and the Azure managed services behind them.
 
-![02 · Container view](docs/architecture/renders/02-containers.png)
-_Rendered from workspace.dsl — see [docs/architecture/renders/README.md](docs/architecture/renders/README.md)_
+![02 · Containers](docs/architecture/renders/02-containers.png)
+_Rendered from workspace.dsl — see [renders/README.md](docs/architecture/renders/README.md)_
 
-**Go deeper:** [ADR-001 — Microservices Architecture](docs/adr/ADR-001-microservices-architecture.md) · [ADR-004 — Polyglot Persistence](docs/adr/ADR-004-polyglot-persistence.md) · [ADR-006 — Ocelot API Gateway over YARP](docs/adr/ADR-006-ocelot-api-gateway.md) · [ADR-014 — Cosmos DB and Azure Service Bus](docs/adr/ADR-014-cosmosdb-and-servicebus.md) · [ADR-019 — Serverless Notification with Azure Functions and Event Grid](docs/adr/ADR-019-serverless-notification-functions-eventgrid.md) · [ADR-020 — API Management as the Managed Edge Gateway](docs/adr/ADR-020-api-management-managed-edge-gateway.md) _(APIM planned)_
+**Go deeper:** [full detail & decisions →](docs/architecture/diagrams/README.md#02--container-view-l2--services-azure-paas-apim)
 
-### 03 · Component view (L3) — inside AK.Order
-> **Question:** How is AK.Order structured internally (API → application → domain → infrastructure)?
+### 03 · Inside AK.Order
+One service's internals — API, application (CQRS/MediatR), domain, and infrastructure layers.
 
-![03 · Component view](docs/architecture/renders/03-order-components.png)
-_Rendered from workspace.dsl — see [docs/architecture/renders/README.md](docs/architecture/renders/README.md)_
+![03 · Inside AK.Order](docs/architecture/renders/03-order-components.png)
+_Rendered from workspace.dsl — see [renders/README.md](docs/architecture/renders/README.md)_
 
-**Go deeper:** [ADR-002 — Clean Architecture and Domain-Driven Design](docs/adr/ADR-002-clean-architecture-and-ddd.md) · [ADR-010 — CQRS and MediatR](docs/adr/ADR-010-CQRS-and-MediatR.md) · [ADR-011 — Repository, Specification, and Unit of Work](docs/adr/ADR-011-Repository-Specification-and-Unit-of-Work.md) · [ADR-005 — SAGA Orchestration over 2PC and Choreography](docs/adr/ADR-005-saga-orchestration.md) · [ADR-009 — Domain Events vs Integration Events](docs/adr/ADR-009-domain-events-vs-integration-events.md)
+**Go deeper:** [full detail & decisions →](docs/architecture/diagrams/README.md#03--component-view-l3--inside-akorder)
 
-### 04 · Order saga — dynamic flow to Paid
-> **Question:** How does an order flow through the orchestrated saga to a Paid state?
+## Cloud architecture
 
-![04 · Order saga](docs/architecture/renders/04-saga-flow.png)
-_Rendered from workspace.dsl — see [docs/architecture/renders/README.md](docs/architecture/renders/README.md)_
+### 05 · Azure topology
+The Azure resources that make up the environment and how they group.
 
-**Go deeper:** [ADR-005 — SAGA Orchestration over 2PC and Choreography](docs/adr/ADR-005-saga-orchestration.md) · [ADR-007 — MassTransit over Raw RabbitMQ Client](docs/adr/ADR-007-masstransit-over-raw-rabbitmq.md) · [ADR-015 — Messaging Migration to Azure Service Bus](docs/adr/ADR-015-messaging-migration-to-service-bus.md) · [Event Bus design](docs/design/EVENTBUS.md)
+![05 · Azure topology](docs/architecture/renders/05-azure-topology.png)
+_Rendered from workspace.dsl — see [renders/README.md](docs/architecture/renders/README.md)_
 
----
+**Go deeper:** [full detail & decisions →](docs/architecture/diagrams/README.md#05--azure-resource-topology)
 
-## Cloud — where it lives
-
-The Azure resources, how they are provisioned as code, and how traffic reaches them.
-
-### 05 · Azure resource topology
-> **Question:** What Azure resources exist and how are they grouped/related?
-
-![05 · Azure resource topology](docs/architecture/renders/05-azure-topology.png)
-_Rendered from workspace.dsl — see [docs/architecture/renders/README.md](docs/architecture/renders/README.md)_
-
-**Go deeper:** [ADR-012 — Infrastructure as Code with Terraform and Terragrunt](docs/adr/ADR-012-iac-with-terraform-terragrunt.md) · [ADR-018 — Managed Kubernetes, Workload Identity, and Hardened Base Image](docs/adr/ADR-018-aks-workload-identity-base-image.md) · [Infrastructure Guide](docs/guides/infrastructure-guide.md) · [IaC Concepts](docs/guides/iac-concepts.md)
-
-### 06 · Terragrunt unit dependency graph
-> **Question:** In what order do the IaC units apply, and what depends on what?
-
-View diagram → [06-terragrunt-dependencies.md](docs/architecture/diagrams/06-terragrunt-dependencies.md)
-
-**Go deeper:** [ADR-012 — Infrastructure as Code with Terraform and Terragrunt](docs/adr/ADR-012-iac-with-terraform-terragrunt.md) · [IaC Concepts](docs/guides/iac-concepts.md) · [Infrastructure Guide](docs/guides/infrastructure-guide.md)
-
-### 07 · Network & traffic path
-> **Question:** How does a request physically reach a service, and where is TLS terminated?
-
-View diagram → [07-network-traffic-path.md](docs/architecture/diagrams/07-network-traffic-path.md)
-
-**Go deeper:** [Networking & Kubernetes Concepts](docs/guides/networking-concepts.md) · [AKS Guide](docs/guides/aks-guide.md) · [ADR-006 — Ocelot API Gateway over YARP](docs/adr/ADR-006-ocelot-api-gateway.md)
-
----
-
-## Security & identity
-
-The secret-less trust chain, the public/internal boundaries, and the planned managed edge.
-
-### 08 · Identity & trust chain
-> **Question:** How does trust flow from provisioning to runtime, secret-lessly?
-
-View diagram → [08-identity-chain.md](docs/architecture/diagrams/08-identity-chain.md)
-
-**Go deeper:** [ADR-016 — Cosmos DB Data Migration and Workload Identity Foundation](docs/adr/ADR-016-data-migration-cosmosdb-and-workload-identity.md) · [ADR-022 — CI/CD on GitHub Actions with OIDC Federated Credentials](docs/adr/ADR-022-cicd-github-actions-oidc.md) · [Identity Concepts](docs/guides/identity-concepts.md)
-
-### 09 · Security posture & trust boundaries
-> **Question:** What is exposed vs internal, and where do the known gaps sit?
-
-View diagram → [09-security-posture.md](docs/architecture/diagrams/09-security-posture.md)
-
-**Go deeper:** [Known Issues Register](docs/KNOWN_ISSUES.md) · [Identity Concepts](docs/guides/identity-concepts.md) · [Security Test Guide](docs/test/SECURITY_TESTS.md)
-
-### 10 · APIM edge & two-gateway model (target state)
-> **Question:** What does the managed edge do before traffic reaches the cluster ingress?
-
-View diagram → [10-apim-edge.md](docs/architecture/diagrams/10-apim-edge.md)
-
-_Azure API Management is **planned**, not yet provisioned._
-
-**Go deeper:** [ADR-020 — API Management as the Managed Edge Gateway](docs/adr/ADR-020-api-management-managed-edge-gateway.md) · [ADR-006 — Ocelot API Gateway over YARP](docs/adr/ADR-006-ocelot-api-gateway.md)
-
----
-
-## Kubernetes — how it runs
-
-The cluster layout, how pods authenticate without secrets, and how one chart deploys six services.
+## Kubernetes architecture
 
 ### 11 · Cluster topology
-> **Question:** How are namespaces, workloads, and ingress laid out inside AKS?
+How namespaces, workloads, and ingress are laid out inside AKS.
 
 ![11 · Cluster topology](docs/architecture/renders/11-cluster-topology.png)
-_Rendered from workspace.dsl — see [docs/architecture/renders/README.md](docs/architecture/renders/README.md)_
+_Rendered from workspace.dsl — see [renders/README.md](docs/architecture/renders/README.md)_
 
-**Go deeper:** [ADR-018 — Managed Kubernetes, Workload Identity, and Hardened Base Image](docs/adr/ADR-018-aks-workload-identity-base-image.md) · [AKS Guide](docs/guides/aks-guide.md)
+**Go deeper:** [full detail & decisions →](docs/architecture/diagrams/README.md#11--cluster-topology)
 
-### 12 · Workload identity token flow
-> **Question:** How does a pod get an Entra token with no stored secret?
+## Delivery architecture
 
-View diagram → [12-workload-identity-token-flow.md](docs/architecture/diagrams/12-workload-identity-token-flow.md)
+### 19 · Commit to running pod
+The end-to-end delivery path from a developer commit to a running pod — CI gate, secret-less CD, GitOps reconciliation.
 
-**Go deeper:** [ADR-016 — Cosmos DB Data Migration and Workload Identity Foundation](docs/adr/ADR-016-data-migration-cosmosdb-and-workload-identity.md) · [ADR-018 — Managed Kubernetes, Workload Identity, and Hardened Base Image](docs/adr/ADR-018-aks-workload-identity-base-image.md) · [Identity Concepts](docs/guides/identity-concepts.md)
+```mermaid
+flowchart TD
+    DEV["Developer commit"]:::external
+    PR["Pull request"]:::cicd
+    CI["CI quality gate<br/>build · test · SonarCloud · Trivy<br/>4 required checks + branch protection"]:::cicd
+    MERGE["Merge to master"]:::cicd
+    OIDC{{"CD authenticates to Azure<br/>OIDC federated credential · no stored secret"}}:::identity
+    BUILD["Build image · tag = commit SHA"]:::cicd
+    ACR["Push to Azure Container Registry"]:::cicd
+    BUMP["Bump image tag in Helm values in Git<br/>CD_PUSH_TOKEN · [skip ci]"]:::cicd
+    ARGO["Argo CD detects drift"]:::cicd
+    SYNC["Auto-sync + self-heal"]:::cicd
+    POD["New pod on AKS"]:::service
 
-### 13 · Helm chart & values precedence
-> **Question:** How does one generic chart become six services, and which values win?
+    DEV --> PR --> CI --> MERGE --> OIDC --> BUILD --> ACR --> BUMP --> ARGO --> SYNC --> POD
 
-View diagram → [13-helm-chart-values.md](docs/architecture/diagrams/13-helm-chart-values.md)
+    classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
-**Go deeper:** [AKS Guide](docs/guides/aks-guide.md) · [Container Configuration](docs/guides/container-configuration.md) · [GitOps Guide](docs/guides/gitops-guide.md)
+**Go deeper:** [full detail & decisions →](docs/architecture/diagrams/README.md#19--delivery-architecture--commit-to-running-pod)
 
----
+**[All 19 diagrams, including the thirteen not shown here →](docs/architecture/diagrams/README.md)**
 
-## DevOps — how it ships
+## Explore
 
-The pull-request gate, the merge delivery, the GitOps loop that runs it, and environment promotion.
-
-### 14 · CI pipeline
-> **Question:** What runs on a pull request, and what gates the merge?
-
-View diagram → [14-ci-pipeline.md](docs/architecture/diagrams/14-ci-pipeline.md)
-
-**Go deeper:** [ADR-022 — CI/CD on GitHub Actions with OIDC Federated Credentials](docs/adr/ADR-022-cicd-github-actions-oidc.md) · [ADR-023 — CI/CD Pipeline Design and Repository Strategy](docs/adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md) · [DevOps CI/CD Guide](docs/guides/devops-cicd-guide.md)
-
-### 15 · CD pipeline
-> **Question:** What happens on merge — build, push, tag-bump — and with what identity?
-
-View diagram → [15-cd-pipeline.md](docs/architecture/diagrams/15-cd-pipeline.md)
-
-**Go deeper:** [ADR-022 — CI/CD on GitHub Actions with OIDC Federated Credentials](docs/adr/ADR-022-cicd-github-actions-oidc.md) · [ADR-023 — CI/CD Pipeline Design and Repository Strategy](docs/adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md) · [DevOps CI/CD Guide](docs/guides/devops-cicd-guide.md)
-
-### 16 · GitOps reconciliation loop
-> **Question:** How does a Git change become a running pod via Argo CD?
-
-View diagram → [16-gitops-reconciliation.md](docs/architecture/diagrams/16-gitops-reconciliation.md)
-
-**Go deeper:** [ADR-023 — CI/CD Pipeline Design and Repository Strategy](docs/adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md) · [GitOps Guide](docs/guides/gitops-guide.md)
-
-### 17 · Environment promotion — dev vs QA
-> **Question:** How does a change move from dev to QA, and what differs between them?
-
-View diagram → [17-env-promotion.md](docs/architecture/diagrams/17-env-promotion.md)
-
-_The QA environment is **planned**; only `dev` exists today._
-
-**Go deeper:** [ADR-012 — Infrastructure as Code with Terraform and Terragrunt](docs/adr/ADR-012-iac-with-terraform-terragrunt.md) · [Infrastructure Guide](docs/guides/infrastructure-guide.md) · [Roadmap](docs/ROADMAP.md)
-
----
-
-## Cross-cutting
-
-How the platform is observed.
-
-### 18 · Observability pipeline
-> **Question:** How do logs, metrics, and traces flow to their sinks and dashboards?
-
-View diagram → [18-observability.md](docs/architecture/diagrams/18-observability.md)
-
-_Structured logging to Application Insights / Log Analytics is **delivered**; metrics and tracing (OpenTelemetry, Prometheus, Grafana) are **planned**._
-
-**Go deeper:** [ADR-013 — Key Vault RBAC and Observability Foundation](docs/adr/ADR-013-key-vault-rbac-and-observability-foundation.md) · [Observability design](docs/design/OBSERVABILITY.md)
-
----
-
-## Running and rebuilding the platform
-
-- **[Infrastructure Guide](docs/guides/infrastructure-guide.md)** — provision the Azure resources as code, unit by unit (Understand → Build → Execute → Verify).
-- **[AKS Guide](docs/guides/aks-guide.md)** — containers, the cluster, workload identity, Helm deployment, ingress/TLS, and troubleshooting.
-- **[Operations Command Reference](docs/guides/operations-command-reference.md)** — every `az` / `kubectl` / `helm` / `terragrunt` / `argocd` command to build, inspect, and operate the platform, each flag explained.
-
-## Documentation map
-
-| Document | What it is for |
-|----------|----------------|
-| [Development Guide](DevelopmentGuide.md) | The spine — each delivery phase with its build guide, prerequisite concepts, and governing ADRs. |
-| [Roadmap](docs/ROADMAP.md) | The single record of what is delivered, in progress, and planned. |
-| [ADR index](docs/adr/README.md) | The full set of Architecture Decision Records and why each choice was made. |
-| [Diagram Plan](docs/architecture/DIAGRAM-PLAN.md) | The plan and contract for the 18-diagram set (visual language, tooling, status). |
-| [Known Issues Register](docs/KNOWN_ISSUES.md) | Acknowledged defects and deferred fixes, each with a planned resolution. |
-| [Testing index](docs/test/README.md) | The verification strategy — unit, integration, end-to-end, and security tests. |
+- [Architecture, all 19 diagrams](docs/architecture/diagrams/README.md) — the full diagram set with questions and decisions.
+- [Build and run](DevelopmentGuide.md) — the delivery phases, build guides, and prerequisite concepts.
+- [Architecture decisions](docs/adr/README.md) — the 23 ADRs and why each choice was made.
+- [Testing](docs/test/README.md) — the verification strategy from unit to end-to-end.
 
 ## Known issues
 
-Open defects are tracked in the **[Known Issues Register](docs/KNOWN_ISSUES.md)**. The two headline items:
-
-- **KI-002 (High)** — the Discount gRPC service **decodes** the bearer token without verifying its signature/issuer/audience; mitigated only by being ClusterIP-only (not externally reachable).
-- **KI-005 (Medium)** — **no stock-release compensation on payment failure**: stock reserved by the saga is retained indefinitely when a payment fails, pending a compensation workstream.
-
-The register also tracks **KI-003** (permissive gateway CORS) and **KI-004** (mutable image tag can serve a stale image).
+See the [Known Issues Register](docs/KNOWN_ISSUES.md) — notably **KI-002** (Discount gRPC decodes tokens without cryptographic validation) and **KI-005** (no stock-release compensation on payment failure).

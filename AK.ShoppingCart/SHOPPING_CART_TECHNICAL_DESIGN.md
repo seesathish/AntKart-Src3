@@ -1,5 +1,7 @@
 # AK.ShoppingCart Microservice — Technical Design Document
 
+> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../README.md) and the [architecture diagram index](../docs/architecture/diagrams/README.md).
+
 ## Table of Contents
 1. [Overview](#1-overview)
 2. [Functional Requirements](#2-functional-requirements)

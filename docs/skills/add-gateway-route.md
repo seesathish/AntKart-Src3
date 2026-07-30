@@ -1,5 +1,7 @@
 # Skill: Add a Gateway Route
 
+> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [architecture diagram index](../architecture/diagrams/README.md).
+
 **Purpose:** Add a new Ocelot route to `ocelot.json` (Docker) and `ocelot.Development.json` (local dev) with the correct downstream host, auth policy, rate limiting, and QoS circuit breaker. Includes health check route and development override.
 
 ---

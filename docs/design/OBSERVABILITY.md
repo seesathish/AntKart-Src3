@@ -1,5 +1,7 @@
 # AntKart — Observability Technical Design
 
+> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [architecture diagram index](../architecture/diagrams/README.md).
+
 ## Overview
 
 All AntKart services emit **structured logs via Serilog**, written to the **Console** (the standard sink for containers and serverless) and a local rolling file for development. In the cloud the console stream is collected by **Azure Monitor — Application Insights / Log Analytics**, which is the query and dashboard surface. There is **no Elasticsearch/Kibana sink**.

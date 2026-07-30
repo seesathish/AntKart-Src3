@@ -1,5 +1,7 @@
 # AntKart — Integration Tests Technical Design
 
+> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../README.md) and the [architecture diagram index](../docs/architecture/diagrams/README.md).
+
 ## Overview
 
 `AK.IntegrationTests` exercises the orchestrated SAGA, event bus flows, and payment event routing using **MassTransit's in-memory test harness** — no broker, no database, no running host. All 28 tests run in ~12 seconds.

@@ -1,5 +1,7 @@
 # AK.Gateway — API Gateway Technical Design
 
+> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../README.md) and the [architecture diagram index](../docs/architecture/diagrams/README.md).
+
 ## Overview
 
 The API Gateway is the single entry point for AntKart's REST services. Built with **Ocelot 23.4.2** on .NET 9, it provides routing, edge JWT validation, per-route rate limiting, and circuit-breaker QoS — without any business logic. In the cluster it runs as `ak-gateway` (ClusterIP on port 8080) and is the only service exposed externally, through the cluster ingress.
