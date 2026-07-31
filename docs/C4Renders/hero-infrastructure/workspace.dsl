@@ -197,17 +197,16 @@ workspace "AntKart — infrastructure as code" "How the cloud is built and rebui
                 color #ffffff
             }
             element "Planned" {
-                background #D9D8D4
-                color #5F5E5A
+                background #5F5E5A
+                color #ffffff
                 border dashed
                 strokeWidth 3
             }
             element "Issue" {
-                background #ffffff
-                color #E24B4A
-                stroke #E24B4A
-                strokeWidth 4
+                background #E24B4A
+                color #ffffff
                 border dashed
+                strokeWidth 3
             }
             relationship "Relationship" {
                 dashed false
