@@ -15,8 +15,10 @@ Customers reach the platform through one public HTTPS endpoint; behind it, six s
 
 ## Platform architecture
 
-> **Diagram: System overview** — _not yet drawn_
-> **Must show:** the engineering foundation inside a service - Clean Architecture layers, CQRS with MediatR, the orchestrated saga, the transactional outbox, repository with specification and unit of work, minimal API endpoints, and the distinction between domain events and integration events. Answers "how is the code built".
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/C4Renders/renders/PlatformArchitecture-dark.svg">
+  <img alt="AntKart under Clean Architecture: Domain at the core with entities, value objects, domain events and specifications and no framework dependencies, surrounded by Application, Infrastructure and API rings, with all dependencies pointing inward" src="docs/C4Renders/renders/PlatformArchitecture.svg">
+</picture>
 
 Every service is the same inside: a dependency-free domain core, an application layer of CQRS handlers behind a validation pipeline, and a thin API host. Services never call each other synchronously for business flows — they coordinate through an orchestrated saga with a transactional outbox.
 

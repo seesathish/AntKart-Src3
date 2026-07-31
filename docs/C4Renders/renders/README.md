@@ -7,7 +7,7 @@ This folder holds the **exported SVG images** of the eight hero diagrams. The re
 | Folder | View key | Exported files | Status |
 |--------|----------|----------------|--------|
 | [`../hero-system/`](../hero-system/) | `SystemOverview` | `SystemOverview.svg` · `SystemOverview-dark.svg` | Drawn |
-| [`../hero-platform/`](../hero-platform/) | `PlatformArchitecture` | `PlatformArchitecture.svg` · `PlatformArchitecture-dark.svg` | Scaffolded (DSL only) |
+| _hero-platform (folder removed — source in git history)_ | `PlatformArchitecture` | `PlatformArchitecture.svg` · `PlatformArchitecture-dark.svg` | Drawn |
 | [`../hero-infrastructure/`](../hero-infrastructure/) | `InfrastructureAsCode` | `InfrastructureAsCode.svg` · `InfrastructureAsCode-dark.svg` | Scaffolded (DSL only) |
 | [`../hero-azure/`](../hero-azure/) | `AzureServices` | `AzureServices.svg` · `AzureServices-dark.svg` | Scaffolded (DSL only) |
 | [`../hero-kubernetes/`](../hero-kubernetes/) | `Kubernetes` | `Kubernetes.svg` · `Kubernetes-dark.svg` | Scaffolded (DSL only) |
