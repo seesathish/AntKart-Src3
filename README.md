@@ -26,10 +26,18 @@ Every service is the same inside: a dependency-free domain core, an application 
 
 ## Infrastructure as code
 
-> **Diagram: Infrastructure as code** — _not yet drawn_
-> **Must show:** Terraform driven by Terragrunt - root.hcl generating backend, provider and versions into each of the eighteen units, units composed from shared modules, remote state isolated per unit in Azure Storage with blob-lease locking, and the dev environment with QA marked planned. Answers "how does the cloud get built".
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/C4Renders/renders/InfrastructureAsCode-dark.svg">
+  <img alt="AntKart infrastructure as code: shared reusable modules and one root.hcl config feed two environments — dev (delivered) and qa (planned, dashed) — each composing the same modules with its own inputs; an apply writes isolated per-unit state to Azure Storage and provisions the Azure resources, qa mirroring dev" src="docs/C4Renders/renders/InfrastructureAsCode.svg">
+</picture>
 
-Every Azure resource is provisioned as code: Terraform modules describe how a resource is built, and Terragrunt live units wire them together per environment. A shared `root.hcl` generates the backend and provider config into each unit, and remote state is isolated per unit with blob-lease locking.
+Infrastructure is code, and a new environment is new inputs — not new code:
+
+1. **Root configuration** — `root.hcl` generates the Terraform backend, provider and versions into every unit, so that config lives in exactly one place (DRY).
+2. **Shared modules** — each environment's units compose the same reusable, versioned modules with that environment's own inputs.
+3. **Isolated state** — an apply provisions the Azure resources and records per-unit state (one leased blob per unit) in Azure Storage, in a resource group of its own.
+
+**QA is next.** It is drawn dashed because it reuses the same modules and the same root config with qa inputs. When it lands, its state key must use a distinct backend container or key prefix — the key is the unit path, so otherwise qa would overwrite dev state.
 
 → [Infrastructure as code](docs/development/1-infrastructure-as-code.md)
 

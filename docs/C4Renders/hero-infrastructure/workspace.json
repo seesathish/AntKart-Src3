@@ -1,0 +1,260 @@
+{
+  "configuration" : { },
+  "description" : "How the cloud gets built and promoted: one root config, shared modules, per-environment units, isolated state",
+  "documentation" : { },
+  "id" : 1,
+  "lastModifiedDate" : "2026-07-31T17:17:07Z",
+  "model" : {
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "2",
+        "name" : "Shared modules",
+        "properties" : {
+          "structurizr.dsl.identifier" : "iac.modules"
+        },
+        "relationships" : [ {
+          "description" : "2",
+          "destinationId" : "4",
+          "id" : "10",
+          "sourceId" : "2",
+          "tags" : "Relationship"
+        }, {
+          "destinationId" : "5",
+          "id" : "11",
+          "sourceId" : "2",
+          "tags" : "Relationship,Planned"
+        } ],
+        "tags" : "Element,Container,Infra",
+        "technology" : "reusable · versioned"
+      }, {
+        "documentation" : { },
+        "id" : "3",
+        "name" : "Root configuration",
+        "properties" : {
+          "structurizr.dsl.identifier" : "iac.root"
+        },
+        "relationships" : [ {
+          "description" : "1",
+          "destinationId" : "4",
+          "id" : "8",
+          "sourceId" : "3",
+          "tags" : "Relationship"
+        }, {
+          "destinationId" : "5",
+          "id" : "9",
+          "sourceId" : "3",
+          "tags" : "Relationship,Planned"
+        } ],
+        "tags" : "Element,Container,Edge",
+        "technology" : "root.hcl · backend · provider · versions"
+      }, {
+        "documentation" : { },
+        "group" : "environments",
+        "id" : "4",
+        "name" : "environments/dev",
+        "properties" : {
+          "structurizr.dsl.identifier" : "iac.dev"
+        },
+        "relationships" : [ {
+          "description" : "3",
+          "destinationId" : "6",
+          "id" : "12",
+          "sourceId" : "4",
+          "tags" : "Relationship"
+        }, {
+          "description" : "creates",
+          "destinationId" : "7",
+          "id" : "13",
+          "sourceId" : "4",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Service",
+        "technology" : "18 units · dev inputs · delivered"
+      }, {
+        "documentation" : { },
+        "group" : "environments",
+        "id" : "5",
+        "name" : "environments/qa",
+        "properties" : {
+          "structurizr.dsl.identifier" : "iac.qa"
+        },
+        "relationships" : [ {
+          "destinationId" : "6",
+          "id" : "14",
+          "sourceId" : "5",
+          "tags" : "Relationship,Planned"
+        }, {
+          "destinationId" : "7",
+          "id" : "15",
+          "sourceId" : "5",
+          "tags" : "Relationship,Planned"
+        } ],
+        "tags" : "Element,Container,Planned",
+        "technology" : "same modules · qa inputs · planned"
+      }, {
+        "documentation" : { },
+        "id" : "6",
+        "name" : "State storage",
+        "properties" : {
+          "structurizr.dsl.identifier" : "iac.state"
+        },
+        "tags" : "Element,Container,Datastore",
+        "technology" : "one blob per unit · leased · own resource group"
+      }, {
+        "documentation" : { },
+        "id" : "7",
+        "name" : "Azure resources",
+        "properties" : {
+          "structurizr.dsl.identifier" : "iac.resources"
+        },
+        "tags" : "Element,Container,Managed",
+        "technology" : "one estate per environment"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "AntKart infrastructure",
+      "properties" : {
+        "structurizr.dsl.identifier" : "iac"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "AntKart — infrastructure as code",
+  "properties" : {
+    "structurizr.inspection.error" : "24",
+    "structurizr.dsl" : "LyoKICogQW50S2FydCDigJQgSW5mcmFzdHJ1Y3R1cmUgYXMgY29kZSAoaGVybyBkaWFncmFtKQogKgogKiBRdWVzdGlvbjogaG93IGRvZXMgdGhlIGNsb3VkIGdldCBidWlsdCwgYW5kIGhvdyBpcyBpdCBwcm9tb3RlZCB0byBhIG5ldyBlbnZpcm9ubWVudD8KICoKICogVEhFIFNIQVBFIOKAlCB0d28gcmV1c2FibGUgdGhpbmdzIG9uIHRoZSBsZWZ0ICh0aGUgc2hhcmVkIG1vZHVsZXMgYW5kIHRoZSBvbmUgcm9vdAogKiBjb25maWd1cmF0aW9uKSBmZWVkIHRoZSBFTlZJUk9OTUVOVFMgaW4gdGhlIG1pZGRsZS4gZGV2IGlzIGRlbGl2ZXJlZCAoc29saWQgZ3JlZW4pOwogKiBxYSBpcyBuZXh0IChkYXNoZWQpLiBCb3RoIGNvbXBvc2UgdGhlIFNBTUUgbW9kdWxlcyBhbmQgaW5oZXJpdCB0aGUgU0FNRSByb290IGNvbmZpZyDigJQKICogb25seSB0aGVpciBpbnB1dHMgZGlmZmVyLiBPbiB0aGUgcmlnaHQsIGFuIGFwcGx5IHdyaXRlcyBpc29sYXRlZCBwZXItdW5pdCBzdGF0ZSBhbmQKICogcHJvdmlzaW9ucyB0aGUgcmVhbCBBenVyZSByZXNvdXJjZXMuIFRoZSB2ZXJicyBsaXZlIG9uIHRoZSBhcnJvd3MgYW5kIHRoZSBSRUFETUUKICogbGVnZW5kOyBUZXJyYWZvcm0gY29tbWFuZHMgKGluaXQvcGxhbi9hcHBseSkgYXJlIGRlbGliZXJhdGVseSBhYnNlbnQg4oCUIHRoZXkgYXJlCiAqIGFjdGlvbnMsIGFuZCBkcmF3aW5nIHRoZW0gdHVybnMgYW4gYXJjaGl0ZWN0dXJlIGRpYWdyYW0gaW50byBhIHJ1bmJvb2suCiAqCiAqIFRIRSBUSFJFRSBJREVBUwogKiAgIDEuIE9uZSByb290IGNvbmZpZ3VyYXRpb24gZ2VuZXJhdGVzIHRoZSBiYWNrZW5kL3Byb3ZpZGVyL3ZlcnNpb25zIGludG8gZXZlcnkgdW5pdC4KICogICAyLiBFYWNoIGVudmlyb25tZW50J3MgdW5pdHMgY29tcG9zZSB0aGUgc2hhcmVkIG1vZHVsZXMgd2l0aCB0aGF0IGVudmlyb25tZW50J3MKICogICAgICBpbnB1dHMg4oCUIHNvIGEgbmV3IGVudmlyb25tZW50IGlzIG5ldyBpbnB1dHMsIG5vdCBuZXcgY29kZS4KICogICAzLiBTdGF0ZSBpcyBpc29sYXRlZCBwZXIgdW5pdCwgbGVhc2VkIGR1cmluZyBhbiBhcHBseSwgYW5kIGtlcHQgaW4gYSByZXNvdXJjZSBncm91cAogKiAgICAgIG9mIGl0cyBvd24sIHNvIGRlc3Ryb3lpbmcgdGhlIHBsYXRmb3JtIG5ldmVyIGRlc3Ryb3lzIHRoZSByZWNvcmQgb2YgaXQuCiAqCiAqIFFBIElTIE5FWFQg4oCUIGl0IGlzIGRyYXduIG5vdyAoZGFzaGVkKSBzbyB0aGUgcHJvbW90aW9uIHN0b3J5IGlzIHZpc2libGU6IHFhIHJldXNlcwogKiB0aGUgbW9kdWxlcyBhbmQgcm9vdCwgd2l0aCBxYSBpbnB1dHMuIE5PVEUgZm9yIHdoZW4gaXQgaXMgYnVpbHQ6IHRoZSBzdGF0ZSBrZXkgaXMgdGhlCiAqIFVOSVQgUEFUSCBvbmx5LCBzbyBxYSBNVVNUIHVzZSBhIGRpc3RpbmN0IGJhY2tlbmQgY29udGFpbmVyIG9yIGtleSBwcmVmaXggb3IgaXQgd2lsbAogKiBvdmVyd3JpdGUgZGV2IHN0YXRlLiBUaGF0IGNhdmVhdCBiZWxvbmdzIGluIHRoZSBSRUFETUUgbGVnZW5kLCBub3QgYSBib3guCiAqCiAqIFJFTkRFUgogKiAgIGRvY2tlciBydW4gLWl0IC0tcm0gLXAgODA4MDo4MDgwIFwKICogICAgIC12ICJDOlxVc2Vyc1xzZWVzYVxPbmVEcml2ZVxEZXNrdG9wXEFudENhcnRcQW50S2FydC1TcmMzXGRvY3NcQzRSZW5kZXJzXGhlcm8taW5mcmFzdHJ1Y3R1cmU6L3Vzci9sb2NhbC9zdHJ1Y3R1cml6ciIgXAogKiAgICAgc3RydWN0dXJpenIvc3RydWN0dXJpenIgbG9jYWwKICoKICogVFdPLVBIQVNFOiBhdXRvTGF5b3V0IE9OIGZvciByb3VnaCByYW5rcywgdGhlbiBDT01NRU5UIElUIE9VVCBiZWZvcmUgZHJhZ2dpbmcuCiAqIFRhcmdldCBsYXlvdXQ6IHNoYXJlZCBtb2R1bGVzIGFuZCByb290IGNvbmZpZ3VyYXRpb24gc3RhY2tlZCBvbiB0aGUgbGVmdDsgdGhlIHR3bwogKiBlbnZpcm9ubWVudHMgc3RhY2tlZCBpbiB0aGUgY2VudHJlIChkZXYgYWJvdmUsIHFhIGJlbG93IGFuZCBkYXNoZWQpOyBzdGF0ZSBzdG9yYWdlCiAqIGFuZCBBenVyZSByZXNvdXJjZXMgb24gdGhlIHJpZ2h0LiBxYSBtaXJyb3JzIGRldiBleGFjdGx5IOKAlCBldmVyeSBkZXYgYXJyb3cgaGFzIGEKICogcGFyYWxsZWwgZGFzaGVkIHFhIGFycm93IGJlbG93IGl0LCBzbyB0aGUgdHdvIHJvd3MgcmVhZCBhcyAidGhlIHNhbWUgc2hhcGUsIG9uZQogKiBkZWxpdmVyZWQgYW5kIG9uZSBwbGFubmVkIi4KICovCgp3b3Jrc3BhY2UgIkFudEthcnQg4oCUIGluZnJhc3RydWN0dXJlIGFzIGNvZGUiICJIb3cgdGhlIGNsb3VkIGdldHMgYnVpbHQgYW5kIHByb21vdGVkOiBvbmUgcm9vdCBjb25maWcsIHNoYXJlZCBtb2R1bGVzLCBwZXItZW52aXJvbm1lbnQgdW5pdHMsIGlzb2xhdGVkIHN0YXRlIiB7CgogICAgIWlkZW50aWZpZXJzIGhpZXJhcmNoaWNhbAoKICAgIG1vZGVsIHsKCiAgICAgICAgaWFjID0gc29mdHdhcmVTeXN0ZW0gIkFudEthcnQgaW5mcmFzdHJ1Y3R1cmUiICIiIHsKCiAgICAgICAgICAgIG1vZHVsZXMgPSBjb250YWluZXIgIlNoYXJlZCBtb2R1bGVzIiAiIiAicmV1c2FibGUgwrcgdmVyc2lvbmVkIiB7CiAgICAgICAgICAgICAgICB0YWdzICJJbmZyYSIKICAgICAgICAgICAgfQogICAgICAgICAgICByb290ID0gY29udGFpbmVyICJSb290IGNvbmZpZ3VyYXRpb24iICIiICJyb290LmhjbCDCtyBiYWNrZW5kIMK3IHByb3ZpZGVyIMK3IHZlcnNpb25zIiB7CiAgICAgICAgICAgICAgICB0YWdzICJFZGdlIgogICAgICAgICAgICB9CgogICAgICAgICAgICBncm91cCAiZW52aXJvbm1lbnRzIiB7CiAgICAgICAgICAgICAgICBkZXYgPSBjb250YWluZXIgImVudmlyb25tZW50cy9kZXYiICIiICIxOCB1bml0cyDCtyBkZXYgaW5wdXRzIMK3IGRlbGl2ZXJlZCIgewogICAgICAgICAgICAgICAgICAgIHRhZ3MgIlNlcnZpY2UiCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICBxYSA9IGNvbnRhaW5lciAiZW52aXJvbm1lbnRzL3FhIiAiIiAic2FtZSBtb2R1bGVzIMK3IHFhIGlucHV0cyDCtyBwbGFubmVkIiB7CiAgICAgICAgICAgICAgICAgICAgdGFncyAiUGxhbm5lZCIKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfQoKICAgICAgICAgICAgc3RhdGUgPSBjb250YWluZXIgIlN0YXRlIHN0b3JhZ2UiICIiICJvbmUgYmxvYiBwZXIgdW5pdCDCtyBsZWFzZWQgwrcgb3duIHJlc291cmNlIGdyb3VwIiB7CiAgICAgICAgICAgICAgICB0YWdzICJEYXRhc3RvcmUiCiAgICAgICAgICAgIH0KICAgICAgICAgICAgcmVzb3VyY2VzID0gY29udGFpbmVyICJBenVyZSByZXNvdXJjZXMiICIiICJvbmUgZXN0YXRlIHBlciBlbnZpcm9ubWVudCIgewogICAgICAgICAgICAgICAgdGFncyAiTWFuYWdlZCIKICAgICAgICAgICAgfQogICAgICAgIH0KCiAgICAgICAgLy8gMSDigJQgb25lIHJvb3QgY29uZmlnIGdlbmVyYXRlcyB0aGUgYm9pbGVycGxhdGUgaW50byBldmVyeSB1bml0IChib3RoIGVudnMpLgogICAgICAgIGlhYy5yb290IC0+IGlhYy5kZXYgIjEiCiAgICAgICAgaWFjLnJvb3QgLT4gaWFjLnFhICIiIHsKICAgICAgICAgICAgdGFncyAiUGxhbm5lZCIKICAgICAgICB9CgogICAgICAgIC8vIDIg4oCUIGVhY2ggZW52aXJvbm1lbnQgY29tcG9zZXMgdGhlIHNoYXJlZCBtb2R1bGVzIHdpdGggaXRzIG93biBpbnB1dHMuCiAgICAgICAgaWFjLm1vZHVsZXMgLT4gaWFjLmRldiAiMiIKICAgICAgICBpYWMubW9kdWxlcyAtPiBpYWMucWEgIiIgewogICAgICAgICAgICB0YWdzICJQbGFubmVkIgogICAgICAgIH0KCiAgICAgICAgLy8gMyDigJQgYW4gYXBwbHkgaXNvbGF0ZXMgcGVyLXVuaXQgc3RhdGUgYW5kIHByb3Zpc2lvbnMgdGhlIHJlc291cmNlcy4gQm90aAogICAgICAgIC8vIGVudmlyb25tZW50cyBkbyB0aGlzOiBkZXYgZGVsaXZlcmVkIChzb2xpZCksIHFhIHBsYW5uZWQgKGRhc2hlZCkuCiAgICAgICAgaWFjLmRldiAtPiBpYWMuc3RhdGUgIjMiCiAgICAgICAgaWFjLmRldiAtPiBpYWMucmVzb3VyY2VzICJjcmVhdGVzIgogICAgICAgIGlhYy5xYSAtPiBpYWMuc3RhdGUgIiIgewogICAgICAgICAgICB0YWdzICJQbGFubmVkIgogICAgICAgIH0KICAgICAgICBpYWMucWEgLT4gaWFjLnJlc291cmNlcyAiIiB7CiAgICAgICAgICAgIHRhZ3MgIlBsYW5uZWQiCiAgICAgICAgfQogICAgfQoKICAgIHZpZXdzIHsKCiAgICAgICAgdGhlbWVzIGh0dHBzOi8vc3RhdGljLnN0cnVjdHVyaXpyLmNvbS90aGVtZXMvbWljcm9zb2Z0LWF6dXJlLTIwMjEuMDEuMjYvdGhlbWUuanNvbgoKICAgICAgICBjb250YWluZXIgaWFjICJJbmZyYXN0cnVjdHVyZUFzQ29kZSIgIkhvdyBkb2VzIHRoZSBjbG91ZCBnZXQgYnVpbHQsIGFuZCBob3cgaXMgaXQgcHJvbW90ZWQ/IiB7CiAgICAgICAgICAgIGluY2x1ZGUgKgogICAgICAgICAgICAvLyBQSEFTRSBPTkUuIENvbW1lbnQgb3V0IGJlZm9yZSBoYW5kLWFycmFuZ2luZywgYW5kIGxlYXZlIGl0IGNvbW1lbnRlZC4KICAgICAgICAgICAgYXV0b0xheW91dCBsciAyMjAgMTQwCiAgICAgICAgfQoKICAgICAgICBzdHlsZXMgewogICAgICAgICAgICBlbGVtZW50ICJFbGVtZW50IiB7CiAgICAgICAgICAgICAgICBkZXNjcmlwdGlvbiBmYWxzZQogICAgICAgICAgICAgICAgbWV0YWRhdGEgdHJ1ZQogICAgICAgICAgICAgICAgZm9udFNpemUgMzAKICAgICAgICAgICAgICAgIHdpZHRoIDQ4MAogICAgICAgICAgICAgICAgaGVpZ2h0IDI2MAogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIkdyb3VwIiB7CiAgICAgICAgICAgICAgICBzdHJva2VXaWR0aCA4CiAgICAgICAgICAgICAgICBjb2xvciAjNUY1RTVBCiAgICAgICAgICAgICAgICBmb250U2l6ZSAzOAogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIlBlcnNvbiIgewogICAgICAgICAgICAgICAgc2hhcGUgUGVyc29uCiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM1RjVFNUEKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJTb2Z0d2FyZSBTeXN0ZW0iIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzg4ODc4MAogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIlNlcnZpY2UiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzFEOUU3NQogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgc2hhcGUgUm91bmRlZEJveAogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIkVkZ2UiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzdGNzdERAogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgc2hhcGUgUm91bmRlZEJveAogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIkluZnJhIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM4ODg3ODAKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJNYW5hZ2VkIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICMzNzhBREQKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJEYXRhc3RvcmUiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzE4NUZBNQogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgc2hhcGUgQ3lsaW5kZXIKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJQbGFubmVkIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM1RjVFNUEKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgICAgIGJvcmRlciBkYXNoZWQKICAgICAgICAgICAgICAgIHN0cm9rZVdpZHRoIDYKICAgICAgICAgICAgfQogICAgICAgICAgICByZWxhdGlvbnNoaXAgIlJlbGF0aW9uc2hpcCIgewogICAgICAgICAgICAgICAgZGFzaGVkIGZhbHNlCiAgICAgICAgICAgICAgICB0aGlja25lc3MgNAogICAgICAgICAgICAgICAgZm9udFNpemUgNDAKICAgICAgICAgICAgICAgIHJvdXRpbmcgT3J0aG9nb25hbAogICAgICAgICAgICB9CiAgICAgICAgICAgIHJlbGF0aW9uc2hpcCAiUGxhbm5lZCIgewogICAgICAgICAgICAgICAgZGFzaGVkIHRydWUKICAgICAgICAgICAgICAgIHRoaWNrbmVzcyA0CiAgICAgICAgICAgICAgICBmb250U2l6ZSA0MAogICAgICAgICAgICAgICAgcm91dGluZyBPcnRob2dvbmFsCiAgICAgICAgICAgIH0KICAgICAgICB9CiAgICB9Cn0=",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : {
+        "elements" : [ {
+          "background" : "#185fa5",
+          "color" : "#ffffff",
+          "shape" : "Cylinder",
+          "tag" : "Datastore"
+        }, {
+          "background" : "#7f77dd",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Edge"
+        }, {
+          "description" : false,
+          "fontSize" : 30,
+          "height" : 260,
+          "metadata" : true,
+          "tag" : "Element",
+          "width" : 480
+        }, {
+          "color" : "#5f5e5a",
+          "fontSize" : 38,
+          "strokeWidth" : 8,
+          "tag" : "Group"
+        }, {
+          "background" : "#888780",
+          "color" : "#ffffff",
+          "tag" : "Infra"
+        }, {
+          "background" : "#378add",
+          "color" : "#ffffff",
+          "tag" : "Managed"
+        }, {
+          "background" : "#5f5e5a",
+          "color" : "#ffffff",
+          "shape" : "Person",
+          "tag" : "Person"
+        }, {
+          "background" : "#5f5e5a",
+          "border" : "Dashed",
+          "color" : "#ffffff",
+          "strokeWidth" : 6,
+          "tag" : "Planned"
+        }, {
+          "background" : "#1d9e75",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Service"
+        }, {
+          "background" : "#888780",
+          "color" : "#ffffff",
+          "tag" : "Software System"
+        } ],
+        "relationships" : [ {
+          "dashed" : true,
+          "fontSize" : 40,
+          "routing" : "Orthogonal",
+          "tag" : "Planned",
+          "thickness" : 4
+        }, {
+          "dashed" : false,
+          "fontSize" : 40,
+          "routing" : "Orthogonal",
+          "tag" : "Relationship",
+          "thickness" : 4
+        } ]
+      },
+      "terminology" : { },
+      "themes" : [ "https://static.structurizr.com/themes/microsoft-azure-2021.01.26/theme.json" ]
+    },
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 140,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 220,
+        "vertices" : true
+      },
+      "description" : "How does the cloud get built, and how is it promoted?",
+      "elements" : [ {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "3",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "key" : "InfrastructureAsCode",
+      "name" : "Container View: AntKart infrastructure",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "10"
+      }, {
+        "id" : "11"
+      }, {
+        "id" : "12"
+      }, {
+        "id" : "13"
+      }, {
+        "id" : "14"
+      }, {
+        "id" : "15"
+      }, {
+        "id" : "8"
+      }, {
+        "id" : "9"
+      } ],
+      "softwareSystemId" : "1"
+    } ]
+  }
+}
