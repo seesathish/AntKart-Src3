@@ -56,6 +56,8 @@ Entra ID backs every workload identity, so no credential is stored anywhere in t
 
 The platform runs entirely on managed Azure services — Cosmos DB, PostgreSQL, Managed Redis, Service Bus, Event Grid, Functions, Key Vault, and more. Each replaced a local Phase-1 component, adopting token-based authentication throughout. API Management, the managed edge, is planned.
 
+Container Registry, Application Insights and Log Analytics are also provisioned. They appear in the DevOps and Observability diagrams, where they belong to the flow being described.
+
 → [Azure services](docs/development/2-azure-services.md)
 
 ## Kubernetes
