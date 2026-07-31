@@ -1,0 +1,284 @@
+{
+  "configuration" : { },
+  "description" : "How a commit becomes a running pod: branch-protected merge, secret-less image build, pull-based delivery",
+  "documentation" : { },
+  "id" : 1,
+  "lastModifiedDate" : "2026-07-31T16:45:23Z",
+  "model" : {
+    "people" : [ {
+      "id" : "1",
+      "name" : "Developer",
+      "properties" : {
+        "structurizr.dsl.identifier" : "developer"
+      },
+      "relationships" : [ {
+        "destinationId" : "3",
+        "id" : "10",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      }, {
+        "destinationId" : "2",
+        "id" : "11",
+        "linkedRelationshipId" : "10",
+        "sourceId" : "1"
+      } ],
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "group" : "GitHub repository",
+        "id" : "3",
+        "name" : "Pull request",
+        "properties" : {
+          "structurizr.dsl.identifier" : "delivery.pr"
+        },
+        "relationships" : [ {
+          "description" : "1",
+          "destinationId" : "5",
+          "id" : "12",
+          "sourceId" : "3",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,CICD",
+        "technology" : "feature branch"
+      }, {
+        "documentation" : { },
+        "group" : "GitHub repository",
+        "id" : "4",
+        "name" : "master",
+        "properties" : {
+          "structurizr.dsl.identifier" : "delivery.master"
+        },
+        "relationships" : [ {
+          "description" : "2",
+          "destinationId" : "6",
+          "id" : "14",
+          "sourceId" : "4",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,CICD",
+        "technology" : "source of truth"
+      }, {
+        "documentation" : { },
+        "id" : "5",
+        "name" : "Branch protection",
+        "properties" : {
+          "structurizr.dsl.identifier" : "delivery.protection"
+        },
+        "relationships" : [ {
+          "destinationId" : "4",
+          "id" : "13",
+          "sourceId" : "5",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Edge",
+        "technology" : "4 required checks"
+      }, {
+        "documentation" : { },
+        "id" : "6",
+        "name" : "Container image",
+        "properties" : {
+          "structurizr.dsl.identifier" : "delivery.image"
+        },
+        "relationships" : [ {
+          "destinationId" : "9",
+          "id" : "18",
+          "sourceId" : "6",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Microsoft Azure - Container Registries",
+        "technology" : "Registry · commit-SHA tag"
+      }, {
+        "documentation" : { },
+        "id" : "7",
+        "name" : "Microsoft Entra ID",
+        "properties" : {
+          "structurizr.dsl.identifier" : "delivery.entra"
+        },
+        "relationships" : [ {
+          "destinationId" : "6",
+          "id" : "15",
+          "sourceId" : "7",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Microsoft Azure - Azure Active Directory",
+        "technology" : "OIDC federated · no secret"
+      }, {
+        "documentation" : { },
+        "id" : "8",
+        "name" : "Argo CD",
+        "properties" : {
+          "structurizr.dsl.identifier" : "delivery.argo"
+        },
+        "relationships" : [ {
+          "destinationId" : "4",
+          "id" : "16",
+          "sourceId" : "8",
+          "tags" : "Relationship"
+        }, {
+          "description" : "3",
+          "destinationId" : "9",
+          "id" : "17",
+          "sourceId" : "8",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Edge",
+        "technology" : "GitOps · auto-sync"
+      }, {
+        "documentation" : { },
+        "id" : "9",
+        "name" : "AKS pods",
+        "properties" : {
+          "structurizr.dsl.identifier" : "delivery.aks"
+        },
+        "tags" : "Element,Container,Microsoft Azure - Kubernetes Services",
+        "technology" : "aks-antkart-dev"
+      } ],
+      "documentation" : { },
+      "id" : "2",
+      "name" : "AntKart delivery",
+      "properties" : {
+        "structurizr.dsl.identifier" : "delivery"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "AntKart — DevOps",
+  "properties" : {
+    "structurizr.inspection.error" : "28",
+    "structurizr.dsl" : "LyoKICogQW50S2FydCDigJQgRGV2T3BzIChoZXJvIGRpYWdyYW0pCiAqCiAqIFF1ZXN0aW9uOiBob3cgZG9lcyBhIGNvbW1pdCBiZWNvbWUgYSBydW5uaW5nIHBvZD8KICoKICogVEhFIFNIQVBFIOKAlCBvbmUgc3RyYWlnaHQgbGVmdC10by1yaWdodCBzdG9yeSwgdGhyZWUgbnVtYmVyZWQgYmVhdHMuIFRoZSBHaXRIdWIKICogcmVwb3NpdG9yeSAocHVsbCByZXF1ZXN0ICsgbWFzdGVyKSBzaXRzIGF0IHRoZSBsZWZ0LiBUaGUgdmVyYnMgYW5kIHRoZSBkZXRhaWwgbGl2ZQogKiBpbiB0aGUgUkVBRE1FIGxlZ2VuZCB1bmRlciB0aGUgaW1hZ2U7IHRoZSBkaWFncmFtIGl0c2VsZiBzdGF5cyBsaWdodC4KICoKICogICBEZXZlbG9wZXIgb3BlbnMgYSBwdWxsIHJlcXVlc3QsIHRoZW46CiAqICAgICAxICBCcmFuY2ggcHJvdGVjdGlvbiDigJQgdGhlIHJlcXVpcmVkIGNoZWNrcyBtdXN0IHBhc3MsIHRoZW4gdGhlIGNvZGUgbWVyZ2VzLgogKiAgICAgMiAgVGhlIGNvbnRhaW5lciBpbWFnZSBpcyByZWJ1aWx0IGFuZCBwdXNoZWQgKGltbXV0YWJsZSBjb21taXQtU0hBIHRhZykuIENECiAqICAgICAgICBhdXRoZW50aWNhdGVzIHRvIEF6dXJlIHdpdGggYW4gRW50cmEgT0lEQyBmZWRlcmF0ZWQgY3JlZGVudGlhbCDigJQgbm8gc2VjcmV0LgogKiAgICAgMyAgQXJnbyBDRCAoR2l0T3BzKSByZWFkcyBtYXN0ZXIgYW5kIHVwZGF0ZXMgdGhlIHBvZHMgb24gQUtTLiBOb3RoaW5nIGlzIHB1c2hlZAogKiAgICAgICAgdG8gdGhlIGNsdXN0ZXIg4oCUIEFyZ28gcHVsbHMsIGFuZCB0aGUga3ViZWxldCBwdWxscyB0aGUgaW1hZ2UuCiAqCiAqIFRoZSB0aHJlZSBDSSBjaGVja3MgKGJ1aWxkL3Rlc3QsIFNvbmFyQ2xvdWQsIFRyaXZ5KSBhcmUgZGVsaWJlcmF0ZWx5IE5PVCBkcmF3biBhcwogKiBzZXBhcmF0ZSBib3hlcyDigJQgdGhleSBhcmUgIjQgcmVxdWlyZWQgY2hlY2tzIiBpbnNpZGUgQnJhbmNoIHByb3RlY3Rpb24sIGFuZCB0aGUKICogbGVnZW5kIHNwZWxscyB0aGVtIG91dC4gVGhhdCBpcyB3aGF0IGtlZXBzIHRoaXMgZGlhZ3JhbSBmcm9tIGdldHRpbmcgaGVhdnkuCiAqCiAqIFJFTkRFUgogKiAgIGRvY2tlciBydW4gLWl0IC0tcm0gLXAgODA4MDo4MDgwIFwKICogICAgIC12ICJDOlxVc2Vyc1xzZWVzYVxPbmVEcml2ZVxEZXNrdG9wXEFudENhcnRcQW50S2FydC1TcmMzXGRvY3NcQzRSZW5kZXJzXGhlcm8tZGV2b3BzOi91c3IvbG9jYWwvc3RydWN0dXJpenIiIFwKICogICAgIHN0cnVjdHVyaXpyL3N0cnVjdHVyaXpyIGxvY2FsCiAqCiAqIFRXTy1QSEFTRTogYXV0b0xheW91dCBPTiBmb3Igcm91Z2ggcmFua3MsIHRoZW4gQ09NTUVOVCBJVCBPVVQgYmVmb3JlIGRyYWdnaW5nLgogKiBUYXJnZXQgbGF5b3V0IChsZWZ0IHRvIHJpZ2h0KTogRGV2ZWxvcGVyLCB0aGVuIHRoZSBHaXRIdWIgcmVwb3NpdG9yeSBib3ggKHB1bGwKICogcmVxdWVzdCBhYm92ZSBtYXN0ZXIpLCBCcmFuY2ggcHJvdGVjdGlvbiBqdXN0IHJpZ2h0IG9mIHRoZSByZXBvIHJldHVybmluZyBpbnRvCiAqIG1hc3RlciwgdGhlbiBDb250YWluZXIgaW1hZ2UsIHRoZW4gQXJnbyBDRCBhbmQgQUtTIHBvZHMgYXQgdGhlIGZhciByaWdodC4gRW50cmEgSUQKICogc2l0cyBiZWxvdy9iZXNpZGUgdGhlIENvbnRhaW5lciBpbWFnZSwgaXRzIGFycm93IGZlZWRpbmcgdGhlIHB1c2guIFRoZSBpbWFnZSAtPiBwb2RzCiAqIHB1bGwgYXJyb3cgYW5kIHRoZSBBcmdvIC0+IG1hc3RlciByZWFkIGFycm93IHBvaW50IGJhY2sgYXQgdGhlaXIgc291cmNlIG9uIHB1cnBvc2UuCiAqLwoKd29ya3NwYWNlICJBbnRLYXJ0IOKAlCBEZXZPcHMiICJIb3cgYSBjb21taXQgYmVjb21lcyBhIHJ1bm5pbmcgcG9kOiBicmFuY2gtcHJvdGVjdGVkIG1lcmdlLCBzZWNyZXQtbGVzcyBpbWFnZSBidWlsZCwgcHVsbC1iYXNlZCBkZWxpdmVyeSIgewoKICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwKCiAgICBtb2RlbCB7CgogICAgICAgIGRldmVsb3BlciA9IHBlcnNvbiAiRGV2ZWxvcGVyIiAiIiB7CiAgICAgICAgICAgIHRhZ3MgIlBlcnNvbiIKICAgICAgICB9CgogICAgICAgIGRlbGl2ZXJ5ID0gc29mdHdhcmVTeXN0ZW0gIkFudEthcnQgZGVsaXZlcnkiICIiIHsKCiAgICAgICAgICAgIGdyb3VwICJHaXRIdWIgcmVwb3NpdG9yeSIgewogICAgICAgICAgICAgICAgcHIgPSBjb250YWluZXIgIlB1bGwgcmVxdWVzdCIgIiIgImZlYXR1cmUgYnJhbmNoIiB7CiAgICAgICAgICAgICAgICAgICAgdGFncyAiQ0lDRCIKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgIG1hc3RlciA9IGNvbnRhaW5lciAibWFzdGVyIiAiIiAic291cmNlIG9mIHRydXRoIiB7CiAgICAgICAgICAgICAgICAgICAgdGFncyAiQ0lDRCIKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfQoKICAgICAgICAgICAgcHJvdGVjdGlvbiA9IGNvbnRhaW5lciAiQnJhbmNoIHByb3RlY3Rpb24iICIiICI0IHJlcXVpcmVkIGNoZWNrcyIgewogICAgICAgICAgICAgICAgdGFncyAiRWRnZSIKICAgICAgICAgICAgfQoKICAgICAgICAgICAgaW1hZ2UgPSBjb250YWluZXIgIkNvbnRhaW5lciBpbWFnZSIgIiIgIlJlZ2lzdHJ5IMK3IGNvbW1pdC1TSEEgdGFnIiB7CiAgICAgICAgICAgICAgICB0YWdzICJNaWNyb3NvZnQgQXp1cmUgLSBDb250YWluZXIgUmVnaXN0cmllcyIKICAgICAgICAgICAgfQogICAgICAgICAgICBlbnRyYSA9IGNvbnRhaW5lciAiTWljcm9zb2Z0IEVudHJhIElEIiAiIiAiT0lEQyBmZWRlcmF0ZWQgwrcgbm8gc2VjcmV0IiB7CiAgICAgICAgICAgICAgICB0YWdzICJNaWNyb3NvZnQgQXp1cmUgLSBBenVyZSBBY3RpdmUgRGlyZWN0b3J5IgogICAgICAgICAgICB9CgogICAgICAgICAgICBhcmdvID0gY29udGFpbmVyICJBcmdvIENEIiAiIiAiR2l0T3BzIMK3IGF1dG8tc3luYyIgewogICAgICAgICAgICAgICAgdGFncyAiRWRnZSIKICAgICAgICAgICAgfQogICAgICAgICAgICBha3MgPSBjb250YWluZXIgIkFLUyBwb2RzIiAiIiAiYWtzLWFudGthcnQtZGV2IiB7CiAgICAgICAgICAgICAgICB0YWdzICJNaWNyb3NvZnQgQXp1cmUgLSBLdWJlcm5ldGVzIFNlcnZpY2VzIgogICAgICAgICAgICB9CiAgICAgICAgfQoKICAgICAgICAvLyBEZXZlbG9wZXIgb3BlbnMgdGhlIFBSICh0aGUgc2V0dXAg4oCUIHVubnVtYmVyZWQpLgogICAgICAgIGRldmVsb3BlciAtPiBkZWxpdmVyeS5wciAiIgoKICAgICAgICAvLyAxIOKAlCBicmFuY2ggcHJvdGVjdGlvbiwgdGhlbiBtZXJnZS4KICAgICAgICBkZWxpdmVyeS5wciAtPiBkZWxpdmVyeS5wcm90ZWN0aW9uICIxIgogICAgICAgIGRlbGl2ZXJ5LnByb3RlY3Rpb24gLT4gZGVsaXZlcnkubWFzdGVyICIiCgogICAgICAgIC8vIDIg4oCUIHVwZGF0ZSB0aGUgY29udGFpbmVyIGltYWdlLCBhdXRoZW50aWNhdGVkIHNlY3JldC1sZXNzbHkuCiAgICAgICAgZGVsaXZlcnkubWFzdGVyIC0+IGRlbGl2ZXJ5LmltYWdlICIyIgogICAgICAgIGRlbGl2ZXJ5LmVudHJhIC0+IGRlbGl2ZXJ5LmltYWdlICIiCgogICAgICAgIC8vIDMg4oCUIEdpdE9wcyB1cGRhdGVzIHRoZSBwb2RzOyBldmVyeXRoaW5nIHB1bGxzLgogICAgICAgIGRlbGl2ZXJ5LmFyZ28gLT4gZGVsaXZlcnkubWFzdGVyICIiCiAgICAgICAgZGVsaXZlcnkuYXJnbyAtPiBkZWxpdmVyeS5ha3MgIjMiCiAgICAgICAgZGVsaXZlcnkuaW1hZ2UgLT4gZGVsaXZlcnkuYWtzICIiCiAgICB9CgogICAgdmlld3MgewoKICAgICAgICB0aGVtZXMgaHR0cHM6Ly9zdGF0aWMuc3RydWN0dXJpenIuY29tL3RoZW1lcy9taWNyb3NvZnQtYXp1cmUtMjAyMS4wMS4yNi90aGVtZS5qc29uCgogICAgICAgIGNvbnRhaW5lciBkZWxpdmVyeSAiRGV2T3BzIiAiSG93IGRvZXMgYSBjb21taXQgYmVjb21lIGEgcnVubmluZyBwb2Q/IiB7CiAgICAgICAgICAgIGluY2x1ZGUgKgogICAgICAgICAgICAvLyBQSEFTRSBPTkUuIENvbW1lbnQgb3V0IGJlZm9yZSBoYW5kLWFycmFuZ2luZywgYW5kIGxlYXZlIGl0IGNvbW1lbnRlZC4KICAgICAgICAgICAgYXV0b0xheW91dCBsciAxMDAgOTAKICAgICAgICB9CgogICAgICAgIHN0eWxlcyB7CiAgICAgICAgICAgIGVsZW1lbnQgIkVsZW1lbnQiIHsKICAgICAgICAgICAgICAgIGRlc2NyaXB0aW9uIGZhbHNlCiAgICAgICAgICAgICAgICBtZXRhZGF0YSB0cnVlCiAgICAgICAgICAgICAgICBmb250U2l6ZSAzMAogICAgICAgICAgICAgICAgd2lkdGggNDgwCiAgICAgICAgICAgICAgICBoZWlnaHQgMjYwCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiR3JvdXAiIHsKICAgICAgICAgICAgICAgIHN0cm9rZVdpZHRoIDgKICAgICAgICAgICAgICAgIGNvbG9yICM1RjVFNUEKICAgICAgICAgICAgICAgIGZvbnRTaXplIDM4CiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiUGVyc29uIiB7CiAgICAgICAgICAgICAgICBzaGFwZSBQZXJzb24KICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzVGNUU1QQogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIlNvZnR3YXJlIFN5c3RlbSIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjODg4NzgwCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiU2VydmljZSIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjMUQ5RTc1CiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgICAgICBzaGFwZSBSb3VuZGVkQm94CiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiRWRnZSIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjN0Y3N0RECiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgICAgICBzaGFwZSBSb3VuZGVkQm94CiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiQ0lDRCIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjNjM5OTIyCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgICAgICBzaGFwZSBSb3VuZGVkQm94CiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiTWljcm9zb2Z0IEF6dXJlIC0gQXp1cmUgQWN0aXZlIERpcmVjdG9yeSIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjQkE3NTE3CiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiTWljcm9zb2Z0IEF6dXJlIC0gQ29udGFpbmVyIFJlZ2lzdHJpZXMiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzE4NUZBNQogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIk1pY3Jvc29mdCBBenVyZSAtIEt1YmVybmV0ZXMgU2VydmljZXMiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzE4NUZBNQogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICB9CiAgICAgICAgICAgIHJlbGF0aW9uc2hpcCAiUmVsYXRpb25zaGlwIiB7CiAgICAgICAgICAgICAgICBkYXNoZWQgZmFsc2UKICAgICAgICAgICAgICAgIHRoaWNrbmVzcyA0CiAgICAgICAgICAgICAgICBmb250U2l6ZSA0MAogICAgICAgICAgICAgICAgcm91dGluZyBPcnRob2dvbmFsCiAgICAgICAgICAgIH0KICAgICAgICB9CiAgICB9Cn0=",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : {
+        "elements" : [ {
+          "background" : "#639922",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "CICD"
+        }, {
+          "background" : "#7f77dd",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Edge"
+        }, {
+          "description" : false,
+          "fontSize" : 30,
+          "height" : 260,
+          "metadata" : true,
+          "tag" : "Element",
+          "width" : 480
+        }, {
+          "color" : "#5f5e5a",
+          "fontSize" : 38,
+          "strokeWidth" : 8,
+          "tag" : "Group"
+        }, {
+          "background" : "#ba7517",
+          "color" : "#ffffff",
+          "tag" : "Microsoft Azure - Azure Active Directory"
+        }, {
+          "background" : "#185fa5",
+          "color" : "#ffffff",
+          "tag" : "Microsoft Azure - Container Registries"
+        }, {
+          "background" : "#185fa5",
+          "color" : "#ffffff",
+          "tag" : "Microsoft Azure - Kubernetes Services"
+        }, {
+          "background" : "#5f5e5a",
+          "color" : "#ffffff",
+          "shape" : "Person",
+          "tag" : "Person"
+        }, {
+          "background" : "#1d9e75",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Service"
+        }, {
+          "background" : "#888780",
+          "color" : "#ffffff",
+          "tag" : "Software System"
+        } ],
+        "relationships" : [ {
+          "dashed" : false,
+          "fontSize" : 40,
+          "routing" : "Orthogonal",
+          "tag" : "Relationship",
+          "thickness" : 4
+        } ]
+      },
+      "terminology" : { },
+      "themes" : [ "https://static.structurizr.com/themes/microsoft-azure-2021.01.26/theme.json" ]
+    },
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 90,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "description" : "How does a commit become a running pod?",
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "3",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "8",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "9",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "key" : "DevOps",
+      "name" : "Container View: AntKart delivery",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "10"
+      }, {
+        "id" : "12"
+      }, {
+        "id" : "13"
+      }, {
+        "id" : "14"
+      }, {
+        "id" : "15"
+      }, {
+        "id" : "16"
+      }, {
+        "id" : "17"
+      }, {
+        "id" : "18"
+      } ],
+      "softwareSystemId" : "2"
+    } ]
+  }
+}

@@ -2,171 +2,128 @@
  * AntKart — DevOps (hero diagram)
  *
  * Question: how does a commit become a running pod?
- * Models the delivery pipeline as containers grouped Source → Quality gate →
- * Build and publish → GitOps, sourced from the twelve GitHub Actions workflows
- * (.github/workflows, a CI + CD pair per service) and deploy/argocd. CD never touches
- * the cluster; it commits a tag bump to Git and Argo CD reconciles.
+ *
+ * THE SHAPE — one straight left-to-right story, three numbered beats. The GitHub
+ * repository (pull request + master) sits at the left. The verbs and the detail live
+ * in the README legend under the image; the diagram itself stays light.
+ *
+ *   Developer opens a pull request, then:
+ *     1  Branch protection — the required checks must pass, then the code merges.
+ *     2  The container image is rebuilt and pushed (immutable commit-SHA tag). CD
+ *        authenticates to Azure with an Entra OIDC federated credential — no secret.
+ *     3  Argo CD (GitOps) reads master and updates the pods on AKS. Nothing is pushed
+ *        to the cluster — Argo pulls, and the kubelet pulls the image.
+ *
+ * The three CI checks (build/test, SonarCloud, Trivy) are deliberately NOT drawn as
+ * separate boxes — they are "4 required checks" inside Branch protection, and the
+ * legend spells them out. That is what keeps this diagram from getting heavy.
  *
  * RENDER
  *   docker run -it --rm -p 8080:8080 \
  *     -v "C:\Users\seesa\OneDrive\Desktop\AntCart\AntKart-Src3\docs\C4Renders\hero-devops:/usr/local/structurizr" \
  *     structurizr/structurizr local
- *   Open http://localhost:8080. Edit, save, press F5. Never restart the container.
  *
- * TWO-PHASE WORKFLOW
- *   Phase one: autoLayout is ON to get the left-to-right pipeline flow.
- *   Phase two: COMMENT OUT the autoLayout line, refresh, then hand-arrange the four
- *              stages left to right with the developer at the far left and the pod at
- *              the far right.
- *
- * IMPORTANT — autoLayout WARNING
- *   autoLayout recalculates on every load and DISCARDS hand placement. Once you start
- *   dragging, leave autoLayout commented out permanently. Placement autosaves into
- *   workspace.json (generated — do not hand-edit; .structurizr/ is gitignored cache).
+ * TWO-PHASE: autoLayout ON for rough ranks, then COMMENT IT OUT before dragging.
+ * Target layout (left to right): Developer, then the GitHub repository box (pull
+ * request above master), Branch protection just right of the repo returning into
+ * master, then Container image, then Argo CD and AKS pods at the far right. Entra ID
+ * sits below/beside the Container image, its arrow feeding the push. The image -> pods
+ * pull arrow and the Argo -> master read arrow point back at their source on purpose.
  */
 
-workspace "AntKart — DevOps" "How a commit becomes a running pod: CI quality gate, secret-less CD, GitOps reconciliation" {
+workspace "AntKart — DevOps" "How a commit becomes a running pod: branch-protected merge, secret-less image build, pull-based delivery" {
 
     !identifiers hierarchical
 
     model {
 
-        developer = person "Developer" "Commits code and opens a pull request." {
+        developer = person "Developer" "" {
             tags "Person"
         }
 
-        gitRepo = softwareSystem "Git repository (master)" "Application source plus deploy/helm/values — Argo CD's desired state." {
-            tags "External"
-        }
+        delivery = softwareSystem "AntKart delivery" "" {
 
-        acr = softwareSystem "Azure Container Registry" "acrantkartdev — immutable, commit-SHA-tagged images." {
-            tags "Managed"
-        }
-
-        pipeline = softwareSystem "AntKart delivery pipeline" "Twelve GitHub Actions workflows — a CI + CD pair per service — that carry a commit to a running pod." {
-
-            group "Source" {
-                pr = container "Pull request → master" "Path-filtered to the service, AK.BuildingBlocks and tests." "GitHub Actions" {
+            group "GitHub repository" {
+                pr = container "Pull request" "" "feature branch" {
+                    tags "CICD"
+                }
+                master = container "master" "" "source of truth" {
                     tags "CICD"
                 }
             }
 
-            group "Quality gate (service-ci.yml)" {
-                buildtest = container "build-test" "restore · build Release · unit + integration tests · OpenCover coverage." "job" {
-                    tags "CICD"
-                }
-                sonar = container "sonar" "SonarCloud analysis. needs build-test." "job" {
-                    tags "CICD"
-                }
-                trivy = container "trivy" "Filesystem + Dockerfile scan; HIGH/CRITICAL fails the build." "job" {
-                    tags "CICD"
-                }
-                branchProtection = container "Branch protection — master-protection" "Merge blocked until four required checks are green: build-test, sonar, trivy, SonarCloud Code Analysis." "ruleset" {
-                    tags "Identity"
-                }
+            protection = container "Branch protection" "" "4 required checks" {
+                tags "Edge"
             }
 
-            group "Build & publish (service-cd.yml)" {
-                cdOidc = container "azure/login (OIDC)" "id-ak-cicd-dev federated credential — no stored secret, AcrPush only." "job step" {
-                    tags "Identity"
-                }
-                buildImage = container "Build image · tag = commit SHA" "docker build with an immutable short-SHA tag." "job step" {
-                    tags "CICD"
-                }
-                tagBump = container "Bump image tag in Git" "yq sets .image.tag in deploy/helm/values; commit [skip ci] via CD_PUSH_TOKEN." "job step" {
-                    tags "CICD"
-                }
+            image = container "Container image" "" "Registry · commit-SHA tag" {
+                tags "Microsoft Azure - Container Registries"
+            }
+            entra = container "Microsoft Entra ID" "" "OIDC federated · no secret" {
+                tags "Microsoft Azure - Azure Active Directory"
             }
 
-            group "GitOps" {
-                argo = container "Argo CD" "Detects drift and auto-syncs (self-heal, prune false) across six Applications." "in-cluster" {
-                    tags "CICD"
-                }
-                pod = container "New pod on AKS" "Runs exactly the image the commit named (:sha)." "workload" {
-                    tags "Service"
-                }
+            argo = container "Argo CD" "" "GitOps · auto-sync" {
+                tags "Edge"
+            }
+            aks = container "AKS pods" "" "aks-antkart-dev" {
+                tags "Microsoft Azure - Kubernetes Services"
             }
         }
 
-        // ── The path: commit → gate → merge → build → tag bump → reconcile → pod ──
-        developer -> gitRepo "Commits & opens PR"
-        developer -> pipeline.pr "Opens"
-        gitRepo -> pipeline.pr "Triggers CI"
-        pipeline.pr -> pipeline.buildtest "Runs"
-        pipeline.buildtest -> pipeline.sonar "then"
-        pipeline.pr -> pipeline.trivy "Runs"
-        pipeline.buildtest -> pipeline.branchProtection "Reports check"
-        pipeline.sonar -> pipeline.branchProtection "Reports check"
-        pipeline.trivy -> pipeline.branchProtection "Reports check"
-        pipeline.branchProtection -> gitRepo "Merge to master (only when green)"
-        gitRepo -> pipeline.cdOidc "Push to master triggers CD"
-        pipeline.cdOidc -> pipeline.buildImage "Authenticated build"
-        pipeline.buildImage -> acr "Pushes :sha"
-        pipeline.buildImage -> pipeline.tagBump "then"
-        pipeline.tagBump -> gitRepo "Commits tag bump ([skip ci])"
-        gitRepo -> pipeline.argo "Watched by"
-        pipeline.argo -> pipeline.pod "Auto-sync + self-heal deploys"
-        acr -> pipeline.pod "Image pulled by"
+        // Developer opens the PR (the setup — unnumbered).
+        developer -> delivery.pr ""
+
+        // 1 — branch protection, then merge.
+        delivery.pr -> delivery.protection "1"
+        delivery.protection -> delivery.master ""
+
+        // 2 — update the container image, authenticated secret-lessly.
+        delivery.master -> delivery.image "2"
+        delivery.entra -> delivery.image ""
+
+        // 3 — GitOps updates the pods; everything pulls.
+        delivery.argo -> delivery.master ""
+        delivery.argo -> delivery.aks "3"
+        delivery.image -> delivery.aks ""
     }
 
     views {
 
         themes https://static.structurizr.com/themes/microsoft-azure-2021.01.26/theme.json
 
-        container pipeline "DevOps" "How does a commit become a running pod? Source, quality gate, build & publish, GitOps." {
+        container delivery "DevOps" "How does a commit become a running pod?" {
             include *
-            // PHASE ONE: autoLayout is ON. Before hand-arranging, COMMENT OUT the next
-            // line, refresh, then drag. Leave it commented once you start dragging.
-            autoLayout lr 300 150
+            // PHASE ONE. Comment out before hand-arranging, and leave it commented.
+            autoLayout lr 100 90
         }
 
         styles {
-            // Hide descriptions. Keep metadata — that is the technology line.
             element "Element" {
-                description true
+                description false
                 metadata true
+                fontSize 30
+                width 480
+                height 260
             }
             element "Group" {
-                strokeWidth 4
+                strokeWidth 8
                 color #5F5E5A
-                fontSize 24
+                fontSize 38
             }
             element "Person" {
                 shape Person
                 background #5F5E5A
                 color #ffffff
-                fontSize 26
             }
             element "Software System" {
                 background #888780
-                color #ffffff
-            }
-            element "External" {
-                background #888780
-                color #ffffff
-            }
-            element "Identity" {
-                background #BA7517
-                color #ffffff
-            }
-            element "Managed" {
-                background #378ADD
                 color #ffffff
             }
             element "Service" {
                 background #1D9E75
                 color #ffffff
                 shape RoundedBox
-            }
-            element "Serverless" {
-                background #0F6E56
-                color #ffffff
-                shape RoundedBox
-            }
-            element "Datastore" {
-                background #185FA5
-                color #ffffff
-                shape Cylinder
             }
             element "Edge" {
                 background #7F77DD
@@ -178,32 +135,22 @@ workspace "AntKart — DevOps" "How a commit becomes a running pod: CI quality g
                 color #ffffff
                 shape RoundedBox
             }
-            element "Infra" {
-                background #888780
+            element "Microsoft Azure - Azure Active Directory" {
+                background #BA7517
                 color #ffffff
             }
-            element "Planned" {
-                background #5F5E5A
+            element "Microsoft Azure - Container Registries" {
+                background #185FA5
                 color #ffffff
-                border dashed
-                strokeWidth 3
             }
-            element "Issue" {
-                background #E24B4A
+            element "Microsoft Azure - Kubernetes Services" {
+                background #185FA5
                 color #ffffff
-                border dashed
-                strokeWidth 3
             }
             relationship "Relationship" {
                 dashed false
-                thickness 2
-                fontSize 22
-                routing Orthogonal
-            }
-            relationship "Planned" {
-                dashed true
-                thickness 2
-                fontSize 22
+                thickness 4
+                fontSize 40
                 routing Orthogonal
             }
         }

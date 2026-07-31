@@ -73,10 +73,16 @@ The six services run on a managed AKS cluster with Azure CNI Overlay and an OIDC
 
 ## DevOps
 
-> **Diagram: DevOps** — _not yet drawn_
-> **Must show:** commit to running pod - pull request, the quality gate of build, test, SonarCloud and Trivy with four required checks and branch protection, merge, CD authenticating to Azure by OIDC with no stored secret, an image tagged with the commit SHA, push to Container Registry, the tag bump committed back to Git, and Argo CD auto-sync with self-heal. Answers "how does it ship".
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/C4Renders/renders/DevOps-dark.svg">
+  <img alt="AntKart delivery pipeline: a developer opens a pull request; branch protection gates the merge to master; on merge CD rebuilds a commit-SHA-tagged container image and pushes it to the Azure Container Registry using an Entra OIDC federated credential with no stored secret; and Argo CD updates the pods on AKS by pulling from Git" src="docs/C4Renders/renders/DevOps.svg">
+</picture>
 
-Delivery is a CI quality gate on every pull request and a CD pipeline on merge. CD never touches the cluster — it authenticates to Azure by OIDC, pushes a commit-SHA-tagged image, and bumps the tag in Git for Argo CD to reconcile. No cluster credentials live in CI/CD.
+The developer opens a pull request; from there delivery is automatic and pull-based:
+
+1. **Branch protection** — the pull request must pass four required checks (build-test, unit + integration tests, SonarCloud, Trivy) before it can merge to `master`.
+2. **Container image** — on merge, CD rebuilds the image with an immutable commit-SHA tag and pushes it to the Azure Container Registry, authenticating to Azure with an Entra **OIDC federated credential — no stored secret**.
+3. **GitOps** — Argo CD reads `master`, syncs, and updates the pods on AKS (auto-sync + self-heal). Argo pulls from Git and the kubelet pulls the image — nothing is pushed to the cluster.
 
 → [DevOps](docs/development/4-devops.md)
 
