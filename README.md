@@ -44,8 +44,10 @@ The platform runs entirely on managed Azure services — Cosmos DB, PostgreSQL, 
 
 ## Kubernetes
 
-> **Diagram: Kubernetes** — _not yet drawn_
-> **Must show:** the cluster and node pool, the namespaces antkart, ingress-nginx, cert-manager and argocd, the deployments and their replica counts, which services are ClusterIP-only versus reachable through ingress, TLS termination, and the public path to api.antkart.in. Answers "how is it orchestrated".
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/C4Renders/renders/Kubernetes-dark.svg">
+  <img alt="AntKart on Azure Kubernetes Service: one cluster with four namespaces, where ingress-nginx terminates TLS and routes only to the API gateway, the five remaining services are ClusterIP-only, cert-manager supplies the certificate, and Argo CD applies desired state from Git" src="docs/C4Renders/renders/Kubernetes.svg">
+</picture>
 
 The six services run on a managed AKS cluster with Azure CNI Overlay and an OIDC issuer, deployed from one generic Helm chart parameterised per service. Only the gateway is exposed through ingress with cert-manager TLS; the rest are ClusterIP-only. Pods reach Azure with no stored secret via workload identity.
 

@@ -67,10 +67,23 @@ workspace "AntKart — Kubernetes" "How it is orchestrated: one AKS cluster, fou
                     }
                 }
             }
-        }
 
-        // The public path into the cluster (top-level identifiers — nesting shows the rest).
-        internet -> cluster "HTTPS - ingress-nginx (TLS) - ak-gateway"
+            // ── The public path in: exactly one door ──────────────────────────
+            internet -> cluster.nodepool.nsIngress.ingress "HTTPS to the public LoadBalancer"
+            cluster.nodepool.nsIngress.ingress -> cluster.nodepool.nsAntkart.gateway "Terminates TLS, routes /gateway/*"
+            cluster.nodepool.nsCert.certmgr -> cluster.nodepool.nsIngress.ingress "Supplies the ak-gateway-tls certificate"
+
+            // ── Inside the cluster: only the gateway talks to the services ────
+            cluster.nodepool.nsAntkart.gateway -> cluster.nodepool.nsAntkart.products "Catalogue requests"
+            cluster.nodepool.nsAntkart.gateway -> cluster.nodepool.nsAntkart.cart "Cart requests"
+            cluster.nodepool.nsAntkart.gateway -> cluster.nodepool.nsAntkart.order "Order requests"
+            cluster.nodepool.nsAntkart.gateway -> cluster.nodepool.nsAntkart.payments "Payment requests"
+            cluster.nodepool.nsAntkart.products -> cluster.nodepool.nsAntkart.discount "Discount lookup" "gRPC"
+
+            // ── How the workloads got there ──────────────────────────────────
+            cluster.nodepool.nsArgo.argocd -> cluster.nodepool.nsAntkart.gateway "Applies desired state from Git"
+
+        }
     }
 
     views {
@@ -81,7 +94,7 @@ workspace "AntKart — Kubernetes" "How it is orchestrated: one AKS cluster, fou
             include *
             // PHASE ONE: autoLayout is ON. Before hand-arranging, COMMENT OUT the next
             // line, refresh, then drag. Leave it commented once you start dragging.
-            autoLayout tb 300 150
+            autoLayout lr 120 160
         }
 
         styles {

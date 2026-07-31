@@ -1,0 +1,438 @@
+{
+  "configuration" : { },
+  "description" : "How it is orchestrated: one AKS cluster, four namespaces, the gateway alone exposed",
+  "documentation" : { },
+  "id" : 1,
+  "lastModifiedDate" : "2026-07-31T11:51:06Z",
+  "model" : {
+    "deploymentNodes" : [ {
+      "description" : "GoDaddy A record points the domain at the ingress public IP.",
+      "environment" : "Dev",
+      "id" : "1",
+      "instances" : "1",
+      "name" : "Internet — api.antkart.in",
+      "properties" : {
+        "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.internet"
+      },
+      "relationships" : [ {
+        "description" : "HTTPS to the public LoadBalancer",
+        "destinationId" : "12",
+        "id" : "17",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Deployment Node,External",
+      "technology" : "Public"
+    }, {
+      "children" : [ {
+        "children" : [ {
+          "description" : "The six services (one generic Helm chart per service).",
+          "environment" : "Dev",
+          "id" : "4",
+          "infrastructureNodes" : [ {
+            "description" : "Ocelot. The ONLY workload reachable through ingress; validates the JWT and routes.",
+            "environment" : "Dev",
+            "id" : "5",
+            "name" : "ak-gateway",
+            "properties" : {
+              "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.cluster.nodepool.nsAntkart.gateway"
+            },
+            "relationships" : [ {
+              "description" : "Catalogue requests",
+              "destinationId" : "6",
+              "id" : "20",
+              "sourceId" : "5",
+              "tags" : "Relationship"
+            }, {
+              "description" : "Cart requests",
+              "destinationId" : "7",
+              "id" : "21",
+              "sourceId" : "5",
+              "tags" : "Relationship"
+            }, {
+              "description" : "Order requests",
+              "destinationId" : "8",
+              "id" : "22",
+              "sourceId" : "5",
+              "tags" : "Relationship"
+            }, {
+              "description" : "Payment requests",
+              "destinationId" : "9",
+              "id" : "23",
+              "sourceId" : "5",
+              "tags" : "Relationship"
+            } ],
+            "tags" : "Element,Infrastructure Node,Edge",
+            "technology" : "Deployment - 1 replica"
+          }, {
+            "description" : "Product catalogue. ClusterIP only.",
+            "environment" : "Dev",
+            "id" : "6",
+            "name" : "ak-products",
+            "properties" : {
+              "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.cluster.nodepool.nsAntkart.products"
+            },
+            "relationships" : [ {
+              "description" : "Discount lookup",
+              "destinationId" : "10",
+              "id" : "24",
+              "sourceId" : "6",
+              "tags" : "Relationship",
+              "technology" : "gRPC"
+            } ],
+            "tags" : "Element,Infrastructure Node,Service",
+            "technology" : "Deployment - 2 replicas"
+          }, {
+            "description" : "Shopping cart. ClusterIP only.",
+            "environment" : "Dev",
+            "id" : "7",
+            "name" : "ak-cart",
+            "properties" : {
+              "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.cluster.nodepool.nsAntkart.cart"
+            },
+            "tags" : "Element,Infrastructure Node,Service",
+            "technology" : "Deployment - 1 replica"
+          }, {
+            "description" : "Orders and the saga. ClusterIP only.",
+            "environment" : "Dev",
+            "id" : "8",
+            "name" : "ak-order",
+            "properties" : {
+              "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.cluster.nodepool.nsAntkart.order"
+            },
+            "tags" : "Element,Infrastructure Node,Service",
+            "technology" : "Deployment - 1 replica"
+          }, {
+            "description" : "Payments. ClusterIP only.",
+            "environment" : "Dev",
+            "id" : "9",
+            "name" : "ak-payments",
+            "properties" : {
+              "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.cluster.nodepool.nsAntkart.payments"
+            },
+            "tags" : "Element,Infrastructure Node,Service",
+            "technology" : "Deployment - 1 replica"
+          }, {
+            "description" : "Discount gRPC (TCP probes). ClusterIP only.",
+            "environment" : "Dev",
+            "id" : "10",
+            "name" : "ak-discount",
+            "properties" : {
+              "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.cluster.nodepool.nsAntkart.discount"
+            },
+            "tags" : "Element,Infrastructure Node,Service",
+            "technology" : "Deployment - 1 replica"
+          } ],
+          "instances" : "1",
+          "name" : "namespace: antkart",
+          "properties" : {
+            "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.cluster.nodepool.nsAntkart"
+          },
+          "tags" : "Element,Deployment Node",
+          "technology" : "namespace"
+        }, {
+          "description" : "Public entry point.",
+          "environment" : "Dev",
+          "id" : "11",
+          "infrastructureNodes" : [ {
+            "description" : "Public LoadBalancer. Terminates TLS and routes /gateway/* to ak-gateway.",
+            "environment" : "Dev",
+            "id" : "12",
+            "name" : "ingress-nginx controller",
+            "properties" : {
+              "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.cluster.nodepool.nsIngress.ingress"
+            },
+            "relationships" : [ {
+              "description" : "Terminates TLS, routes /gateway/*",
+              "destinationId" : "5",
+              "id" : "18",
+              "sourceId" : "12",
+              "tags" : "Relationship"
+            } ],
+            "tags" : "Element,Infrastructure Node,Edge",
+            "technology" : "Deployment"
+          } ],
+          "instances" : "1",
+          "name" : "namespace: ingress-nginx",
+          "properties" : {
+            "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.cluster.nodepool.nsIngress"
+          },
+          "tags" : "Element,Deployment Node",
+          "technology" : "namespace"
+        }, {
+          "description" : "Certificate automation.",
+          "environment" : "Dev",
+          "id" : "13",
+          "infrastructureNodes" : [ {
+            "description" : "Issues and renews the Let's Encrypt production certificate (secret ak-gateway-tls).",
+            "environment" : "Dev",
+            "id" : "14",
+            "name" : "cert-manager",
+            "properties" : {
+              "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.cluster.nodepool.nsCert.certmgr"
+            },
+            "relationships" : [ {
+              "description" : "Supplies the ak-gateway-tls certificate",
+              "destinationId" : "12",
+              "id" : "19",
+              "sourceId" : "14",
+              "tags" : "Relationship"
+            } ],
+            "tags" : "Element,Infrastructure Node,Edge",
+            "technology" : "Deployment"
+          } ],
+          "instances" : "1",
+          "name" : "namespace: cert-manager",
+          "properties" : {
+            "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.cluster.nodepool.nsCert"
+          },
+          "tags" : "Element,Deployment Node",
+          "technology" : "namespace"
+        }, {
+          "description" : "GitOps controller.",
+          "environment" : "Dev",
+          "id" : "15",
+          "infrastructureNodes" : [ {
+            "description" : "Auto-sync + self-heal (prune false) across six Applications, from Git.",
+            "environment" : "Dev",
+            "id" : "16",
+            "name" : "Argo CD",
+            "properties" : {
+              "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.cluster.nodepool.nsArgo.argocd"
+            },
+            "relationships" : [ {
+              "description" : "Applies desired state from Git",
+              "destinationId" : "5",
+              "id" : "25",
+              "sourceId" : "16",
+              "tags" : "Relationship"
+            } ],
+            "tags" : "Element,Infrastructure Node,CICD",
+            "technology" : "Deployment"
+          } ],
+          "instances" : "1",
+          "name" : "namespace: argocd",
+          "properties" : {
+            "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.cluster.nodepool.nsArgo"
+          },
+          "tags" : "Element,Deployment Node",
+          "technology" : "namespace"
+        } ],
+        "description" : "Two nodes.",
+        "environment" : "Dev",
+        "id" : "3",
+        "instances" : "1",
+        "name" : "System node pool",
+        "properties" : {
+          "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.cluster.nodepool"
+        },
+        "tags" : "Element,Deployment Node",
+        "technology" : "2 x Standard_D2s_v3"
+      } ],
+      "description" : "Azure CNI Overlay, OIDC issuer, workload identity.",
+      "environment" : "Dev",
+      "id" : "2",
+      "instances" : "1",
+      "name" : "AKS — aks-antkart-dev",
+      "properties" : {
+        "structurizr.dsl.identifier" : "774408a1-fa4d-4e05-8984-0ff755053d60.cluster"
+      },
+      "tags" : "Element,Deployment Node,Microsoft Azure - Kubernetes Services",
+      "technology" : "AKS"
+    } ]
+  },
+  "name" : "AntKart — Kubernetes",
+  "properties" : {
+    "structurizr.inspection.error" : "11",
+    "structurizr.dsl" : "LyoKICogQW50S2FydCDigJQgS3ViZXJuZXRlcyAoaGVybyBkaWFncmFtKQogKgogKiBRdWVzdGlvbjogaG93IGlzIGl0IG9yY2hlc3RyYXRlZD8KICogQSBERVBMT1lNRU5UIFZJRVcgb2YgdGhlIGNsdXN0ZXIuIFNvdXJjZWQgZnJvbSBkZXBsb3kvaGVsbSwgZGVwbG95L2FyZ29jZCBhbmQKICogZG9jcy9kZXZlbG9wbWVudC8zLWt1YmVybmV0ZXMubWQuIFNob3dzIHRoZSBjbHVzdGVyIGFuZCBpdHMgbm9kZSBwb29sOyB0aGUgbmFtZXNwYWNlcwogKiBhbnRrYXJ0LCBpbmdyZXNzLW5naW54LCBjZXJ0LW1hbmFnZXIgYW5kIGFyZ29jZDsgZWFjaCBkZXBsb3ltZW50IHdpdGggaXRzIHJlYWwgcmVwbGljYQogKiBjb3VudDsgd2hpY2ggd29ya2xvYWRzIGFyZSBDbHVzdGVySVAtb25seSB2cyByZWFjaGFibGUgdGhyb3VnaCBpbmdyZXNzOyBUTFMKICogdGVybWluYXRpb247IGFuZCB0aGUgcHVibGljIHBhdGggdG8gYXBpLmFudGthcnQuaW4uCiAqCiAqIFJFUExJQ0FTIOKAlCBvbmx5IGFrLXByb2R1Y3RzIG92ZXJyaWRlcyB0aGUgY2hhcnQgZGVmYXVsdCAocmVwbGljYUNvdW50IDIpOyB0aGUgY2hhcnQKICogZGVmYXVsdCBpcyAxLCBzbyBhay1nYXRld2F5LCBhay1jYXJ0LCBhay1vcmRlciwgYWstcGF5bWVudHMgYW5kIGFrLWRpc2NvdW50IHJ1biAxIGVhY2guCiAqCiAqIFJFTkRFUgogKiAgIGRvY2tlciBydW4gLWl0IC0tcm0gLXAgODA4MDo4MDgwIFwKICogICAgIC12ICJDOlxVc2Vyc1xzZWVzYVxPbmVEcml2ZVxEZXNrdG9wXEFudENhcnRcQW50S2FydC1TcmMzXGRvY3NcQzRSZW5kZXJzXGhlcm8ta3ViZXJuZXRlczovdXNyL2xvY2FsL3N0cnVjdHVyaXpyIiBcCiAqICAgICBzdHJ1Y3R1cml6ci9zdHJ1Y3R1cml6ciBsb2NhbAogKiAgIE9wZW4gaHR0cDovL2xvY2FsaG9zdDo4MDgwLiBFZGl0LCBzYXZlLCBwcmVzcyBGNS4gTmV2ZXIgcmVzdGFydCB0aGUgY29udGFpbmVyLgogKgogKiBUV08tUEhBU0UgV09SS0ZMT1cKICogICBQaGFzZSBvbmU6IGF1dG9MYXlvdXQgaXMgT04gdG8gZ2V0IHJvdWdoIHBsYWNlbWVudC4KICogICBQaGFzZSB0d286IENPTU1FTlQgT1VUIHRoZSBhdXRvTGF5b3V0IGxpbmUsIHJlZnJlc2gsIHRoZW4gaGFuZC1hcnJhbmdlIHRoZSBmb3VyCiAqICAgICAgICAgICAgICBuYW1lc3BhY2VzIGluc2lkZSB0aGUgbm9kZSBwb29sIGFuZCByb3V0ZSB0aGUgcHVibGljIHBhdGggZG93biB0aHJvdWdoCiAqICAgICAgICAgICAgICBpbmdyZXNzLW5naW54IHRvIGFrLWdhdGV3YXkuCiAqCiAqIElNUE9SVEFOVCDigJQgYXV0b0xheW91dCBXQVJOSU5HCiAqICAgYXV0b0xheW91dCByZWNhbGN1bGF0ZXMgb24gZXZlcnkgbG9hZCBhbmQgRElTQ0FSRFMgaGFuZCBwbGFjZW1lbnQuIE9uY2UgeW91IHN0YXJ0CiAqICAgZHJhZ2dpbmcsIGxlYXZlIGF1dG9MYXlvdXQgY29tbWVudGVkIG91dCBwZXJtYW5lbnRseS4gUGxhY2VtZW50IGF1dG9zYXZlcyBpbnRvCiAqICAgd29ya3NwYWNlLmpzb24gKGdlbmVyYXRlZCDigJQgZG8gbm90IGhhbmQtZWRpdDsgLnN0cnVjdHVyaXpyLyBpcyBnaXRpZ25vcmVkIGNhY2hlKS4KICovCgp3b3Jrc3BhY2UgIkFudEthcnQg4oCUIEt1YmVybmV0ZXMiICJIb3cgaXQgaXMgb3JjaGVzdHJhdGVkOiBvbmUgQUtTIGNsdXN0ZXIsIGZvdXIgbmFtZXNwYWNlcywgdGhlIGdhdGV3YXkgYWxvbmUgZXhwb3NlZCIgewoKICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwKCiAgICBtb2RlbCB7CgogICAgICAgIGRlcGxveW1lbnRFbnZpcm9ubWVudCAiRGV2IiB7CgogICAgICAgICAgICBpbnRlcm5ldCA9IGRlcGxveW1lbnROb2RlICJJbnRlcm5ldCDigJQgYXBpLmFudGthcnQuaW4iICJHb0RhZGR5IEEgcmVjb3JkIHBvaW50cyB0aGUgZG9tYWluIGF0IHRoZSBpbmdyZXNzIHB1YmxpYyBJUC4iICJQdWJsaWMiIHsKICAgICAgICAgICAgICAgIHRhZ3MgIkV4dGVybmFsIgogICAgICAgICAgICB9CgogICAgICAgICAgICBjbHVzdGVyID0gZGVwbG95bWVudE5vZGUgIkFLUyDigJQgYWtzLWFudGthcnQtZGV2IiAiQXp1cmUgQ05JIE92ZXJsYXksIE9JREMgaXNzdWVyLCB3b3JrbG9hZCBpZGVudGl0eS4iICJBS1MiICJNaWNyb3NvZnQgQXp1cmUgLSBLdWJlcm5ldGVzIFNlcnZpY2VzIiB7CgogICAgICAgICAgICAgICAgbm9kZXBvb2wgPSBkZXBsb3ltZW50Tm9kZSAiU3lzdGVtIG5vZGUgcG9vbCIgIlR3byBub2Rlcy4iICIyIHggU3RhbmRhcmRfRDJzX3YzIiB7CgogICAgICAgICAgICAgICAgICAgIG5zQW50a2FydCA9IGRlcGxveW1lbnROb2RlICJuYW1lc3BhY2U6IGFudGthcnQiICJUaGUgc2l4IHNlcnZpY2VzIChvbmUgZ2VuZXJpYyBIZWxtIGNoYXJ0IHBlciBzZXJ2aWNlKS4iICJuYW1lc3BhY2UiIHsKICAgICAgICAgICAgICAgICAgICAgICAgZ2F0ZXdheSA9IGluZnJhc3RydWN0dXJlTm9kZSAiYWstZ2F0ZXdheSIgIk9jZWxvdC4gVGhlIE9OTFkgd29ya2xvYWQgcmVhY2hhYmxlIHRocm91Z2ggaW5ncmVzczsgdmFsaWRhdGVzIHRoZSBKV1QgYW5kIHJvdXRlcy4iICJEZXBsb3ltZW50IC0gMSByZXBsaWNhIiAiRWRnZSIKICAgICAgICAgICAgICAgICAgICAgICAgcHJvZHVjdHMgPSBpbmZyYXN0cnVjdHVyZU5vZGUgImFrLXByb2R1Y3RzIiAiUHJvZHVjdCBjYXRhbG9ndWUuIENsdXN0ZXJJUCBvbmx5LiIgIkRlcGxveW1lbnQgLSAyIHJlcGxpY2FzIiAiU2VydmljZSIKICAgICAgICAgICAgICAgICAgICAgICAgY2FydCA9IGluZnJhc3RydWN0dXJlTm9kZSAiYWstY2FydCIgIlNob3BwaW5nIGNhcnQuIENsdXN0ZXJJUCBvbmx5LiIgIkRlcGxveW1lbnQgLSAxIHJlcGxpY2EiICJTZXJ2aWNlIgogICAgICAgICAgICAgICAgICAgICAgICBvcmRlciA9IGluZnJhc3RydWN0dXJlTm9kZSAiYWstb3JkZXIiICJPcmRlcnMgYW5kIHRoZSBzYWdhLiBDbHVzdGVySVAgb25seS4iICJEZXBsb3ltZW50IC0gMSByZXBsaWNhIiAiU2VydmljZSIKICAgICAgICAgICAgICAgICAgICAgICAgcGF5bWVudHMgPSBpbmZyYXN0cnVjdHVyZU5vZGUgImFrLXBheW1lbnRzIiAiUGF5bWVudHMuIENsdXN0ZXJJUCBvbmx5LiIgIkRlcGxveW1lbnQgLSAxIHJlcGxpY2EiICJTZXJ2aWNlIgogICAgICAgICAgICAgICAgICAgICAgICBkaXNjb3VudCA9IGluZnJhc3RydWN0dXJlTm9kZSAiYWstZGlzY291bnQiICJEaXNjb3VudCBnUlBDIChUQ1AgcHJvYmVzKS4gQ2x1c3RlcklQIG9ubHkuIiAiRGVwbG95bWVudCAtIDEgcmVwbGljYSIgIlNlcnZpY2UiCiAgICAgICAgICAgICAgICAgICAgfQoKICAgICAgICAgICAgICAgICAgICBuc0luZ3Jlc3MgPSBkZXBsb3ltZW50Tm9kZSAibmFtZXNwYWNlOiBpbmdyZXNzLW5naW54IiAiUHVibGljIGVudHJ5IHBvaW50LiIgIm5hbWVzcGFjZSIgewogICAgICAgICAgICAgICAgICAgICAgICBpbmdyZXNzID0gaW5mcmFzdHJ1Y3R1cmVOb2RlICJpbmdyZXNzLW5naW54IGNvbnRyb2xsZXIiICJQdWJsaWMgTG9hZEJhbGFuY2VyLiBUZXJtaW5hdGVzIFRMUyBhbmQgcm91dGVzIC9nYXRld2F5LyogdG8gYWstZ2F0ZXdheS4iICJEZXBsb3ltZW50IiAiRWRnZSIKICAgICAgICAgICAgICAgICAgICB9CgogICAgICAgICAgICAgICAgICAgIG5zQ2VydCA9IGRlcGxveW1lbnROb2RlICJuYW1lc3BhY2U6IGNlcnQtbWFuYWdlciIgIkNlcnRpZmljYXRlIGF1dG9tYXRpb24uIiAibmFtZXNwYWNlIiB7CiAgICAgICAgICAgICAgICAgICAgICAgIGNlcnRtZ3IgPSBpbmZyYXN0cnVjdHVyZU5vZGUgImNlcnQtbWFuYWdlciIgIklzc3VlcyBhbmQgcmVuZXdzIHRoZSBMZXQncyBFbmNyeXB0IHByb2R1Y3Rpb24gY2VydGlmaWNhdGUgKHNlY3JldCBhay1nYXRld2F5LXRscykuIiAiRGVwbG95bWVudCIgIkVkZ2UiCiAgICAgICAgICAgICAgICAgICAgfQoKICAgICAgICAgICAgICAgICAgICBuc0FyZ28gPSBkZXBsb3ltZW50Tm9kZSAibmFtZXNwYWNlOiBhcmdvY2QiICJHaXRPcHMgY29udHJvbGxlci4iICJuYW1lc3BhY2UiIHsKICAgICAgICAgICAgICAgICAgICAgICAgYXJnb2NkID0gaW5mcmFzdHJ1Y3R1cmVOb2RlICJBcmdvIENEIiAiQXV0by1zeW5jICsgc2VsZi1oZWFsIChwcnVuZSBmYWxzZSkgYWNyb3NzIHNpeCBBcHBsaWNhdGlvbnMsIGZyb20gR2l0LiIgIkRlcGxveW1lbnQiICJDSUNEIgogICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfQoKICAgICAgICAgICAgLy8g4pSA4pSAIFRoZSBwdWJsaWMgcGF0aCBpbjogZXhhY3RseSBvbmUgZG9vciDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKICAgICAgICAgICAgaW50ZXJuZXQgLT4gY2x1c3Rlci5ub2RlcG9vbC5uc0luZ3Jlc3MuaW5ncmVzcyAiSFRUUFMgdG8gdGhlIHB1YmxpYyBMb2FkQmFsYW5jZXIiCiAgICAgICAgICAgIGNsdXN0ZXIubm9kZXBvb2wubnNJbmdyZXNzLmluZ3Jlc3MgLT4gY2x1c3Rlci5ub2RlcG9vbC5uc0FudGthcnQuZ2F0ZXdheSAiVGVybWluYXRlcyBUTFMsIHJvdXRlcyAvZ2F0ZXdheS8qIgogICAgICAgICAgICBjbHVzdGVyLm5vZGVwb29sLm5zQ2VydC5jZXJ0bWdyIC0+IGNsdXN0ZXIubm9kZXBvb2wubnNJbmdyZXNzLmluZ3Jlc3MgIlN1cHBsaWVzIHRoZSBhay1nYXRld2F5LXRscyBjZXJ0aWZpY2F0ZSIKCiAgICAgICAgICAgIC8vIOKUgOKUgCBJbnNpZGUgdGhlIGNsdXN0ZXI6IG9ubHkgdGhlIGdhdGV3YXkgdGFsa3MgdG8gdGhlIHNlcnZpY2VzIOKUgOKUgOKUgOKUgAogICAgICAgICAgICBjbHVzdGVyLm5vZGVwb29sLm5zQW50a2FydC5nYXRld2F5IC0+IGNsdXN0ZXIubm9kZXBvb2wubnNBbnRrYXJ0LnByb2R1Y3RzICJDYXRhbG9ndWUgcmVxdWVzdHMiCiAgICAgICAgICAgIGNsdXN0ZXIubm9kZXBvb2wubnNBbnRrYXJ0LmdhdGV3YXkgLT4gY2x1c3Rlci5ub2RlcG9vbC5uc0FudGthcnQuY2FydCAiQ2FydCByZXF1ZXN0cyIKICAgICAgICAgICAgY2x1c3Rlci5ub2RlcG9vbC5uc0FudGthcnQuZ2F0ZXdheSAtPiBjbHVzdGVyLm5vZGVwb29sLm5zQW50a2FydC5vcmRlciAiT3JkZXIgcmVxdWVzdHMiCiAgICAgICAgICAgIGNsdXN0ZXIubm9kZXBvb2wubnNBbnRrYXJ0LmdhdGV3YXkgLT4gY2x1c3Rlci5ub2RlcG9vbC5uc0FudGthcnQucGF5bWVudHMgIlBheW1lbnQgcmVxdWVzdHMiCiAgICAgICAgICAgIGNsdXN0ZXIubm9kZXBvb2wubnNBbnRrYXJ0LnByb2R1Y3RzIC0+IGNsdXN0ZXIubm9kZXBvb2wubnNBbnRrYXJ0LmRpc2NvdW50ICJEaXNjb3VudCBsb29rdXAiICJnUlBDIgoKICAgICAgICAgICAgLy8g4pSA4pSAIEhvdyB0aGUgd29ya2xvYWRzIGdvdCB0aGVyZSDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKICAgICAgICAgICAgY2x1c3Rlci5ub2RlcG9vbC5uc0FyZ28uYXJnb2NkIC0+IGNsdXN0ZXIubm9kZXBvb2wubnNBbnRrYXJ0LmdhdGV3YXkgIkFwcGxpZXMgZGVzaXJlZCBzdGF0ZSBmcm9tIEdpdCIKCiAgICAgICAgfQogICAgfQoKICAgIHZpZXdzIHsKCiAgICAgICAgdGhlbWVzIGh0dHBzOi8vc3RhdGljLnN0cnVjdHVyaXpyLmNvbS90aGVtZXMvbWljcm9zb2Z0LWF6dXJlLTIwMjEuMDEuMjYvdGhlbWUuanNvbgoKICAgICAgICBkZXBsb3ltZW50ICogIkRldiIgIkt1YmVybmV0ZXMiICJIb3cgaXMgaXQgb3JjaGVzdHJhdGVkPyBPbmUgY2x1c3RlciwgZm91ciBuYW1lc3BhY2VzLCBvbmx5IHRoZSBnYXRld2F5IGV4cG9zZWQuIiB7CiAgICAgICAgICAgIGluY2x1ZGUgKgogICAgICAgICAgICAvLyBQSEFTRSBPTkU6IGF1dG9MYXlvdXQgaXMgT04uIEJlZm9yZSBoYW5kLWFycmFuZ2luZywgQ09NTUVOVCBPVVQgdGhlIG5leHQKICAgICAgICAgICAgLy8gbGluZSwgcmVmcmVzaCwgdGhlbiBkcmFnLiBMZWF2ZSBpdCBjb21tZW50ZWQgb25jZSB5b3Ugc3RhcnQgZHJhZ2dpbmcuCiAgICAgICAgICAgIGF1dG9MYXlvdXQgbHIgMTIwIDE2MAogICAgICAgIH0KCiAgICAgICAgc3R5bGVzIHsKICAgICAgICAgICAgLy8gSGlkZSBkZXNjcmlwdGlvbnMuIEtlZXAgbWV0YWRhdGEg4oCUIHRoYXQgaXMgdGhlIHRlY2hub2xvZ3kgbGluZS4KICAgICAgICAgICAgZWxlbWVudCAiRWxlbWVudCIgewogICAgICAgICAgICAgICAgZGVzY3JpcHRpb24gdHJ1ZQogICAgICAgICAgICAgICAgbWV0YWRhdGEgdHJ1ZQogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIkdyb3VwIiB7CiAgICAgICAgICAgICAgICBzdHJva2VXaWR0aCA0CiAgICAgICAgICAgICAgICBjb2xvciAjNUY1RTVBCiAgICAgICAgICAgICAgICBmb250U2l6ZSAyNAogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIlBlcnNvbiIgewogICAgICAgICAgICAgICAgc2hhcGUgUGVyc29uCiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM1RjVFNUEKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgICAgIGZvbnRTaXplIDI2CiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiU29mdHdhcmUgU3lzdGVtIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM4ODg3ODAKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJFeHRlcm5hbCIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjODg4NzgwCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiSWRlbnRpdHkiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgI0JBNzUxNwogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIk1hbmFnZWQiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzM3OEFERAogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIlNlcnZpY2UiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzFEOUU3NQogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgc2hhcGUgUm91bmRlZEJveAogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIlNlcnZlcmxlc3MiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzBGNkU1NgogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgc2hhcGUgUm91bmRlZEJveAogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIkRhdGFzdG9yZSIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjMTg1RkE1CiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgICAgICBzaGFwZSBDeWxpbmRlcgogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIkVkZ2UiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzdGNzdERAogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgc2hhcGUgUm91bmRlZEJveAogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIkNJQ0QiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzYzOTkyMgogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgc2hhcGUgUm91bmRlZEJveAogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIkluZnJhIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM4ODg3ODAKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJQbGFubmVkIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM1RjVFNUEKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgICAgIGJvcmRlciBkYXNoZWQKICAgICAgICAgICAgICAgIHN0cm9rZVdpZHRoIDMKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJJc3N1ZSIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjRTI0QjRBCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgICAgICBib3JkZXIgZGFzaGVkCiAgICAgICAgICAgICAgICBzdHJva2VXaWR0aCAzCiAgICAgICAgICAgIH0KICAgICAgICAgICAgcmVsYXRpb25zaGlwICJSZWxhdGlvbnNoaXAiIHsKICAgICAgICAgICAgICAgIGRhc2hlZCBmYWxzZQogICAgICAgICAgICAgICAgdGhpY2tuZXNzIDIKICAgICAgICAgICAgICAgIGZvbnRTaXplIDIyCiAgICAgICAgICAgICAgICByb3V0aW5nIE9ydGhvZ29uYWwKICAgICAgICAgICAgfQogICAgICAgICAgICByZWxhdGlvbnNoaXAgIlBsYW5uZWQiIHsKICAgICAgICAgICAgICAgIGRhc2hlZCB0cnVlCiAgICAgICAgICAgICAgICB0aGlja25lc3MgMgogICAgICAgICAgICAgICAgZm9udFNpemUgMjIKICAgICAgICAgICAgICAgIHJvdXRpbmcgT3J0aG9nb25hbAogICAgICAgICAgICB9CiAgICAgICAgfQogICAgfQp9",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : {
+        "elements" : [ {
+          "background" : "#639922",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "CICD"
+        }, {
+          "background" : "#185fa5",
+          "color" : "#ffffff",
+          "shape" : "Cylinder",
+          "tag" : "Datastore"
+        }, {
+          "background" : "#7f77dd",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Edge"
+        }, {
+          "description" : true,
+          "metadata" : true,
+          "tag" : "Element"
+        }, {
+          "background" : "#888780",
+          "color" : "#ffffff",
+          "tag" : "External"
+        }, {
+          "color" : "#5f5e5a",
+          "fontSize" : 24,
+          "strokeWidth" : 4,
+          "tag" : "Group"
+        }, {
+          "background" : "#ba7517",
+          "color" : "#ffffff",
+          "tag" : "Identity"
+        }, {
+          "background" : "#888780",
+          "color" : "#ffffff",
+          "tag" : "Infra"
+        }, {
+          "background" : "#e24b4a",
+          "border" : "Dashed",
+          "color" : "#ffffff",
+          "strokeWidth" : 3,
+          "tag" : "Issue"
+        }, {
+          "background" : "#378add",
+          "color" : "#ffffff",
+          "tag" : "Managed"
+        }, {
+          "background" : "#5f5e5a",
+          "color" : "#ffffff",
+          "fontSize" : 26,
+          "shape" : "Person",
+          "tag" : "Person"
+        }, {
+          "background" : "#5f5e5a",
+          "border" : "Dashed",
+          "color" : "#ffffff",
+          "strokeWidth" : 3,
+          "tag" : "Planned"
+        }, {
+          "background" : "#0f6e56",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Serverless"
+        }, {
+          "background" : "#1d9e75",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Service"
+        }, {
+          "background" : "#888780",
+          "color" : "#ffffff",
+          "tag" : "Software System"
+        } ],
+        "relationships" : [ {
+          "dashed" : true,
+          "fontSize" : 22,
+          "routing" : "Orthogonal",
+          "tag" : "Planned",
+          "thickness" : 2
+        }, {
+          "dashed" : false,
+          "fontSize" : 22,
+          "routing" : "Orthogonal",
+          "tag" : "Relationship",
+          "thickness" : 2
+        } ]
+      },
+      "terminology" : { },
+      "themes" : [ "https://static.structurizr.com/themes/microsoft-azure-2021.01.26/theme.json" ]
+    },
+    "deploymentViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 160,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 120,
+        "vertices" : true
+      },
+      "description" : "How is it orchestrated? One cluster, four namespaces, only the gateway exposed.",
+      "elements" : [ {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "3",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "8",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "9",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "10",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "11",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "12",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "13",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "14",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "15",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "16",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "Dev",
+      "key" : "Kubernetes",
+      "name" : "Deployment View: Dev",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "18"
+      }, {
+        "id" : "19"
+      }, {
+        "id" : "20"
+      }, {
+        "id" : "21"
+      }, {
+        "id" : "22"
+      }, {
+        "id" : "23"
+      }, {
+        "id" : "24"
+      }, {
+        "id" : "25"
+      } ]
+    } ]
+  }
+}
