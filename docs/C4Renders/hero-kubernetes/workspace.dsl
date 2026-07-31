@@ -1,27 +1,37 @@
 /*
- * AntKart — Kubernetes (hero diagram)
+ * AntKart — Azure services (hero diagram)
  *
- * Question: how is it orchestrated?
- * A DEPLOYMENT VIEW of the cluster. Sourced from deploy/helm, deploy/argocd and
- * docs/development/3-kubernetes.md. Shows the cluster and its node pool; the namespaces
- * antkart, ingress-nginx, cert-manager and argocd; each deployment with its real replica
- * count; which workloads are ClusterIP-only vs reachable through ingress; TLS
- * termination; and the public path to api.antkart.in.
+ * Question: where does it run, and what replaced what?
+ * A DEPLOYMENT VIEW of the managed estate — subscription, ONE resource group spanning
+ * TWO regions, virtual network, AKS, and the managed services. Sourced from the
+ * Terragrunt units (infrastructure/environments/dev) and deploy/helm. Each element notes
+ * which Phase 1 component it replaced where one did. API Management is marked planned.
  *
- * REPLICAS — only ak-products overrides the chart default (replicaCount 2); the chart
- * default is 1, so ak-gateway, ak-cart, ak-order, ak-payments and ak-discount run 1 each.
+ * NOTE ON REGION — the repository provisions TWO regions inside the SAME resource group
+ * (rg-antkart-dev-eastus, a logical container that is not region-bound). East US holds
+ * AKS and everything else; East US 2 holds PostgreSQL Flexible Server and Azure Managed
+ * Redis. PostgreSQL is in East US 2 because East US is offer-restricted for Flexible
+ * Server (infrastructure/environments/dev/postgresql/terragrunt.hcl:46); Redis is
+ * colocated with it there (redis/terragrunt.hcl:46). Data calls from the cluster to
+ * those two stores CROSS the region boundary — drawn as two arrows.
+ *
+ * NOTE ON TAGS — Azure elements carry a "Microsoft Azure - ..." tag whose string is
+ * VERIFIED against the microsoft-azure-2021.01.26 theme.json, so the icons render. Three
+ * elements deliberately carry NO Azure tag (styled generic boxes instead): the
+ * subscription / resource-group / vnet BOUNDARIES (Infra), Azure Communication Services
+ * (this theme has no ACS tag), and Log Analytics (no verified tag). An unmatched theme
+ * tag renders no icon and looks like a bug, so those are left as clean styled boxes.
  *
  * RENDER
  *   docker run -it --rm -p 8080:8080 \
- *     -v "C:\Users\seesa\OneDrive\Desktop\AntCart\AntKart-Src3\docs\C4Renders\hero-kubernetes:/usr/local/structurizr" \
+ *     -v "C:\Users\seesa\OneDrive\Desktop\AntCart\AntKart-Src3\docs\C4Renders\hero-azure:/usr/local/structurizr" \
  *     structurizr/structurizr local
  *   Open http://localhost:8080. Edit, save, press F5. Never restart the container.
  *
  * TWO-PHASE WORKFLOW
  *   Phase one: autoLayout is ON to get rough placement.
- *   Phase two: COMMENT OUT the autoLayout line, refresh, then hand-arrange the four
- *              namespaces inside the node pool and route the public path down through
- *              ingress-nginx to ak-gateway.
+ *   Phase two: COMMENT OUT the autoLayout line, refresh, then hand-arrange the managed
+ *              services around the resource-group boundary and pull Entra out to one side.
  *
  * IMPORTANT — autoLayout WARNING
  *   autoLayout recalculates on every load and DISCARDS hand placement. Once you start
@@ -29,7 +39,7 @@
  *   workspace.json (generated — do not hand-edit; .structurizr/ is gitignored cache).
  */
 
-workspace "AntKart — Kubernetes" "How it is orchestrated: one AKS cluster, four namespaces, the gateway alone exposed" {
+workspace "AntKart — Azure services" "Where it runs: the managed Azure estate across East US and East US 2" {
 
     !identifiers hierarchical
 
@@ -37,52 +47,61 @@ workspace "AntKart — Kubernetes" "How it is orchestrated: one AKS cluster, fou
 
         deploymentEnvironment "Dev" {
 
-            internet = deploymentNode "Internet — api.antkart.in" "GoDaddy A record points the domain at the ingress public IP." "Public" {
-                tags "External"
-            }
+            entra = deploymentNode "Microsoft Entra ID" "Tenant-level identity, not inside the resource group. Issues the tokens every service validates. Replaced Keycloak." "OAuth2 / OIDC" "Microsoft Azure - Azure Active Directory"
 
-            cluster = deploymentNode "AKS — aks-antkart-dev" "Azure CNI Overlay, OIDC issuer, workload identity." "AKS" "Microsoft Azure - Kubernetes Services" {
+            subscription = deploymentNode "Azure Subscription" "Single subscription for the dev environment." "Azure" "Infra" {
 
-                nodepool = deploymentNode "System node pool" "Two nodes." "2 x Standard_D2s_v3" {
+                // ONE resource group, TWO regions. A resource group is a LOGICAL container
+                // and is not region-bound, so both regions sit inside this single group —
+                // there is no second resource group.
+                rg = deploymentNode "rg-antkart-dev-eastus" "Application resource group — a logical, NOT region-bound container. Terraform state lives in a SEPARATE resource group (rg-antkart-tfstate)." "Resource group" "Infra" {
 
-                    nsAntkart = deploymentNode "namespace: antkart" "The six services (one generic Helm chart per service)." "namespace" {
-                        gateway = infrastructureNode "ak-gateway" "Ocelot. The ONLY workload reachable through ingress; validates the JWT and routes." "Deployment - 1 replica" "Edge"
-                        products = infrastructureNode "ak-products" "Product catalogue. ClusterIP only." "Deployment - 2 replicas" "Service"
-                        cart = infrastructureNode "ak-cart" "Shopping cart. ClusterIP only." "Deployment - 1 replica" "Service"
-                        order = infrastructureNode "ak-order" "Orders and the saga. ClusterIP only." "Deployment - 1 replica" "Service"
-                        payments = infrastructureNode "ak-payments" "Payments. ClusterIP only." "Deployment - 1 replica" "Service"
-                        discount = infrastructureNode "ak-discount" "Discount gRPC (TCP probes). ClusterIP only." "Deployment - 1 replica" "Service"
+                    eastus = deploymentNode "Region: East US (eastus)" "Primary region — AKS and every managed service except the two offer-restricted data stores." "Azure region" {
+
+                        vnet = deploymentNode "vnet-antkart-dev-eastus" "Virtual network — aks, private-endpoints and gateway subnets." "VNet" "Infra" {
+                            aks = deploymentNode "AKS — aks-antkart-dev" "Azure CNI Overlay, OIDC issuer, workload identity. Node pool: 2 x Standard_D2s_v3. Runs the six services and the serverless wiring." "AKS" "Microsoft Azure - Kubernetes Services"
+                        }
+
+                        cosmos = infrastructureNode "Cosmos DB (MongoDB API)" "Product catalogue. Replaced local MongoDB." "antkart-products" "Microsoft Azure - Azure Cosmos DB"
+                        servicebus = infrastructureNode "Azure Service Bus" "Orchestrated SAGA transport (MassTransit, Entra auth). Replaced RabbitMQ." "Service Bus namespace" "Microsoft Azure - Service Bus"
+                        eventgrid = infrastructureNode "Event Grid" "Fire-and-forget notification events." "evgt-antkart-dev" "Microsoft Azure - Event Grid Topics"
+                        functions = infrastructureNode "Azure Functions" "Serverless notification handlers. Replaced the notification microservice." "func-antkart-notifications-dev" "Microsoft Azure - Function Apps"
+                        keyvault = infrastructureNode "Key Vault" "Secrets, read at runtime via managed identity." "RBAC data plane" "Microsoft Azure - Key Vaults"
+                        acs = infrastructureNode "Azure Communication Services" "Transactional customer email. Replaced Mailhog. (No icon — this theme has no ACS tag.)" "Email" "Managed"
+                        acr = infrastructureNode "Container Registry" "Service container images." "acrantkartdev" "Microsoft Azure - Container Registries"
+                        appInsights = infrastructureNode "Application Insights" "Telemetry collection for the services and Functions." "Azure Monitor" "Microsoft Azure - Application Insights"
+                        logAnalytics = infrastructureNode "Log Analytics" "Central log store, queried with KQL. (No icon — no verified Log Analytics tag in this theme.)" "log-antkart-dev" "Managed"
+                        apim = infrastructureNode "API Management" "PLANNED managed edge (ADR-020) — not yet provisioned." "planned" "Microsoft Azure - API Management Services,Planned"
                     }
 
-                    nsIngress = deploymentNode "namespace: ingress-nginx" "Public entry point." "namespace" {
-                        ingress = infrastructureNode "ingress-nginx controller" "Public LoadBalancer. Terminates TLS and routes /gateway/* to ak-gateway." "Deployment" "Edge"
-                    }
-
-                    nsCert = deploymentNode "namespace: cert-manager" "Certificate automation." "namespace" {
-                        certmgr = infrastructureNode "cert-manager" "Issues and renews the Let's Encrypt production certificate (secret ak-gateway-tls)." "Deployment" "Edge"
-                    }
-
-                    nsArgo = deploymentNode "namespace: argocd" "GitOps controller." "namespace" {
-                        argocd = infrastructureNode "Argo CD" "Auto-sync + self-heal (prune false) across six Applications, from Git." "Deployment" "CICD"
+                    eastus2 = deploymentNode "Region: East US 2 (eastus2)" "Paired region — holds the two data stores that could not be provisioned in East US." "Azure region" {
+                        postgres = infrastructureNode "PostgreSQL Flexible Server" "Order, Payments and Discount databases. Provisioned in East US 2 because East US is offer-restricted for Flexible Server." "AKOrdersDb / AKPaymentsDb / AKDiscountDb" "Microsoft Azure - Azure Database PostgreSQL Server"
+                        redis = infrastructureNode "Azure Managed Redis" "Shopping cart store. Colocated with PostgreSQL in East US 2." "AKCart:cart:{userId}" "Microsoft Azure - Cache Redis"
                     }
                 }
             }
 
-            // ── The public path in: exactly one door ──────────────────────────
-            internet -> cluster.nodepool.nsIngress.ingress "HTTPS to the public LoadBalancer"
-            cluster.nodepool.nsIngress.ingress -> cluster.nodepool.nsAntkart.gateway "Terminates TLS, routes /gateway/*"
-            cluster.nodepool.nsCert.certmgr -> cluster.nodepool.nsIngress.ingress "Supplies the ak-gateway-tls certificate"
+            // Cross-region data calls — these two arrows leave the East US boundary and
+            // enter East US 2, so a reader sees that the cluster's data hop crosses regions.
+            // ── Data: the cluster reaches its stores, two of them across a region ──
+            subscription.rg.eastus.vnet.aks -> subscription.rg.eastus.cosmos "Product catalogue"
+            subscription.rg.eastus.vnet.aks -> subscription.rg.eastus2.postgres "Order, Payments and Discount data — crosses region"
+            subscription.rg.eastus.vnet.aks -> subscription.rg.eastus2.redis "Cart data — crosses region"
 
-            // ── Inside the cluster: only the gateway talks to the services ────
-            cluster.nodepool.nsAntkart.gateway -> cluster.nodepool.nsAntkart.products "Catalogue requests"
-            cluster.nodepool.nsAntkart.gateway -> cluster.nodepool.nsAntkart.cart "Cart requests"
-            cluster.nodepool.nsAntkart.gateway -> cluster.nodepool.nsAntkart.order "Order requests"
-            cluster.nodepool.nsAntkart.gateway -> cluster.nodepool.nsAntkart.payments "Payment requests"
-            cluster.nodepool.nsAntkart.products -> cluster.nodepool.nsAntkart.discount "Discount lookup" "gRPC"
+            // ── Messaging: the business saga, then customer notification ──────
+            subscription.rg.eastus.vnet.aks -> subscription.rg.eastus.servicebus "Saga and stock events"
+            subscription.rg.eastus.vnet.aks -> subscription.rg.eastus.eventgrid "Customer-facing events"
+            subscription.rg.eastus.eventgrid -> subscription.rg.eastus.functions "Triggers the handler"
+            subscription.rg.eastus.functions -> subscription.rg.eastus.acs "Sends email"
 
-            // ── How the workloads got there ──────────────────────────────────
-            cluster.nodepool.nsArgo.argocd -> cluster.nodepool.nsAntkart.gateway "Applies desired state from Git"
+            // ── Platform: secrets, images, telemetry ──────────────────────────
+            subscription.rg.eastus.vnet.aks -> subscription.rg.eastus.keyvault "Reads secrets at runtime"
+            subscription.rg.eastus.vnet.aks -> subscription.rg.eastus.acr "Pulls SHA-tagged images"
+            subscription.rg.eastus.vnet.aks -> subscription.rg.eastus.appInsights "Logs, traces and metrics"
+            subscription.rg.eastus.appInsights -> subscription.rg.eastus.logAnalytics "Backed by"
 
+            // ── Identity: no stored secrets anywhere in that chain ────────────
+            entra -> subscription.rg.eastus.vnet.aks "Federated workload identity"
         }
     }
 
@@ -90,11 +109,11 @@ workspace "AntKart — Kubernetes" "How it is orchestrated: one AKS cluster, fou
 
         themes https://static.structurizr.com/themes/microsoft-azure-2021.01.26/theme.json
 
-        deployment * "Dev" "Kubernetes" "How is it orchestrated? One cluster, four namespaces, only the gateway exposed." {
+        deployment * "Dev" "AzureServices" "Where does it run, and what replaced what? The managed Azure estate across East US and East US 2." {
             include *
             // PHASE ONE: autoLayout is ON. Before hand-arranging, COMMENT OUT the next
             // line, refresh, then drag. Leave it commented once you start dragging.
-            autoLayout lr 120 160
+            autoLayout lr 140 160
         }
 
         styles {

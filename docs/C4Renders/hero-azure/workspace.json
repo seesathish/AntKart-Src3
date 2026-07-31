@@ -1,0 +1,579 @@
+{
+  "configuration" : { },
+  "description" : "Where it runs, and the path a request takes",
+  "documentation" : { },
+  "id" : 1,
+  "lastModifiedDate" : "2026-07-31T14:06:50Z",
+  "model" : {
+    "people" : [ {
+      "id" : "1",
+      "name" : "Customer",
+      "properties" : {
+        "structurizr.dsl.identifier" : "customer"
+      },
+      "relationships" : [ {
+        "description" : "1",
+        "destinationId" : "3",
+        "id" : "18",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      }, {
+        "description" : "1",
+        "destinationId" : "2",
+        "id" : "19",
+        "linkedRelationshipId" : "18",
+        "sourceId" : "1"
+      } ],
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "3",
+        "name" : "API Management",
+        "properties" : {
+          "structurizr.dsl.identifier" : "azure.apim"
+        },
+        "relationships" : [ {
+          "description" : "2",
+          "destinationId" : "5",
+          "id" : "20",
+          "sourceId" : "3",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Planned",
+        "technology" : "Planned"
+      }, {
+        "documentation" : { },
+        "id" : "4",
+        "name" : "Microsoft Entra ID",
+        "properties" : {
+          "structurizr.dsl.identifier" : "azure.entra"
+        },
+        "relationships" : [ {
+          "description" : "identity",
+          "destinationId" : "5",
+          "id" : "37",
+          "sourceId" : "4",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Microsoft Azure - Azure Active Directory",
+        "technology" : "Identity"
+      }, {
+        "documentation" : { },
+        "group" : "Azure Kubernetes Service",
+        "id" : "5",
+        "name" : "Gateway",
+        "properties" : {
+          "structurizr.dsl.identifier" : "azure.gateway"
+        },
+        "relationships" : [ {
+          "description" : "3",
+          "destinationId" : "6",
+          "id" : "21",
+          "sourceId" : "5",
+          "tags" : "Relationship"
+        }, {
+          "description" : "3",
+          "destinationId" : "8",
+          "id" : "22",
+          "sourceId" : "5",
+          "tags" : "Relationship"
+        }, {
+          "description" : "3",
+          "destinationId" : "9",
+          "id" : "23",
+          "sourceId" : "5",
+          "tags" : "Relationship"
+        }, {
+          "description" : "3",
+          "destinationId" : "10",
+          "id" : "24",
+          "sourceId" : "5",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Edge",
+        "technology" : "Ocelot"
+      }, {
+        "documentation" : { },
+        "group" : "Azure Kubernetes Service",
+        "id" : "6",
+        "name" : "Products",
+        "properties" : {
+          "structurizr.dsl.identifier" : "azure.products"
+        },
+        "relationships" : [ {
+          "description" : "4",
+          "destinationId" : "7",
+          "id" : "25",
+          "sourceId" : "6",
+          "tags" : "Relationship"
+        }, {
+          "description" : "5",
+          "destinationId" : "11",
+          "id" : "26",
+          "sourceId" : "6",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Service",
+        "technology" : ".NET 9"
+      }, {
+        "documentation" : { },
+        "group" : "Azure Kubernetes Service",
+        "id" : "7",
+        "name" : "Discount",
+        "properties" : {
+          "structurizr.dsl.identifier" : "azure.discount"
+        },
+        "relationships" : [ {
+          "description" : "7",
+          "destinationId" : "13",
+          "id" : "30",
+          "sourceId" : "7",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Service",
+        "technology" : "gRPC"
+      }, {
+        "documentation" : { },
+        "group" : "Azure Kubernetes Service",
+        "id" : "8",
+        "name" : "Cart",
+        "properties" : {
+          "structurizr.dsl.identifier" : "azure.cart"
+        },
+        "relationships" : [ {
+          "description" : "6",
+          "destinationId" : "12",
+          "id" : "27",
+          "sourceId" : "8",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Service",
+        "technology" : ".NET 9"
+      }, {
+        "documentation" : { },
+        "group" : "Azure Kubernetes Service",
+        "id" : "9",
+        "name" : "Order",
+        "properties" : {
+          "structurizr.dsl.identifier" : "azure.order"
+        },
+        "relationships" : [ {
+          "description" : "7",
+          "destinationId" : "13",
+          "id" : "28",
+          "sourceId" : "9",
+          "tags" : "Relationship"
+        }, {
+          "description" : "8",
+          "destinationId" : "14",
+          "id" : "31",
+          "sourceId" : "9",
+          "tags" : "Relationship"
+        }, {
+          "description" : "9",
+          "destinationId" : "15",
+          "id" : "33",
+          "sourceId" : "9",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Service",
+        "technology" : ".NET 9"
+      }, {
+        "documentation" : { },
+        "group" : "Azure Kubernetes Service",
+        "id" : "10",
+        "name" : "Payments",
+        "properties" : {
+          "structurizr.dsl.identifier" : "azure.payments"
+        },
+        "relationships" : [ {
+          "description" : "7",
+          "destinationId" : "13",
+          "id" : "29",
+          "sourceId" : "10",
+          "tags" : "Relationship"
+        }, {
+          "description" : "8",
+          "destinationId" : "14",
+          "id" : "32",
+          "sourceId" : "10",
+          "tags" : "Relationship"
+        }, {
+          "description" : "9",
+          "destinationId" : "15",
+          "id" : "34",
+          "sourceId" : "10",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Service",
+        "technology" : ".NET 9"
+      }, {
+        "documentation" : { },
+        "id" : "11",
+        "name" : "Cosmos DB",
+        "properties" : {
+          "structurizr.dsl.identifier" : "azure.cosmos"
+        },
+        "tags" : "Element,Container,Microsoft Azure - Azure Cosmos DB",
+        "technology" : "Mongo API"
+      }, {
+        "documentation" : { },
+        "id" : "12",
+        "name" : "Redis",
+        "properties" : {
+          "structurizr.dsl.identifier" : "azure.redis"
+        },
+        "tags" : "Element,Container,Microsoft Azure - Cache Redis",
+        "technology" : "East US 2"
+      }, {
+        "documentation" : { },
+        "id" : "13",
+        "name" : "PostgreSQL",
+        "properties" : {
+          "structurizr.dsl.identifier" : "azure.postgres"
+        },
+        "tags" : "Element,Container,Microsoft Azure - Azure Database PostgreSQL Server",
+        "technology" : "East US 2"
+      }, {
+        "documentation" : { },
+        "id" : "14",
+        "name" : "Service Bus",
+        "properties" : {
+          "structurizr.dsl.identifier" : "azure.servicebus"
+        },
+        "tags" : "Element,Container,Microsoft Azure - Service Bus",
+        "technology" : "Topics"
+      }, {
+        "documentation" : { },
+        "id" : "15",
+        "name" : "Event Grid",
+        "properties" : {
+          "structurizr.dsl.identifier" : "azure.eventgrid"
+        },
+        "relationships" : [ {
+          "description" : "10",
+          "destinationId" : "16",
+          "id" : "35",
+          "sourceId" : "15",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Microsoft Azure - Event Grid Topics",
+        "technology" : "Topics"
+      }, {
+        "documentation" : { },
+        "id" : "16",
+        "name" : "Functions",
+        "properties" : {
+          "structurizr.dsl.identifier" : "azure.functions"
+        },
+        "relationships" : [ {
+          "description" : "11",
+          "destinationId" : "17",
+          "id" : "36",
+          "sourceId" : "16",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Microsoft Azure - Function Apps",
+        "technology" : "Serverless"
+      }, {
+        "documentation" : { },
+        "id" : "17",
+        "name" : "Communication Services",
+        "properties" : {
+          "structurizr.dsl.identifier" : "azure.acs"
+        },
+        "tags" : "Element,Container,Managed",
+        "technology" : "Email"
+      } ],
+      "documentation" : { },
+      "id" : "2",
+      "name" : "AntKart on Microsoft Azure",
+      "properties" : {
+        "structurizr.dsl.identifier" : "azure"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "AntKart — Azure services",
+  "properties" : {
+    "structurizr.inspection.error" : "41",
+    "structurizr.dsl" : "LyoKICogQW50S2FydCDigJQgQXp1cmUgc2VydmljZXMgKGhlcm8gZGlhZ3JhbSkKICoKICogUXVlc3Rpb246IHdoZXJlIGRvZXMgaXQgcnVuLCBhbmQgaG93IGRvZXMgYSByZXF1ZXN0IG1vdmUgdGhyb3VnaCB0aGUgZXN0YXRlPwogKgogKiBNaWNyb3NvZnQgcmVmZXJlbmNlLWFyY2hpdGVjdHVyZSBzdHlsZTogc21hbGwgYm9sZCBib3hlcywgc2VydmljZSBpY29ucywgYW5kIGFycm93cwogKiBjYXJyeWluZyBPTkxZIGEgc3RlcCBudW1iZXIuIFRoZSBudW1iZXJlZCBleHBsYW5hdGlvbiBsaXZlcyB1bmRlciB0aGUgZGlhZ3JhbSBpbgogKiBSRUFETUUubWQg4oCUIHRoYXQgaXMgd2hhdCBrZWVwcyB0aGUgcGljdHVyZSBjYWxtLgogKgogKiBPTkUgYm91bmRhcnkgb25seTogdGhlIGNsdXN0ZXIuIEZ1bmN0aW9uYWwgZ3JvdXBpbmcgKGNvbXB1dGUgLyBkYXRhIC8gbWVzc2FnaW5nKSB3YXMKICogdHJpZWQgYW5kIHJlbW92ZWQg4oCUIGl0IGZvdWdodCB0aGUgbGVmdC10by1yaWdodCBmbG93IGluc3RlYWQgb2YgY2FycnlpbmcgaXQuCiAqCiAqIFJFTkRFUgogKiAgIGRvY2tlciBydW4gLWl0IC0tcm0gLXAgODA4MDo4MDgwIFwKICogICAgIC12ICJDOlxVc2Vyc1xzZWVzYVxPbmVEcml2ZVxEZXNrdG9wXEFudENhcnRcQW50S2FydC1TcmMzXGRvY3NcQzRSZW5kZXJzXGhlcm8tYXp1cmU6L3Vzci9sb2NhbC9zdHJ1Y3R1cml6ciIgXAogKiAgICAgc3RydWN0dXJpenIvc3RydWN0dXJpenIgbG9jYWwKICoKICogVFdPLVBIQVNFOiBhdXRvTGF5b3V0IE9OIGZvciByb3VnaCByYW5rcywgdGhlbiBDT01NRU5UIElUIE9VVCBiZWZvcmUgZHJhZ2dpbmcuCiAqIFRhcmdldCBsYXlvdXQsIGxlZnQgdG8gcmlnaHQ6CiAqICAgQ3VzdG9tZXIg4oaSIEFQSSBNYW5hZ2VtZW50IOKGkiBbY2x1c3RlciBib3g6IGdhdGV3YXksIHRoZW4gZml2ZSBzZXJ2aWNlcyBzdGFja2VkXQogKiAgIOKGkiBkYXRhIHN0b3JlcyBhbmQgbWVzc2FnaW5nIGluIG9uZSBwYXJhbGxlbCBjb2x1bW4g4oaSIEZ1bmN0aW9ucyDihpIgZW1haWwuCiAqICAgRW50cmEgc2l0cyBhYm92ZSB0aGUgY2x1c3Rlci4gTm90aGluZyBlbHNlIGZsb2F0cy4KICovCgp3b3Jrc3BhY2UgIkFudEthcnQg4oCUIEF6dXJlIHNlcnZpY2VzIiAiV2hlcmUgaXQgcnVucywgYW5kIHRoZSBwYXRoIGEgcmVxdWVzdCB0YWtlcyIgewoKICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwKCiAgICBtb2RlbCB7CgogICAgICAgIGN1c3RvbWVyID0gcGVyc29uICJDdXN0b21lciIgIiIgewogICAgICAgICAgICB0YWdzICJQZXJzb24iCiAgICAgICAgfQoKICAgICAgICBhenVyZSA9IHNvZnR3YXJlU3lzdGVtICJBbnRLYXJ0IG9uIE1pY3Jvc29mdCBBenVyZSIgIiIgewoKICAgICAgICAgICAgYXBpbSA9IGNvbnRhaW5lciAiQVBJIE1hbmFnZW1lbnQiICIiICJQbGFubmVkIiB7CiAgICAgICAgICAgICAgICB0YWdzICJQbGFubmVkIgogICAgICAgICAgICB9CgogICAgICAgICAgICBlbnRyYSA9IGNvbnRhaW5lciAiTWljcm9zb2Z0IEVudHJhIElEIiAiIiAiSWRlbnRpdHkiIHsKICAgICAgICAgICAgICAgIHRhZ3MgIk1pY3Jvc29mdCBBenVyZSAtIEF6dXJlIEFjdGl2ZSBEaXJlY3RvcnkiCiAgICAgICAgICAgIH0KCiAgICAgICAgICAgIGdyb3VwICJBenVyZSBLdWJlcm5ldGVzIFNlcnZpY2UiIHsKICAgICAgICAgICAgICAgIGdhdGV3YXkgPSBjb250YWluZXIgIkdhdGV3YXkiICIiICJPY2Vsb3QiIHsKICAgICAgICAgICAgICAgICAgICB0YWdzICJFZGdlIgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgcHJvZHVjdHMgPSBjb250YWluZXIgIlByb2R1Y3RzIiAiIiAiLk5FVCA5IiB7CiAgICAgICAgICAgICAgICAgICAgdGFncyAiU2VydmljZSIKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgIGRpc2NvdW50ID0gY29udGFpbmVyICJEaXNjb3VudCIgIiIgImdSUEMiIHsKICAgICAgICAgICAgICAgICAgICB0YWdzICJTZXJ2aWNlIgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgY2FydCA9IGNvbnRhaW5lciAiQ2FydCIgIiIgIi5ORVQgOSIgewogICAgICAgICAgICAgICAgICAgIHRhZ3MgIlNlcnZpY2UiCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICBvcmRlciA9IGNvbnRhaW5lciAiT3JkZXIiICIiICIuTkVUIDkiIHsKICAgICAgICAgICAgICAgICAgICB0YWdzICJTZXJ2aWNlIgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgcGF5bWVudHMgPSBjb250YWluZXIgIlBheW1lbnRzIiAiIiAiLk5FVCA5IiB7CiAgICAgICAgICAgICAgICAgICAgdGFncyAiU2VydmljZSIKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfQoKICAgICAgICAgICAgY29zbW9zID0gY29udGFpbmVyICJDb3Ntb3MgREIiICIiICJNb25nbyBBUEkiIHsKICAgICAgICAgICAgICAgIHRhZ3MgIk1pY3Jvc29mdCBBenVyZSAtIEF6dXJlIENvc21vcyBEQiIKICAgICAgICAgICAgfQogICAgICAgICAgICByZWRpcyA9IGNvbnRhaW5lciAiUmVkaXMiICIiICJFYXN0IFVTIDIiIHsKICAgICAgICAgICAgICAgIHRhZ3MgIk1pY3Jvc29mdCBBenVyZSAtIENhY2hlIFJlZGlzIgogICAgICAgICAgICB9CiAgICAgICAgICAgIHBvc3RncmVzID0gY29udGFpbmVyICJQb3N0Z3JlU1FMIiAiIiAiRWFzdCBVUyAyIiB7CiAgICAgICAgICAgICAgICB0YWdzICJNaWNyb3NvZnQgQXp1cmUgLSBBenVyZSBEYXRhYmFzZSBQb3N0Z3JlU1FMIFNlcnZlciIKICAgICAgICAgICAgfQogICAgICAgICAgICBzZXJ2aWNlYnVzID0gY29udGFpbmVyICJTZXJ2aWNlIEJ1cyIgIiIgIlRvcGljcyIgewogICAgICAgICAgICAgICAgdGFncyAiTWljcm9zb2Z0IEF6dXJlIC0gU2VydmljZSBCdXMiCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZXZlbnRncmlkID0gY29udGFpbmVyICJFdmVudCBHcmlkIiAiIiAiVG9waWNzIiB7CiAgICAgICAgICAgICAgICB0YWdzICJNaWNyb3NvZnQgQXp1cmUgLSBFdmVudCBHcmlkIFRvcGljcyIKICAgICAgICAgICAgfQogICAgICAgICAgICBmdW5jdGlvbnMgPSBjb250YWluZXIgIkZ1bmN0aW9ucyIgIiIgIlNlcnZlcmxlc3MiIHsKICAgICAgICAgICAgICAgIHRhZ3MgIk1pY3Jvc29mdCBBenVyZSAtIEZ1bmN0aW9uIEFwcHMiCiAgICAgICAgICAgIH0KICAgICAgICAgICAgYWNzID0gY29udGFpbmVyICJDb21tdW5pY2F0aW9uIFNlcnZpY2VzIiAiIiAiRW1haWwiIHsKICAgICAgICAgICAgICAgIHRhZ3MgIk1hbmFnZWQiCiAgICAgICAgICAgIH0KICAgICAgICB9CgogICAgICAgIC8vIOKUgOKUgCBOdW1iZXJlZCBwYXRoLiBUaGUgbGVnZW5kIGxpdmVzIGluIFJFQURNRS5tZCDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKICAgICAgICBjdXN0b21lciAtPiBhenVyZS5hcGltICIxIgogICAgICAgIGF6dXJlLmFwaW0gLT4gYXp1cmUuZ2F0ZXdheSAiMiIKCiAgICAgICAgYXp1cmUuZ2F0ZXdheSAtPiBhenVyZS5wcm9kdWN0cyAiMyIKICAgICAgICBhenVyZS5nYXRld2F5IC0+IGF6dXJlLmNhcnQgIjMiCiAgICAgICAgYXp1cmUuZ2F0ZXdheSAtPiBhenVyZS5vcmRlciAiMyIKICAgICAgICBhenVyZS5nYXRld2F5IC0+IGF6dXJlLnBheW1lbnRzICIzIgoKICAgICAgICBhenVyZS5wcm9kdWN0cyAtPiBhenVyZS5kaXNjb3VudCAiNCIKICAgICAgICBhenVyZS5wcm9kdWN0cyAtPiBhenVyZS5jb3Ntb3MgIjUiCiAgICAgICAgYXp1cmUuY2FydCAtPiBhenVyZS5yZWRpcyAiNiIKICAgICAgICBhenVyZS5vcmRlciAtPiBhenVyZS5wb3N0Z3JlcyAiNyIKICAgICAgICBhenVyZS5wYXltZW50cyAtPiBhenVyZS5wb3N0Z3JlcyAiNyIKICAgICAgICBhenVyZS5kaXNjb3VudCAtPiBhenVyZS5wb3N0Z3JlcyAiNyIKCiAgICAgICAgYXp1cmUub3JkZXIgLT4gYXp1cmUuc2VydmljZWJ1cyAiOCIKICAgICAgICBhenVyZS5wYXltZW50cyAtPiBhenVyZS5zZXJ2aWNlYnVzICI4IgogICAgICAgIGF6dXJlLm9yZGVyIC0+IGF6dXJlLmV2ZW50Z3JpZCAiOSIKICAgICAgICBhenVyZS5wYXltZW50cyAtPiBhenVyZS5ldmVudGdyaWQgIjkiCgogICAgICAgIGF6dXJlLmV2ZW50Z3JpZCAtPiBhenVyZS5mdW5jdGlvbnMgIjEwIgogICAgICAgIGF6dXJlLmZ1bmN0aW9ucyAtPiBhenVyZS5hY3MgIjExIgoKICAgICAgICBhenVyZS5lbnRyYSAtPiBhenVyZS5nYXRld2F5ICJpZGVudGl0eSIKICAgIH0KCiAgICB2aWV3cyB7CgogICAgICAgIHRoZW1lcyBodHRwczovL3N0YXRpYy5zdHJ1Y3R1cml6ci5jb20vdGhlbWVzL21pY3Jvc29mdC1henVyZS0yMDIxLjAxLjI2L3RoZW1lLmpzb24KCiAgICAgICAgY29udGFpbmVyIGF6dXJlICJBenVyZVNlcnZpY2VzIiAiV2hlcmUgZG9lcyBpdCBydW4sIGFuZCBob3cgZG9lcyBhIHJlcXVlc3QgbW92ZSB0aHJvdWdoIGl0PyIgewogICAgICAgICAgICBpbmNsdWRlICoKICAgICAgICAgICAgLy8gUEhBU0UgT05FLiBDb21tZW50IG91dCBiZWZvcmUgaGFuZC1hcnJhbmdpbmcsIGFuZCBsZWF2ZSBpdCBjb21tZW50ZWQuCiAgICAgICAgICAgIC8vYXV0b0xheW91dCBsciAxNTAgMTAwCiAgICAgICAgfQoKICAgICAgICBzdHlsZXMgewogICAgICAgICAgICBlbGVtZW50ICJFbGVtZW50IiB7CiAgICAgICAgICAgICAgICBkZXNjcmlwdGlvbiBmYWxzZQogICAgICAgICAgICAgICAgbWV0YWRhdGEgdHJ1ZQogICAgICAgICAgICAgICAgZm9udFNpemUgMzAKICAgICAgICAgICAgICAgIHdpZHRoIDQ4MAogICAgICAgICAgICAgICAgaGVpZ2h0IDI2MAogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIkdyb3VwIiB7CiAgICAgICAgICAgICAgICBzdHJva2VXaWR0aCA2CiAgICAgICAgICAgICAgICBjb2xvciAjNUY1RTVBCiAgICAgICAgICAgICAgICBmb250U2l6ZSAzNAogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIlBlcnNvbiIgewogICAgICAgICAgICAgICAgc2hhcGUgUGVyc29uCiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM1RjVFNUEKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJTb2Z0d2FyZSBTeXN0ZW0iIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzg4ODc4MAogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIk1hbmFnZWQiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzM3OEFERAogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIlNlcnZpY2UiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzFEOUU3NQogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgc2hhcGUgUm91bmRlZEJveAogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIkVkZ2UiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzdGNzdERAogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgc2hhcGUgUm91bmRlZEJveAogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIlBsYW5uZWQiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzVGNUU1QQogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgYm9yZGVyIGRhc2hlZAogICAgICAgICAgICAgICAgc3Ryb2tlV2lkdGggNAogICAgICAgICAgICB9Ci8vIEF6dXJlLXRhZ2dlZCBlbGVtZW50cyB0YWtlIHRoZWlyIGZpbGwgZnJvbSB0aGUgdGhlbWUsIHdoaWNoIGlzIG5lYXItd2hpdGUKICAgICAgICAgICAgLy8gYW5kIHZhbmlzaGVzIG9uIGEgbGlnaHQgZXhwb3J0LiBUaGVzZSBvdmVycmlkZXMgZ2l2ZSBlYWNoIGEgc29saWQgZmlsbAogICAgICAgICAgICAvLyBmcm9tIHRoZSBsb2NrZWQgcGFsZXR0ZS4gSWNvbnMgc3RpbGwgY29tZSBmcm9tIHRoZSB0aGVtZS4KICAgICAgICAgICAgZWxlbWVudCAiTWljcm9zb2Z0IEF6dXJlIC0gQXp1cmUgQ29zbW9zIERCIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICMxODVGQTUKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJNaWNyb3NvZnQgQXp1cmUgLSBBenVyZSBEYXRhYmFzZSBQb3N0Z3JlU1FMIFNlcnZlciIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjMTg1RkE1CiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiTWljcm9zb2Z0IEF6dXJlIC0gQ2FjaGUgUmVkaXMiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzE4NUZBNQogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIk1pY3Jvc29mdCBBenVyZSAtIFNlcnZpY2UgQnVzIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICMzNzhBREQKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJNaWNyb3NvZnQgQXp1cmUgLSBFdmVudCBHcmlkIFRvcGljcyIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjMzc4QURECiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiTWljcm9zb2Z0IEF6dXJlIC0gRnVuY3Rpb24gQXBwcyIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjMEY2RTU2CiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiTWljcm9zb2Z0IEF6dXJlIC0gQXp1cmUgQWN0aXZlIERpcmVjdG9yeSIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjQkE3NTE3CiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgIH0KICAgICAgICAgICAgcmVsYXRpb25zaGlwICJSZWxhdGlvbnNoaXAiIHsKICAgICAgICAgICAgICAgIGRhc2hlZCBmYWxzZQogICAgICAgICAgICAgICAgdGhpY2tuZXNzIDQKICAgICAgICAgICAgICAgIGZvbnRTaXplIDQwCiAgICAgICAgICAgICAgICByb3V0aW5nIE9ydGhvZ29uYWwKICAgICAgICAgICAgfQogICAgICAgIH0KICAgIH0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "lastSavedView" : "AzureServices",
+      "styles" : {
+        "elements" : [ {
+          "background" : "#7f77dd",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Edge"
+        }, {
+          "description" : false,
+          "fontSize" : 30,
+          "height" : 260,
+          "metadata" : true,
+          "tag" : "Element",
+          "width" : 480
+        }, {
+          "color" : "#5f5e5a",
+          "fontSize" : 34,
+          "strokeWidth" : 6,
+          "tag" : "Group"
+        }, {
+          "background" : "#378add",
+          "color" : "#ffffff",
+          "tag" : "Managed"
+        }, {
+          "background" : "#ba7517",
+          "color" : "#ffffff",
+          "tag" : "Microsoft Azure - Azure Active Directory"
+        }, {
+          "background" : "#185fa5",
+          "color" : "#ffffff",
+          "tag" : "Microsoft Azure - Azure Cosmos DB"
+        }, {
+          "background" : "#185fa5",
+          "color" : "#ffffff",
+          "tag" : "Microsoft Azure - Azure Database PostgreSQL Server"
+        }, {
+          "background" : "#185fa5",
+          "color" : "#ffffff",
+          "tag" : "Microsoft Azure - Cache Redis"
+        }, {
+          "background" : "#378add",
+          "color" : "#ffffff",
+          "tag" : "Microsoft Azure - Event Grid Topics"
+        }, {
+          "background" : "#0f6e56",
+          "color" : "#ffffff",
+          "tag" : "Microsoft Azure - Function Apps"
+        }, {
+          "background" : "#378add",
+          "color" : "#ffffff",
+          "tag" : "Microsoft Azure - Service Bus"
+        }, {
+          "background" : "#5f5e5a",
+          "color" : "#ffffff",
+          "shape" : "Person",
+          "tag" : "Person"
+        }, {
+          "background" : "#5f5e5a",
+          "border" : "Dashed",
+          "color" : "#ffffff",
+          "strokeWidth" : 4,
+          "tag" : "Planned"
+        }, {
+          "background" : "#1d9e75",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Service"
+        }, {
+          "background" : "#888780",
+          "color" : "#ffffff",
+          "tag" : "Software System"
+        } ],
+        "relationships" : [ {
+          "dashed" : false,
+          "fontSize" : 40,
+          "routing" : "Orthogonal",
+          "tag" : "Relationship",
+          "thickness" : 4
+        } ]
+      },
+      "terminology" : { },
+      "themes" : [ "https://static.structurizr.com/themes/microsoft-azure-2021.01.26/theme.json" ]
+    },
+    "containerViews" : [ {
+      "description" : "Where does it run, and how does a request move through it?",
+      "dimensions" : {
+        "height" : 3154,
+        "width" : 6000
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 435,
+        "y" : 1105
+      }, {
+        "id" : "3",
+        "x" : 1069,
+        "y" : 1218
+      }, {
+        "id" : "4",
+        "x" : 1069,
+        "y" : 1903
+      }, {
+        "id" : "5",
+        "x" : 1939,
+        "y" : 1373
+      }, {
+        "id" : "6",
+        "x" : 2759,
+        "y" : 908
+      }, {
+        "id" : "7",
+        "x" : 3579,
+        "y" : 863
+      }, {
+        "id" : "8",
+        "x" : 2759,
+        "y" : 1218
+      }, {
+        "id" : "9",
+        "x" : 2759,
+        "y" : 1528
+      }, {
+        "id" : "10",
+        "x" : 2759,
+        "y" : 1838
+      }, {
+        "id" : "11",
+        "x" : 2780,
+        "y" : 510
+      }, {
+        "id" : "12",
+        "x" : 3915,
+        "y" : 520
+      }, {
+        "id" : "13",
+        "x" : 4305,
+        "y" : 1370
+      }, {
+        "id" : "14",
+        "x" : 3640,
+        "y" : 2280
+      }, {
+        "id" : "15",
+        "x" : 3065,
+        "y" : 2290
+      }, {
+        "id" : "16",
+        "x" : 2465,
+        "y" : 2290
+      }, {
+        "id" : "17",
+        "x" : 1645,
+        "y" : 2290
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "key" : "AzureServices",
+      "name" : "Container View: AntKart on Microsoft Azure",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "18"
+      }, {
+        "id" : "20",
+        "vertices" : [ {
+          "x" : 1889,
+          "y" : 1348
+        } ]
+      }, {
+        "id" : "21",
+        "vertices" : [ {
+          "x" : 2589,
+          "y" : 1038
+        } ]
+      }, {
+        "id" : "22",
+        "vertices" : [ {
+          "x" : 2589,
+          "y" : 1348
+        } ]
+      }, {
+        "id" : "23",
+        "vertices" : [ {
+          "x" : 2589,
+          "y" : 1658
+        } ]
+      }, {
+        "id" : "24",
+        "vertices" : [ {
+          "x" : 2589,
+          "y" : 1968
+        } ]
+      }, {
+        "id" : "25",
+        "vertices" : [ {
+          "x" : 3409,
+          "y" : 993
+        } ]
+      }, {
+        "id" : "26",
+        "vertices" : [ {
+          "x" : 3410,
+          "y" : 1038
+        } ]
+      }, {
+        "id" : "27",
+        "vertices" : [ {
+          "x" : 3409,
+          "y" : 1348
+        } ]
+      }, {
+        "id" : "28",
+        "vertices" : [ {
+          "x" : 3409,
+          "y" : 1503
+        }, {
+          "x" : 4279,
+          "y" : 1503
+        } ]
+      }, {
+        "id" : "29",
+        "vertices" : [ {
+          "x" : 3409,
+          "y" : 1858
+        }, {
+          "x" : 4279,
+          "y" : 1858
+        } ]
+      }, {
+        "id" : "30",
+        "vertices" : [ {
+          "x" : 4279,
+          "y" : 993
+        } ]
+      }, {
+        "id" : "31",
+        "vertices" : [ {
+          "x" : 3409,
+          "y" : 1658
+        } ]
+      }, {
+        "id" : "32",
+        "vertices" : [ {
+          "x" : 3409,
+          "y" : 1968
+        } ]
+      }, {
+        "id" : "33",
+        "vertices" : [ {
+          "x" : 3409,
+          "y" : 1788
+        } ]
+      }, {
+        "id" : "34",
+        "vertices" : [ {
+          "x" : 3409,
+          "y" : 2068
+        } ]
+      }, {
+        "id" : "35"
+      }, {
+        "id" : "36"
+      }, {
+        "id" : "37",
+        "vertices" : [ {
+          "x" : 1889,
+          "y" : 2033
+        } ]
+      } ],
+      "softwareSystemId" : "2"
+    } ]
+  }
+}

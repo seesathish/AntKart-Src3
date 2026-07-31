@@ -35,8 +35,24 @@ Every Azure resource is provisioned as code: Terraform modules describe how a re
 
 ## Azure services
 
-> **Diagram: Azure services** — _not yet drawn_
-> **Must show:** the resource estate - resource group, region, virtual network, AKS, and the managed services: Cosmos DB, PostgreSQL Flexible Server, Managed Redis, Service Bus, Event Grid, Functions, Key Vault, Communication Services, Container Registry, Application Insights and Log Analytics, with API Management marked planned. Where useful, show which Phase 1 component each replaced. Answers "where does it run".
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/C4Renders/renders/AzureServices-dark.svg">
+  <img alt="AntKart on Azure: a customer request passes through API Management into the Kubernetes cluster, where the gateway routes to Products, Cart, Order, Payments and Discount, which use Cosmos DB, Redis and PostgreSQL, publish to Service Bus and Event Grid, and trigger a serverless function that sends email through Communication Services" src="docs/C4Renders/renders/AzureServices.svg">
+</picture>
+
+1. The customer calls `https://api.antkart.in`.
+2. API Management validates the token and forwards the request into the cluster.
+3. The gateway routes each path to the service that owns it.
+4. Products asks Discount for pricing over gRPC.
+5. Products reads the catalogue from Cosmos DB.
+6. Cart reads and writes Redis.
+7. Order, Payments and Discount use PostgreSQL — in East US 2, so these calls cross a region boundary.
+8. Order and Payments publish saga and stock events to Service Bus.
+9. Customer-facing events go to Event Grid, deliberately separate from the business saga.
+10. Event Grid triggers the serverless notification handler.
+11. The handler sends email through Communication Services.
+
+Entra ID backs every workload identity, so no credential is stored anywhere in the platform.
 
 The platform runs entirely on managed Azure services — Cosmos DB, PostgreSQL, Managed Redis, Service Bus, Event Grid, Functions, Key Vault, and more. Each replaced a local Phase-1 component, adopting token-based authentication throughout. API Management, the managed edge, is planned.
 
