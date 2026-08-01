@@ -1,6 +1,7 @@
 using AK.BuildingBlocks.Configuration;
 using AK.BuildingBlocks.HealthChecks;
 using AK.BuildingBlocks.Logging;
+using AK.BuildingBlocks.Middleware;
 using AK.Discount.Application.Extensions;
 using AK.Discount.Grpc.Interceptors;
 using AK.Discount.Grpc.Services;
@@ -39,6 +40,11 @@ builder.Services.AddSingleton<ExceptionInterceptor>();
 builder.Services.AddSingleton<AuthInterceptor>();
 
 var app = builder.Build();
+
+// CorrelationIdMiddleware runs outermost (this service has no ExceptionHandlerMiddleware — gRPC
+// errors are mapped by ExceptionInterceptor). It only reads/echoes the X-Correlation-Id header and
+// pushes it into LogContext, so it is transport-agnostic and does not interfere with h2c gRPC.
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.MapGrpcService<DiscountService>();
 if (app.Environment.IsDevelopment())
     app.MapGrpcReflectionService();

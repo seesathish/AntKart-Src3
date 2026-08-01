@@ -70,6 +70,9 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+// CorrelationIdMiddleware runs OUTERMOST so the correlation id is on every log event, including
+// exceptions. It reads the X-Correlation-Id forwarded by the gateway (or generates one).
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ExceptionHandlerMiddleware>();
 
 app.UseSwaggerInDevelopment("AK.Products API v1");
