@@ -10,6 +10,42 @@ AntKart is a cloud-native e-commerce platform built as independently deployable 
 
 ---
 
+## Repository model and documentation contract
+
+This governs **every** documentation edit. Read it before writing or changing any doc.
+
+### Two repositories
+This repo (`AntKart-Src3`) is the **internal working repository**. A separate **public repository** will later be created as a history-free copy, with internal-only assets removed. **Assume everything you write may be published** unless it sits in an internal-only path.
+
+### Internal-only paths — will NOT exist in the public repo
+- `docs/C4Renders/hero-*/` — Structurizr authoring sources
+- `docs/C4Renders/DIAGRAM-PLAN.md` — already marked "private reference"
+- `docs/C4Renders/workspace.dsl`
+- `docs/C4Renders/workspace.json`
+- `docs/C4Renders/c4-*.png` — superseded Phase-1 renders
+- `CLAUDE.md` — this file
+
+### Published and load-bearing — never break these
+- `docs/C4Renders/renders/*.svg` — the root README embeds all eight
+- `docs/C4Renders/renders/README.md`
+
+### Rule: no document intended for the public repo may link into an internal-only path
+Public docs may **embed images** from `docs/C4Renders/renders/`, but must **not link** to `workspace.dsl`, `DIAGRAM-PLAN.md`, or any `hero-*/` folder. If a doc needs to explain how a diagram was authored, describe it in prose instead of linking.
+
+### Documentation flow — the intended reading path; do not reorganise it
+```
+Root README (hero diagrams, the "what")
+  -> DevelopmentGuide.md (the spine, layer by layer)
+    -> docs/development/N-<layer>.md (one layer each)
+      -> docs/adr/ (why), docs/guides/ (how), docs/KNOWN_ISSUES.md (gaps)
+```
+Separately: `DevTestGuide.md` -> `docs/test/` covers verification — testing from service code locally, and data plus security testing against live cloud resources, including all services through the cluster.
+
+### The promise the docs make
+A stranger with an empty Azure subscription should be able to follow the `DevelopmentGuide` and build this platform. When writing or editing any doc, check that promise still holds — no unexplained step, no reference to a resource only Sathish has, no instruction that assumes prior context.
+
+---
+
 ## Repository Layout
 
 ```
@@ -324,14 +360,16 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | Package | Version | Used In |
 |---------|---------|---------|
 | MediatR | 12.4.1 | Application |
-| FluentValidation | 11.x | Application |
-| FluentValidation.DependencyInjectionExtensions | 11.x | Application |
+| FluentValidation | 11.11.0 | Application |
+| FluentValidation.DependencyInjectionExtensions | 11.11.0 | Application |
 | MongoDB.Driver | 3.3.0 | Products Infrastructure |
 | Npgsql.EntityFrameworkCore.PostgreSQL | 9.0.4 | Order / Payments / Discount Infrastructure |
-| Grpc.AspNetCore | 2.x | Discount Grpc |
-| Swashbuckle.AspNetCore | 7.x | Products API |
-| Serilog.AspNetCore | 7.x | BuildingBlocks |
-| Serilog.Sinks.Elasticsearch | 9.0.3 | BuildingBlocks |
+| StackExchange.Redis | 2.8.16 | ShoppingCart Infrastructure |
+| Grpc.AspNetCore | 2.67.0 | Discount Grpc |
+| Swashbuckle.AspNetCore | 7.3.1 | Products API |
+| Serilog.AspNetCore | 8.0.3 | BuildingBlocks, Gateway API |
+| Serilog.Sinks.Console | 6.0.0 | BuildingBlocks |
+| Serilog.Sinks.File | 6.0.0 | BuildingBlocks |
 | MassTransit | 8.3.6 | BuildingBlocks, Order, Products, ShoppingCart |
 | MassTransit.Azure.ServiceBus.Core | 8.3.6 | BuildingBlocks (Azure Service Bus transport, Entra auth) |
 | MassTransit.EntityFrameworkCore | 8.3.6 | Order Infrastructure (outbox + saga) |
@@ -339,6 +377,9 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | Azure.Security.KeyVault.Secrets | 4.7.0 | BuildingBlocks (Key Vault deep health check) |
 | Azure.Messaging.EventGrid | 4.30.0 | BuildingBlocks (fire-and-forget side-effect publisher) |
 | Azure.Communication.Email | 1.0.1 | BuildingBlocks (ACS email sender) |
+| Azure.Extensions.AspNetCore.Configuration.Secrets | 1.3.2 | BuildingBlocks (Key Vault config provider) |
+| Microsoft.AspNetCore.Authentication.JwtBearer | 9.0.0 | BuildingBlocks, Gateway API (Entra JWT validation) |
+| Asp.Versioning.Http | 8.1.0 | BuildingBlocks (AddStandardApiVersioning) |
 | CsvHelper | 33.0.1 | AK.Tools.ProductsSeedGenerator / ProductsSeedLoader (seed CSV) |
 | Microsoft.Azure.Functions.Worker | 2.0.0 | AK.Notification.Functions |
 | Microsoft.Azure.Functions.Worker.Sdk | 2.0.0 | AK.Notification.Functions |
@@ -346,6 +387,7 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | Microsoft.Extensions.Http.Resilience | 9.0.0 | BuildingBlocks, Products Infrastructure |
 | Microsoft.Extensions.Resilience | 9.0.0 | BuildingBlocks, Order/ShoppingCart/Products Infrastructure |
 | Ocelot | 23.4.2 | Gateway API |
+| Ocelot.Provider.Polly | 23.4.2 | Gateway API |
 | Razorpay | 3.3.2 | Payments Infrastructure |
 | xunit | 2.9.x | Tests |
 | Moq | 4.20.x | Tests |
@@ -430,7 +472,11 @@ When asked to build a new service `AK.<Name>`, follow this order:
 - Build context is always the **repo root** (`.`)
 - Dockerfiles live inside the API/Grpc project folder
 - **Non-root containers:** All Dockerfiles include `USER $APP_UID` before `ENTRYPOINT` — uses .NET 9 base image UID 1654
-- **Container/image naming:** use the `antkart-` prefix (e.g. `antkart-mongodb`, `antkart-rabbitmq`) — never `antcart-` or `ak-`
+- **Container/image naming — three distinct domains, each with its own convention:**
+  - **Azure resources:** `antkart-` prefix (resource groups, container registry, Key Vault, Service Bus).
+  - **ACR image paths:** `acrantkartdev.azurecr.io/antkart/<service>`.
+  - **In-cluster Kubernetes objects** (Deployment, Service, ServiceAccount): `ak-<service>` (e.g. `ak-products`, `ak-gateway`). This MUST match the workload-identity federated subject `system:serviceaccount:antkart:ak-<service>`, which is exact-match and case-sensitive — renaming a Kubernetes object silently breaks workload identity.
+  - Never `antcart-`.
 - **Seeding:** Startup auto-seeding is opt-in and resilient — gated behind the `Seeding:RunOnStartup` flag (default `false`) and wrapped in try/catch so a seed failure logs a warning and never crashes startup. Routine data seeding is a deliberate, separate operation (dedicated loader), not a boot-time side effect.
 
 > **No local docker-compose stack.** This repository targets cloud deployment — run services locally against live cloud services or via cloud port-forwarding. The docker-compose-based Phase-1 local orchestration (compose files, `.dockerignore`, healthchecks, `depends_on` wiring, named volumes) is preserved in the public AntKart reference repository.
