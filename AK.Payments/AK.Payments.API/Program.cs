@@ -66,6 +66,9 @@ var app = builder.Build();
 
 await app.ApplyMigrationsAsync();
 
+// CorrelationIdMiddleware runs OUTERMOST so the correlation id is on every log event, including
+// exceptions. It reads the X-Correlation-Id forwarded by the gateway (or generates one).
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ExceptionHandlerMiddleware>();
 
 app.UseSwaggerInDevelopment("AK.Payments API v1");

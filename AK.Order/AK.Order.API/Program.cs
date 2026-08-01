@@ -79,8 +79,11 @@ var app = builder.Build();
 // Ensures the DB schema is always up to date without manual migration steps.
 await app.ApplyMigrationsAsync();
 
-// Middleware order matters — ExceptionHandlerMiddleware must be registered FIRST
-// so it wraps the entire request pipeline and catches exceptions from all subsequent middleware.
+// Middleware order matters — CorrelationIdMiddleware runs OUTERMOST so the correlation id
+// is attached to every log event, including those written by ExceptionHandlerMiddleware.
+// ExceptionHandlerMiddleware then wraps the rest of the pipeline and catches exceptions from
+// all subsequent middleware.
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ExceptionHandlerMiddleware>();
 
 app.UseSwaggerInDevelopment("AK.Order API v1");
