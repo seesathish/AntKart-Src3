@@ -67,7 +67,7 @@ var app = builder.Build();
 app.UseCors("AllowAll");
 
 // Attach X-Correlation-Id to every request so logs from all downstream services
-// can be correlated in Kibana by the same ID.
+// can be correlated in Azure Monitor (Log Analytics / Application Insights) by the same ID.
 app.UseMiddleware<CorrelationIdMiddleware>();
 
 app.UseEntraAuth();

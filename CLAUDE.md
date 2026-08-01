@@ -370,6 +370,7 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | Serilog.AspNetCore | 8.0.3 | BuildingBlocks, Gateway API |
 | Serilog.Sinks.Console | 6.0.0 | BuildingBlocks |
 | Serilog.Sinks.File | 6.0.0 | BuildingBlocks |
+| Serilog.Formatting.Compact | 2.0.0 | BuildingBlocks (cloud JSON console) |
 | MassTransit | 8.3.6 | BuildingBlocks, Order, Products, ShoppingCart |
 | MassTransit.Azure.ServiceBus.Core | 8.3.6 | BuildingBlocks (Azure Service Bus transport, Entra auth) |
 | MassTransit.EntityFrameworkCore | 8.3.6 | Order Infrastructure (outbox + saga) |
