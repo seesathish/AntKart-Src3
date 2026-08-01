@@ -96,6 +96,7 @@ jobs:
         with:
           ref: master
           token: ${{ secrets.CD_PUSH_TOKEN }}
+          fetch-depth: 0
 
       - name: Bump image tag in values
         env:
@@ -117,4 +118,29 @@ jobs:
             exit 0
           fi
           git commit -m "chore(cd): order image -> $TAG [skip ci]"
-          git push origin HEAD:master
+          pushed=false
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:master; then
+              pushed=true
+              break
+            fi
+            echo "push rejected (attempt $attempt) - rebasing onto latest master"
+            git pull --rebase origin master
+          done
+
+          if [ "$pushed" != "true" ]; then
+            echo "::error::failed to push tag bump after 5 attempts" >&2
+            exit 1
+          fi
+
+      - name: Verify tag bump landed on master
+        env:
+          TAG: ${{ needs.build-and-push.outputs.image_tag }}
+        run: |
+          git fetch origin master
+          remote_tag=$(git show "FETCH_HEAD:$VALUES_FILE" | yq '.image.tag')
+          echo "master $VALUES_FILE image.tag = $remote_tag (expected $TAG)"
+          if [ "$remote_tag" != "$TAG" ]; then
+            echo "::error::tag bump did not land on master ($remote_tag != $TAG)" >&2
+            exit 1
+          fi
