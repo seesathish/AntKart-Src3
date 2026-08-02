@@ -43,16 +43,16 @@ Related: the [Platform Roadmap](ROADMAP.md) tracks delivered/in-progress/planned
 - **Current mitigation:** The Terraform config now records reality (`purge_protection_enabled = true`), so routine applies no longer fail trying to disable it. For a rebuild within the retention window, either **wait out the 7 days** before recreating, or recreate the vault under a **different name**. **QA is unaffected:** no Azure Policy enforces purge protection (the governance module only creates a budget), so the QA vault can be created with purge protection **disabled** and stays freely disposable.
 - **Planned resolution:** Accept purge protection as the standing posture for `kv-antkart-dev` (the safer, production-like default) and update the zero-to-AKS rebuild runbook to account for the name-reservation window (wait it out, or use a fresh vault name). No code change is pending; recorded so the rebuild constraint is scheduled, not overlooked.
 
-### KI-008 · AK.Discount.Grpc `/metrics` unreachable by a standard Prometheus scrape · Severity: Low
-
-- **Component:** `AK.Discount/AK.Discount.Grpc` — its single Kestrel listener (HTTP/2-only, cleartext `h2c`) that serves gRPC.
-- **Impact:** The service exposes OpenTelemetry metrics at `/metrics` in Prometheus exposition format, but its only Kestrel endpoint is configured **HTTP/2-only (`h2c`)** so it can serve gRPC. A standard Prometheus scrape speaks **HTTP/1.1**, so it cannot read `/metrics` on that listener — the endpoint is effectively **unreachable to the scraper**, unlike the five REST services whose `/metrics` is HTTP/1.1-capable. Nothing is lost today because nothing scrapes yet (metrics are exposed-not-scraped — see [Observability](development/5-observability.md)), but Discount would be the one gap the moment a scrape is deployed.
-- **Current mitigation:** None needed yet — no Prometheus deployment scrapes any service. Discount's **logs** (Log Analytics `ContainerLog`) and **traces** (Application Insights `AppRequests`/`AppDependencies`) are unaffected; only its Prometheus metrics are unreachable.
-- **Planned resolution:** Add a **second Kestrel listener on a separate port serving HTTP/1.1** dedicated to `/metrics` (and health), leaving the gRPC listener HTTP/2-only. Note: simply switching the gRPC port to `Http1AndHttp2` is **not acceptable** — over cleartext `h2c` there is no TLS/ALPN, so the protocol cannot be negotiated on a mixed listener and gRPC breaks. The correct fix is a dedicated HTTP/1.1 listener. Deferred until the Prometheus scrape is actually deployed (see the [Roadmap](ROADMAP.md)).
-
 ---
 
 ## Resolved
+
+### KI-008 · AK.Discount.Grpc `/metrics` unreachable by a standard Prometheus scrape · Resolved
+
+- **Component:** `AK.Discount/AK.Discount.Grpc` — its Kestrel listener configuration; and the `antkart-service` Helm chart (the metrics port + the ServiceMonitor).
+- **Cause:** the service's only Kestrel endpoint was **HTTP/2-only (cleartext `h2c`)** so it could serve gRPC. A Prometheus scrape speaks **HTTP/1.1**, which that endpoint rejects, so `/metrics` was **unreachable to the scraper** — unlike the five REST services whose `/metrics` is HTTP/1.1-capable.
+- **Fix:** a **second Kestrel listener on port 8081 serving HTTP/1.1** was added for `/metrics`, with the gRPC port left HTTP/2-only — **not** `Http1AndHttp2`, which would break gRPC over cleartext `h2c` (no ALPN to negotiate) (PR #18). This PR then **wires the scrape**: a per-service **ServiceMonitor** (`serviceMonitor.enabled`) targets Discount's `metrics` port **by name**, and the monitoring stack's Prometheus is configured for cross-namespace discovery (`serviceMonitorSelectorNilUsesHelmValues: false` plus a `serviceMonitorNamespaceSelector` matching the `antkart` namespace). Discount's `/metrics` is now actually scraped.
+- **Lesson:** an HTTP/2-only (h2c) port cannot also serve an HTTP/1.1 scrape — put the scrape on its own HTTP/1.1 listener rather than downgrading the gRPC port's protocol.
 
 ### KI-009 · Order state machine rejected `Confirmed → Paid` / `Confirmed → PaymentFailed` · Resolved
 
@@ -61,8 +61,6 @@ Related: the [Platform Roadmap](ROADMAP.md) tracks delivered/in-progress/planned
 - **Proof (not theoretical):** surfaced during the **full cloud saga end-to-end run** (the "AntKart Cloud E2E Saga" Postman flow), where an order that paid successfully never advanced past `Confirmed`.
 - **Fix:** added `Confirmed → Paid` and `Confirmed → PaymentFailed` to `_allowedTransitions` in `AK.Order.Domain/Order.cs` (**PR #8**), shipped through the CI/CD → GitOps pipeline. Verified by re-running the saga E2E to a `Paid` terminal state, and the failure branch to `PaymentFailed`. (Stock-release compensation on the failure path is a separate, still-open concern — see [KI-005](#ki-005--no-stock-release-compensation-on-payment-failure--severity-medium).)
 - **Lesson:** an explicit state machine must cover **every** transition the orchestrator actually drives; a full end-to-end saga run is what exposes a missing edge that unit tests on individual handlers do not.
-
-### KI-006 · CD path filters lacked a markdown exclusion · Resolved
 
 ### KI-006 · CD path filters lacked a markdown exclusion · Resolved
 

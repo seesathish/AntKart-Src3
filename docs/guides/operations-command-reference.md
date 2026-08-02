@@ -231,7 +231,7 @@ az aks show -g <RG> -n <CLUSTER> --query "{powerState:powerState.code, k8sVersio
 az aks stop  -g <RG> -n <CLUSTER>     # deallocates the nodes — stops node billing
 az aks start -g <RG> -n <CLUSTER>     # brings the nodes back
 ```
-- `show` reports whether the cluster is `Running` or `Stopped` and its version. `stop`/`start` is the routine for idle periods (see [section I](#i-operational-routines)); the ingress load balancer's public IP persists across a stop, so the hostname stays valid.
+- `show` reports whether the cluster is `Running` or `Stopped` and its version. `stop`/`start` is the routine for idle periods (see [section I](#i-session-bring-up-and-shutdown)); the ingress load balancer's public IP persists across a stop, so the hostname stays valid.
 
 ```bash
 az aks get-credentials -g <RG> -n <CLUSTER>

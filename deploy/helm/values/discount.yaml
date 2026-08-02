@@ -18,6 +18,11 @@ service:
 # Service. The other five serve /metrics on 8080 over HTTP/1.1 and leave this off (KI-008).
 metricsPort:
   enabled: true
+# Scrape /metrics on the dedicated HTTP/1.1 "metrics" port (8081), NOT the HTTP/2-only
+# gRPC port — reference it by name. This is the one service that overrides the port name.
+serviceMonitor:
+  enabled: true
+  portName: metrics
 image:
   tag: "e0a1d4d"
 # Inherits only the common env default (KeyVault__Uri) — the DiscountDb connection

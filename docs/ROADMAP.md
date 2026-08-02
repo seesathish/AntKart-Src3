@@ -81,7 +81,8 @@ Core Azure services in use: **Microsoft Entra ID**, **Azure Kubernetes Service**
 - Full orchestrated **saga verified end to end** through the public HTTPS endpoint (`api.antkart.in`) — both the payment **success** branch (the order reaches `Paid`) and the payment **failure** branch (the order reaches `PaymentFailed`), exercising stock reservation, the payment outcome, the order state transitions, and the notification emails. This run surfaced and fixed the order state machine's missing `Confirmed → Paid` / `Confirmed → PaymentFailed` transitions — [KI-009](KNOWN_ISSUES.md) · [Cluster end-to-end verification](test/README.md#cluster-end-to-end-verification-public-ingress)
 
 **Observability**
-- Structured logging, distributed tracing, and working correlation delivered across the fleet: Serilog JSON to the console collected by the OMS agent into **Log Analytics** (`ContainerLog`); **OpenTelemetry** traces exported to **Application Insights** (`AppRequests`/`AppDependencies`); cross-service correlation via `X-Correlation-Id` plus `TraceId`/`SpanId` on every log line. A Prometheus `/metrics` endpoint is **exposed** on every service (the scrape and dashboards are not yet deployed — see Planned) — [ADR-025](adr/ADR-025-observability-architecture.md) · [Observability — how it is seen](development/5-observability.md)
+- Structured logging, distributed tracing, and working correlation delivered across the fleet: Serilog JSON to the console collected by the OMS agent into **Log Analytics** (`ContainerLog`); **OpenTelemetry** traces exported to **Application Insights** (`AppRequests`/`AppDependencies`); cross-service correlation via `X-Correlation-Id` plus `TraceId`/`SpanId` on every log line — [ADR-025](adr/ADR-025-observability-architecture.md) · [Observability — how it is seen](development/5-observability.md)
+- **Metrics scraped end to end: Prometheus + Grafana** deployed via the kube-prometheus-stack (Argo CD, scoped `monitoring` project) — every service exposes `/metrics` and is scraped through a per-service **ServiceMonitor** (`AK.Discount.Grpc` on a dedicated HTTP/1.1 port), with Grafana's default Kubernetes dashboards. Alerting is deliberately deferred — [Metrics stack](development/5-observability.md#metrics-stack--kube-prometheus-stack-via-argo-cd)
 
 **Infrastructure as code**
 - Terraform modules (resource shape) composed by Terragrunt live units per environment over a shared remote-state backend, with a reviewed `plan` before every `apply` — [infrastructure/README](../infrastructure/README.md) · [Infrastructure Guide](guides/infrastructure-guide.md) · [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md) · [ADR-013](adr/ADR-013-key-vault-rbac-and-observability-foundation.md) (Key Vault RBAC + observability foundation)
@@ -91,13 +92,13 @@ Core Azure services in use: **Microsoft Entra ID**, **Azure Kubernetes Service**
 
 ## In progress
 
-- **Observability — completing the metrics path.** Logging, tracing, and correlation are delivered (see Delivered); the remaining work is deploying a **Prometheus** scrape over the exposed `/metrics` endpoints and **Grafana** dashboards (self-hosted via GitOps, not managed Grafana), plus giving `AK.Discount.Grpc` a reachable HTTP/1.1 metrics listener — [ADR-025](adr/ADR-025-observability-architecture.md) · [KI-008](KNOWN_ISSUES.md).
+_Nothing is in active development right now — the near-term plan below is the immediate queue._
 
 ## Planned — near term
 
 _Target: on or before 6 August 2026._
 
-- **Metrics scrape and dashboards** — deploy Prometheus to scrape the delivered `/metrics` endpoints and Grafana for dashboards; the logging, tracing, and correlation halves are already delivered — [Observability — how it is seen](development/5-observability.md) · [ADR-025](adr/ADR-025-observability-architecture.md).
+- **Observability follow-ups** — Alertmanager routing + alert/recording rules, and (if warranted) persistent Prometheus storage; the scrape, dashboards, logging, tracing, and correlation are already delivered — [Observability — how it is seen](development/5-observability.md) · [ADR-025](adr/ADR-025-observability-architecture.md).
 - **Deep-understanding consolidation** — of the delivered platform: Kubernetes, Helm, GitOps / Argo CD, CI/CD, OIDC federated credentials, workload identity, and action SHA pinning.
 - **Kubernetes depth at interview level** — probes, resources, configuration, storage, networking, policies, and failure diagnosis applied to the running fleet.
 - **API Management spike** — a time-boxed exploration: provision → wire one scenario (JWT validation at the edge) → test → delete. No standing APIM resource — [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md).

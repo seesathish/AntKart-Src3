@@ -92,21 +92,22 @@ spec:
         server: https://kubernetes.default.svc
         namespace: antkart
       # ---------------------------------------------------------------------
-      # MANUAL SYNC to start (no `automated:` block). Argo CD tracks drift and
-      # reports OutOfSync, but changes are applied only when you click Sync (UI)
-      # or run `argocd app sync <name>`. This makes the first adoption of the
-      # already-running services safe and observable — you diff before applying.
-      #
-      # To enable automation later, add an `automated:` block (see README §"Enable
-      # auto-sync"). Recommended staged rollout:
-      #   1) automated: {}                      # auto-sync on every Git change
-      #   2) automated: { selfHeal: true }      # also revert manual/live drift
-      #   3) automated: { selfHeal: true, prune: true }  # also delete resources removed from Git
-      #        automated = sync automatically when Git changes
-      #        selfHeal  = if the live cluster drifts from Git, revert it
-      #        prune     = if a resource is deleted from Git, delete it from the cluster
+      # AUTO-SYNC IS ENABLED — matching the standalone Applications in
+      # applications/ so BOTH delivery paths behave identically. This is what the
+      # CD pipeline depends on: a workflow bumps the image tag in Git and Argo CD
+      # rolls it out hands-free. Without this block, the RECOMMENDED path (this
+      # ApplicationSet) would silently NOT auto-deploy, while the standalone path
+      # would — a trap for anyone templating a second environment (e.g. QA) from it.
+      #   automated = sync automatically whenever Git changes
+      #   selfHeal  = if the live cluster drifts from Git, revert it back to Git
+      #   prune stays OFF (false): pruning DELETES resources removed from Git. It is
+      #     the only destructive automation, so it is enabled last and deliberately —
+      #     kept off here so a stray Git deletion can never cascade into the cluster.
       # ---------------------------------------------------------------------
       syncPolicy:
+        automated:
+          selfHeal: true
+          prune: false
         syncOptions:
           # The antkart namespace already exists (created out-of-band); do not let
           # Argo try to create/own it.

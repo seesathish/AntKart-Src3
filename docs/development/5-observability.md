@@ -1,6 +1,6 @@
 # Observability — how it is seen
 
-Observability is **mostly delivered**: structured logging and distributed tracing are in place across every service; metrics are *exposed* but not yet scraped. Two secret-less paths ship today — Serilog writes JSON logs to the console, collected by the AKS OMS agent into **Log Analytics** (`ContainerLog`), and OpenTelemetry exports **traces to Application Insights** (`AppRequests` / `AppDependencies`). A Prometheus `/metrics` endpoint is exposed on every service, but nothing scrapes it yet.
+Observability is **delivered** across all three signals. Three secret-less paths ship today: Serilog writes JSON logs to the console, collected by the AKS OMS agent into **Log Analytics** (`ContainerLog`); OpenTelemetry exports **traces to Application Insights** (`AppRequests` / `AppDependencies`); and every service exposes a Prometheus `/metrics` endpoint that is now **scraped by an in-cluster Prometheus**, with **Grafana** dashboards, deployed via the kube-prometheus-stack.
 
 ## Observability pipeline
 
@@ -12,18 +12,15 @@ flowchart TD
         OMS["AKS OMS agent"]:::paas
         LA["Log Analytics<br/>ContainerLog · KQL"]:::paas
         AI["Application Insights<br/>AppRequests / AppDependencies"]:::paas
-        METRICS["/metrics<br/>Prometheus format (exposed)"]:::service
-    end
-
-    subgraph PLANNED["Planned — not deployed"]
-        PROM["Prometheus scrape"]:::issue
-        GRAF["Grafana dashboards"]:::issue
+        METRICS["/metrics<br/>Prometheus format"]:::service
+        PROM["Prometheus scrape<br/>(monitoring ns)"]:::paas
+        GRAF["Grafana dashboards"]:::paas
     end
 
     SVC -->|"Serilog logs"| CON --> OMS --> LA
     SVC -->|"OTel traces"| AI
     SVC -->|"exposes"| METRICS
-    METRICS -. "nothing scrapes it yet" .-> PROM -.-> GRAF
+    METRICS -->|"ServiceMonitor scrape"| PROM --> GRAF
 
     classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
     classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
@@ -40,7 +37,7 @@ flowchart TD
 - **Logging is delivered — via the OMS agent into Log Analytics, NOT Application Insights.** Every service and Function emits **Serilog** `RenderedCompactJsonFormatter` JSON to the **console**; the AKS **OMS agent** ships container stdout into **Log Analytics**, landing in the legacy **`ContainerLog`** table (the cluster is on the pre-DCR collection path — `useAADAuth=false`, no data collection rules, so not `ContainerLogV2`). Because each line is JSON, `ServiceName`, `Environment`, `CorrelationId` and `TraceId`/`SpanId` are queryable via `parse_json(LogEntry)`. No code-side sink credentials.
 - **Tracing is delivered — to Application Insights.** All six services export **OpenTelemetry** traces via the Azure Monitor exporter; spans land in **`AppRequests`** (server) and **`AppDependencies`** (client). Instrumented: AspNetCore, HttpClient, gRPC client, MassTransit (Service Bus), Npgsql (PostgreSQL), MongoDB (Cosmos Mongo API) and StackExchange.Redis.
 - **Logs stay on Serilog, not OTel.** `AppTraces` contains only `func-antkart-notifications-dev` (the Functions app's classic App Insights SDK); the six AKS services deliberately do **not** enable OTel log export — Serilog already covers logs, and logs are joined to traces by the `TraceId`/`SpanId` enrichment instead. See [ADR-025](../adr/ADR-025-observability-architecture.md).
-- **Metrics are exposed but not yet scraped.** Each service serves `/metrics` in Prometheus exposition format. The **kube-prometheus-stack** (Prometheus + Grafana) is now added as a manually-applied Argo CD Application (see [Metrics stack](#metrics-stack--kube-prometheus-stack-via-argo-cd)); the scrape itself (ServiceMonitors) is not wired yet. `AK.Discount.Grpc` now serves `/metrics` on a **dedicated HTTP/1.1 port (8081)** because its main port is HTTP/2-only (h2c) for gRPC — addressing [KI-008](../KNOWN_ISSUES.md).
+- **Metrics are exposed and scraped.** Each service serves `/metrics` in Prometheus exposition format, and an in-cluster **Prometheus** (the kube-prometheus-stack) scrapes all six via per-service **ServiceMonitors**, with **Grafana** for dashboards (see [Metrics stack](#metrics-stack--kube-prometheus-stack-via-argo-cd)). `AK.Discount.Grpc` is scraped on a **dedicated HTTP/1.1 port (8081)** because its main port is HTTP/2-only (h2c) for gRPC — the fix recorded in [KI-008](../KNOWN_ISSUES.md).
 - **Correlation and trace-linking are in place.** The `X-Correlation-Id` middleware follows a request across services in the logs; OTel additionally propagates W3C `traceparent` across HttpClient/gRPC/MassTransit, and each log line carries `TraceId`/`SpanId` so a slow span in Application Insights pivots to its log lines.
 
 ## Working KQL
@@ -91,9 +88,18 @@ union AppRequests, AppDependencies
 
 ## Metrics stack — kube-prometheus-stack (via Argo CD)
 
-Prometheus + Grafana are deployed as the `monitoring-kube-prometheus-stack` Argo CD Application ([deploy/argocd/applications/](../../deploy/argocd/applications/monitoring-kube-prometheus-stack.yaml)), into a dedicated `monitoring` namespace under a **separate, scoped** `monitoring` AppProject ([deploy/argocd/appproject-monitoring.yaml](../../deploy/argocd/appproject-monitoring.yaml)) — kept apart from the least-privilege `antkart` project so the stack's cluster-scoped needs (CRDs, ClusterRoles, admission webhooks) never widen the AntKart project. The chart version is **pinned** and the Application syncs with `ServerSideApply=true` (the chart's CRDs exceed the client-side-apply annotation limit). No ServiceMonitors are wired yet — that is a follow-up once the stack's CRDs exist.
+Prometheus + Grafana are deployed as the `monitoring-kube-prometheus-stack` Argo CD Application ([deploy/argocd/monitoring/kube-prometheus-stack.yaml](../../deploy/argocd/monitoring/kube-prometheus-stack.yaml)), into a dedicated `monitoring` namespace under a **separate, scoped** `monitoring` AppProject ([deploy/argocd/appproject-monitoring.yaml](../../deploy/argocd/appproject-monitoring.yaml)) — kept apart from the least-privilege `antkart` project so the stack's cluster-scoped needs (CRDs, ClusterRoles, admission webhooks) never widen the AntKart project. The chart version is **pinned** and the Application syncs with `ServerSideApply=true` (the chart's CRDs exceed the client-side-apply annotation limit). Alertmanager is disabled; storage is ephemeral (emptyDir).
 
-Prometheus scrapes over **HTTP/1.1**. Five services serve `/metrics` on their main 8080 port; `AK.Discount.Grpc`'s main port is **HTTP/2-only (h2c)** for gRPC and rejects an HTTP/1.1 scrape, so it serves `/metrics` on a **dedicated HTTP/1.1 port 8081** (a second Kestrel listener, enabled only in the cluster). It must not use `Http1AndHttp2` on the gRPC port — over cleartext h2c there is no ALPN, so that would fall back to HTTP/1.1 and break gRPC.
+**What Prometheus scrapes.** The service chart renders one **ServiceMonitor** per service (`serviceMonitor.enabled: true` in every values file). Prometheus runs in `monitoring` and the ServiceMonitors live in `antkart`, so the Application configures cross-namespace discovery — `serviceMonitorSelectorNilUsesHelmValues: false` (select all ServiceMonitors, no release label needed) plus a `serviceMonitorNamespaceSelector` matching the `antkart` namespace by its built-in `kubernetes.io/metadata.name` label. Each ServiceMonitor targets a **named** port: the five REST services and the gateway scrape `/metrics` on the main HTTP port; `AK.Discount.Grpc` is scraped on its **dedicated HTTP/1.1 port 8081** (its main port is HTTP/2-only h2c for gRPC and rejects an HTTP/1.1 scrape — it must not use `Http1AndHttp2`, since over cleartext h2c there is no ALPN and gRPC would break).
+
+**Reaching Grafana.** Grafana is a `ClusterIP` in `monitoring` (no ingress — it is not publicly exposed). Port-forward it:
+
+```bash
+kubectl -n monitoring port-forward svc/monitoring-kube-prometheus-stack-grafana 3000:80
+# then open http://localhost:3000 — log in with the admin user/password from the grafana-admin secret
+```
+
+Grafana ships with the stack's **default Kubernetes dashboards** out of the box (cluster / node / namespace / pod / workload views, driven by kube-state-metrics and node-exporter), plus Prometheus targets/health under **Status → Targets** in the Prometheus UI (`svc/monitoring-kube-prometheus-stack-prometheus:9090`). No custom AntKart dashboards or alert rules are added (deliberately out of scope).
 
 **Grafana admin password — created out of band, never committed.** The chart reads the admin credentials from a Kubernetes Secret via `grafana.admin.existingSecret`. Create it **before** syncing the Application (the Grafana pod needs it at startup):
 
@@ -106,4 +112,7 @@ kubectl create secret generic grafana-admin -n monitoring \
 
 No password — not even a placeholder — is stored in Git.
 
-- **The metrics scrape is not wired yet.** Every service exposes `/metrics`, and `AK.Discount.Grpc` now serves it on a **dedicated HTTP/1.1 port (8081)** — addressing the h2c scrape-reachability gap in [KI-008](../KNOWN_ISSUES.md). The **kube-prometheus-stack** is added as a manually-applied Argo CD Application (see [Metrics stack](#metrics-stack--kube-prometheus-stack-via-argo-cd) above); connecting Prometheus to the services via **ServiceMonitors** is the next step, once the stack's CRDs are installed.
+## Open items
+
+- **No alerting yet.** Alertmanager is disabled and no alert or recording rules are defined — dashboards and ad-hoc queries only. Routing + rules are a deliberate follow-up.
+- **Metrics history is ephemeral.** Prometheus uses an `emptyDir` with 3-day retention (no persistent volume on these tight nodes), so a Prometheus pod restart loses history.

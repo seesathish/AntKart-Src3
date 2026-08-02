@@ -1,15 +1,18 @@
 # kube-prometheus-stack — Prometheus + Grafana for the cluster, delivered by Argo CD.
 #
-# Scoped to the dedicated `monitoring` AppProject (appproject-monitoring.yaml), NOT
+# Scoped to the dedicated `monitoring` AppProject (../appproject-monitoring.yaml), NOT
 # the least-privilege `antkart` project — this stack needs cluster-scoped kinds the
 # AntKart project deliberately forbids. Apply the project FIRST.
 #
+# It lives in deploy/argocd/monitoring/ (NOT applications/) on purpose: the six service
+# Applications in applications/ are an either/or with applicationset-antkart.yaml
+# ("never both" — identical names collide), and `kubectl apply -f applications/` applies
+# the whole folder. This stack is OUTSIDE that choice — different project, different
+# source repo, different chart — so it must not sit in that folder. Apply it explicitly:
+#   kubectl apply -f deploy/argocd/monitoring/kube-prometheus-stack.yaml
+#
 # Like the AntKart Applications, this is applied manually by the operator (there is no
 # automated: block) — it comes up OutOfSync and waits for a reviewed manual sync.
-#
-# NOTE: this PR does NOT add any ServiceMonitor. The ServiceMonitor CRD does not exist
-# until this stack has synced; shipping one now would make the AntKart Applications fail
-# to sync on an unknown kind. Wiring the services' /metrics into Prometheus is the next PR.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -45,6 +48,27 @@ spec:
             # persistent volume is provisioned on these tight nodes; a pod restart loses
             # history, which is an acceptable trade for a demo/interview cluster.
             retention: 3d
+
+            # --- Cross-namespace ServiceMonitor discovery (the AntKart scrape targets) ---
+            # Prometheus runs HERE in `monitoring`; the AntKart ServiceMonitors live in the
+            # `antkart` namespace. TWO chart defaults must be overridden or Prometheus runs
+            # with ZERO targets while reporting perfectly healthy:
+            #   1. serviceMonitorSelectorNilUsesHelmValues (chart default TRUE): with an
+            #      empty serviceMonitorSelector, TRUE restricts discovery to ServiceMonitors
+            #      carrying THIS Helm release's label — which the AntKart ones do not. Set
+            #      FALSE so an empty selector means "select ALL ServiceMonitors" (no label
+            #      required on our ServiceMonitors).
+            #   2. serviceMonitorNamespaceSelector (chart default {} -> rendered nil -> the
+            #      operator searches only Prometheus's OWN namespace). Point it at the
+            #      `antkart` namespace via the built-in immutable label
+            #      kubernetes.io/metadata.name (present on every namespace since k8s 1.22),
+            #      so discovery crosses into `antkart`.
+            # Value names verified against chart 88.0.1 (helm show values).
+            serviceMonitorSelectorNilUsesHelmValues: false
+            serviceMonitorNamespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: antkart
+
             resources:
               requests:
                 cpu: 150m
@@ -76,7 +100,10 @@ spec:
         grafana:
           enabled: true
           # NO persistence — dashboards/state live in an emptyDir and are recreated from
-          # the provisioned config on restart. Keeps the footprint small, no PVC.
+          # the provisioned config on restart. The stack's DEFAULT Kubernetes dashboards
+          # (cluster/node/pod/workload views, from kube-state-metrics + node-exporter) are
+          # provisioned from ConfigMaps on every start, so they survive a restart; only
+          # ad-hoc, hand-saved dashboards would be lost. Keeps the footprint small, no PVC.
           persistence:
             enabled: false
           # Admin password is NOT in Git. The chart reads it from a Secret created out of

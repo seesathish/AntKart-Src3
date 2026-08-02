@@ -59,6 +59,21 @@ metricsPort:
   port: 8081
   name: metrics
 
+# Prometheus scrape wiring. OFF by default; every per-service values file enables it.
+# When enabled the chart renders ONE ServiceMonitor for the service — which requires
+# the Prometheus operator CRDs (installed by the monitoring stack). Prometheus runs in
+# the `monitoring` namespace and is configured to discover ServiceMonitors in `antkart`
+# regardless of label (see deploy/argocd/monitoring/kube-prometheus-stack.yaml), so no
+# discovery label is needed here.
+serviceMonitor:
+  enabled: false
+  # Named Service port to scrape. Empty => the main HTTP port (service.portName).
+  # AK.Discount overrides this to its dedicated HTTP/1.1 metrics port ("metrics"),
+  # because its main port is HTTP/2-only (h2c) gRPC and must NOT be scraped.
+  portName: ""
+  path: /metrics
+  interval: 30s
+
 # Probe strategy for a .NET service that loads Azure Key Vault at startup:
 #   * A startupProbe gives the process up to failureThreshold*periodSeconds to
 #     come up (Key Vault load + Kestrel bind can take several seconds) WITHOUT the
