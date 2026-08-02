@@ -41,6 +41,32 @@ spec:
         alertmanager:
           enabled: false
 
+        # --- Control-plane scrape targets: DISABLED because AKS runs a MANAGED control
+        # plane. On AKS the control-plane components (etcd, scheduler, controller-manager,
+        # kube-proxy, CoreDNS) are operated by Azure and are NOT reachable from the node
+        # pool, so these targets would be permanently DOWN. By default the chart also
+        # creates headless Services for them in the kube-system namespace — which the
+        # scoped `monitoring` AppProject (correctly) forbids, so the sync failed with
+        # "namespace kube-system is not permitted in project 'monitoring'". That failure
+        # is only what SURFACED the problem; the reason to disable them is the managed
+        # control plane, NOT the AppProject restriction. Widening the project to kube-system
+        # would let this Application deploy anything into kube-system and is deliberately
+        # avoided. kubeApiServer stays ENABLED — it is scraped via the `kubernetes` Service
+        # in the default namespace, which works on AKS. Value names verified against chart
+        # 88.0.1 (helm show values).
+        kubeApiServer:
+          enabled: true
+        kubeEtcd:
+          enabled: false
+        kubeProxy:
+          enabled: false
+        kubeControllerManager:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        coreDns:
+          enabled: false
+
         # --- Prometheus ---
         prometheus:
           prometheusSpec:
