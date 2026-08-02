@@ -31,6 +31,10 @@
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Resilience" Version="9.0.0" />
     <PackageReference Include="MongoDB.Driver" Version="3.3.0" />
+    <!-- Emits an ActivitySource ("MongoDB.Driver.Core.Extensions.DiagnosticSources") so Cosmos
+         (Mongo API) command spans appear in traces. 3.x targets MongoDB.Driver 3.x; no
+         Microsoft.Extensions dependency, so it does not affect the pinned OTel/Extensions line. -->
+    <PackageReference Include="MongoDB.Driver.Core.Extensions.DiagnosticSources" Version="3.0.0" />
   </ItemGroup>
 
   <ItemGroup>

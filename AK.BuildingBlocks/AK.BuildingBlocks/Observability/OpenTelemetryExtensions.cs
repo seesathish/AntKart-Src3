@@ -46,8 +46,14 @@ public static class OpenTelemetryExtensions
                         options.Filter = context => !IsHealthEndpoint(context.Request.Path))
                     .AddHttpClientInstrumentation()   // Order -> Products (HttpCatalogPriceProvider) carries traceparent
                     .AddGrpcClientInstrumentation()    // Products -> Discount (IDiscountGrpcClient) carries traceparent
+                    // Data-store spans via each driver's own ActivitySource / instrumentation:
                     .AddSource("MassTransit")          // Service Bus publish/consume spans
-                    .AddSource("Npgsql");              // PostgreSQL command spans
+                    .AddSource("Npgsql")              // PostgreSQL command spans (Order/Payments/Discount)
+                    .AddSource("MongoDB.Driver.Core.Extensions.DiagnosticSources") // Cosmos (Mongo API) command spans (Products)
+                    // Redis command spans (ShoppingCart). The DI overload resolves IConnectionMultiplexer
+                    // from the service provider when present; this extension is shared by all six services,
+                    // and services without Redis registered are unaffected (no multiplexer → nothing instrumented).
+                    .AddRedisInstrumentation();
 
                 if (hasAzureMonitor)
                     tracing.AddAzureMonitorTraceExporter(options => options.ConnectionString = connectionString);

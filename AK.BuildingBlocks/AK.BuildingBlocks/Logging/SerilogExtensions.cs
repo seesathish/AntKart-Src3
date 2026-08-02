@@ -29,7 +29,9 @@ public static class SerilogExtensions
             .MinimumLevel.Override("MassTransit", LogEventLevel.Warning)
             .Enrich.FromLogContext()
             .Enrich.WithProperty("ServiceName", serviceName)
-            .Enrich.WithProperty("Environment", environment);
+            .Enrich.WithProperty("Environment", environment)
+            // Adds TraceId/SpanId from the ambient Activity so logs can be pivoted to their trace.
+            .Enrich.With(new ActivityEnricher());
 
         if (builder.Environment.IsDevelopment())
             loggerConfiguration.WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{ServiceName}] [{CorrelationId}] {SourceContext}: {Message:lj}{NewLine}{Exception}");

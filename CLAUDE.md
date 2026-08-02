@@ -363,6 +363,7 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | FluentValidation | 11.11.0 | Application |
 | FluentValidation.DependencyInjectionExtensions | 11.11.0 | Application |
 | MongoDB.Driver | 3.3.0 | Products Infrastructure |
+| MongoDB.Driver.Core.Extensions.DiagnosticSources | 3.0.0 | Products Infrastructure (Cosmos/Mongo trace spans; no Microsoft.Extensions dep) |
 | Npgsql.EntityFrameworkCore.PostgreSQL | 9.0.4 | Order / Payments / Discount Infrastructure |
 | StackExchange.Redis | 2.8.16 | ShoppingCart Infrastructure |
 | Grpc.AspNetCore | 2.67.0 | Discount Grpc |
@@ -377,6 +378,7 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | OpenTelemetry.Instrumentation.GrpcNetClient | 1.13.0-beta.1 | BuildingBlocks (outbound gRPC traces; beta-only line) |
 | OpenTelemetry.Instrumentation.Runtime | 1.13.0 | BuildingBlocks (runtime metrics) |
 | OpenTelemetry.Exporter.Prometheus.AspNetCore | 1.13.0-beta.1 | BuildingBlocks (/metrics scrape; beta-only line) |
+| OpenTelemetry.Instrumentation.StackExchangeRedis | 1.13.0-beta.1 | BuildingBlocks (Redis trace spans, DI overload; beta-only line) |
 | Azure.Monitor.OpenTelemetry.Exporter | 1.4.0 | BuildingBlocks (traces → App Insights; last on OTel 1.12/Extensions 9.x) |
 | MassTransit | 8.3.6 | BuildingBlocks, Order, Products, ShoppingCart |
 | MassTransit.Azure.ServiceBus.Core | 8.3.6 | BuildingBlocks (Azure Service Bus transport, Entra auth) |

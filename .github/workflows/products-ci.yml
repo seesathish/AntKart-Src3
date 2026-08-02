@@ -200,7 +200,7 @@ jobs:
             /d:sonar.token="$SONAR_TOKEN" \
             /d:sonar.host.url="https://sonarcloud.io" \
             /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
-            /d:sonar.coverage.exclusions="**/Program.cs,**/Logging/SerilogExtensions.cs,**/Observability/OpenTelemetryExtensions.cs"
+            /d:sonar.coverage.exclusions="**/Program.cs,**/Logging/SerilogExtensions.cs,**/Observability/OpenTelemetryExtensions.cs,**/Persistence/MongoDbContext.cs"
 
           dotnet build "${{ env.PRODUCTS_API }}" -c Release
           dotnet build "${{ env.PRODUCTS_TESTS }}" -c Release
