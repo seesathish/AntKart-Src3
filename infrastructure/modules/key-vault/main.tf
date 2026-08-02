@@ -40,8 +40,10 @@ resource "azurerm_key_vault" "this" {
 
   # Purge protection, when enabled, prevents an early permanent purge — a
   # soft-deleted vault must wait out the full retention window. Production
-  # enables it to make secret loss irreversible-proof; dev leaves it off so a
-  # throwaway vault can be purged and recreated cleanly.
+  # enables it to make secret loss irreversible-proof. Note this is a ONE-WAY switch:
+  # once a vault has purge protection on, Azure will not let it be turned off — so it can
+  # only be adopted deliberately. A genuinely disposable environment may leave it false to
+  # allow early purge/recreate, but any vault that already has it on must keep it on.
   purge_protection_enabled = var.purge_protection_enabled
 
   tags = var.tags

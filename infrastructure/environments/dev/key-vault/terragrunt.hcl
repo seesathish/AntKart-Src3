@@ -57,9 +57,12 @@ inputs = {
   # the retention window — recover/purge it or choose a new name.
   key_vault_name = "kv-antkart-dev"
 
-  # Dev: leave purge protection off so a disposable vault can be purged and
-  # recreated cleanly. Production would set this true.
-  purge_protection_enabled = false
+  # Purge protection was ENABLED out of band on the live kv-antkart-dev vault, and
+  # Azure does NOT allow disabling it once on ("once Purge Protection has been Enabled
+  # it's not possible to disable it"). This records that reality — it is not a preference
+  # for dev. Leaving it false here would make every apply try to disable it and fail.
+  # See docs/KNOWN_ISSUES.md (KI-007) for the teardown/rebuild consequence.
+  purge_protection_enabled = true
 
   tags = {
     environment = "dev"

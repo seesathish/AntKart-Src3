@@ -36,6 +36,13 @@ Related: the [Platform Roadmap](ROADMAP.md) tracks delivered/in-progress/planned
 - **Current mitigation:** Delete the pod (or roll the Deployment) to force a fresh pull; documented in the [AKS Guide troubleshooting](guides/aks-guide.md#troubleshooting).
 - **Planned resolution:** Tag images with the **immutable commit SHA** so every rollout references a distinct image; adopted with the CI/CD delivery pipeline ([ADR-022](adr/ADR-022-cicd-github-actions-oidc.md)).
 
+### KI-007 · Key Vault purge protection blocks early teardown/rebuild · Severity: Low
+
+- **Component:** `infrastructure/environments/dev/key-vault` — the `kv-antkart-dev` vault (`purge_protection_enabled = true`, `soft_delete_retention_days = 7`).
+- **Impact:** Purge protection was enabled **out of band** on the live vault and Azure **cannot disable it once on**. With it enabled and a **7-day** soft-delete retention, the vault **cannot be purged early**, and after deletion its **globally-unique name (`kv-antkart-dev`) stays reserved for 7 days**. Any teardown-and-rebuild that recreates the vault under the **same name** inside that window fails — which blocks the planned **zero-to-AKS rebuild runbook** (a clean destroy → re-apply of the dev environment).
+- **Current mitigation:** The Terraform config now records reality (`purge_protection_enabled = true`), so routine applies no longer fail trying to disable it. For a rebuild within the retention window, either **wait out the 7 days** before recreating, or recreate the vault under a **different name**. **QA is unaffected:** no Azure Policy enforces purge protection (the governance module only creates a budget), so the QA vault can be created with purge protection **disabled** and stays freely disposable.
+- **Planned resolution:** Accept purge protection as the standing posture for `kv-antkart-dev` (the safer, production-like default) and update the zero-to-AKS rebuild runbook to account for the name-reservation window (wait it out, or use a fresh vault name). No code change is pending; recorded so the rebuild constraint is scheduled, not overlooked.
+
 ---
 
 ## Resolved
