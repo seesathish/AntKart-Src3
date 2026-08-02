@@ -38,7 +38,7 @@ variable "soft_delete_retention_days" {
 }
 
 variable "purge_protection_enabled" {
-  description = "When true, a soft-deleted vault CANNOT be purged early — it must wait out the full retention period. Production sets this true to prevent irreversible loss. Dev leaves it false so a disposable vault can be purged and recreated cleanly during teardown."
+  description = "When true, a soft-deleted vault CANNOT be purged early — it must wait out the full retention period. This is a ONE-WAY switch: once enabled on a vault, Azure will not allow disabling it, so the setting must match the live vault's actual state. Production sets this true to prevent irreversible loss. A genuinely disposable environment may set it false to allow early purge/recreate during teardown — but a vault that already has it enabled (e.g. kv-antkart-dev) must keep it true."
   type        = bool
   default     = false
 }
