@@ -50,3 +50,18 @@ resource "azurerm_key_vault" "this" {
   # **Key Vault Secrets User** role (read secrets at runtime) is assigned to the
   # app/managed identities in the managed-identity step, not in this module.
 }
+
+# Application Insights connection string, vaulted for the six AKS services to read
+# (secret name uses "--" so AddAzureKeyVault maps it to the config key
+# ApplicationInsights:ConnectionString). Created only when a value is supplied — the
+# observability unit feeds it in; local/plan runs with a null value create nothing.
+# The value never leaves the vault: it is not in any values file, Helm chart, or YAML.
+# Writing it requires the Terraform identity to hold "Key Vault Secrets Officer" on the
+# vault (RBAC data plane).
+resource "azurerm_key_vault_secret" "app_insights_connection_string" {
+  count = var.app_insights_connection_string != null ? 1 : 0
+
+  name         = "ApplicationInsights--ConnectionString"
+  value        = var.app_insights_connection_string
+  key_vault_id = azurerm_key_vault.this.id
+}

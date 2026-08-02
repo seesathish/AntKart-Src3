@@ -26,6 +26,20 @@ dependency "resource_group" {
   mock_outputs_allowed_terraform_commands = ["init", "plan", "validate"]
 }
 
+# dependency: the Application Insights connection string this vault stores as a secret
+# comes from the observability unit's output. Terragrunt applies observability FIRST and
+# exposes its outputs here, so the real value is wired in — never hardcoded.
+dependency "observability" {
+  config_path = "../observability"
+
+  # mock_outputs let init/plan/validate run before the dependency is applied. A real
+  # apply uses the actual connection string.
+  mock_outputs = {
+    connection_string = "InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=https://eastus-0.in.applicationinsights.azure.com/"
+  }
+  mock_outputs_allowed_terraform_commands = ["init", "plan", "validate"]
+}
+
 # terraform.source: the reusable key-vault module this unit runs.
 terraform {
   source = "../../../modules/key-vault"
@@ -52,4 +66,10 @@ inputs = {
     project     = "antkart"
     managed-by  = "terraform"
   }
+
+  # Vault the Application Insights connection string as the secret
+  # ApplicationInsights--ConnectionString, which the six AKS services read as the config
+  # key ApplicationInsights:ConnectionString. Sourced from the observability unit; the
+  # value is sensitive and is NEVER placed in a values file, Helm chart, or committed YAML.
+  app_insights_connection_string = dependency.observability.outputs.connection_string
 }

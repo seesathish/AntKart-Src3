@@ -1,6 +1,7 @@
 using AK.BuildingBlocks.Authentication;
 using AK.BuildingBlocks.Configuration;
 using AK.BuildingBlocks.HealthChecks;
+using AK.BuildingBlocks.Observability;
 using AK.BuildingBlocks.Logging;
 using AK.BuildingBlocks.Swagger;
 using AK.Payments.API.Endpoints;
@@ -21,6 +22,7 @@ builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 builder.AddSerilogLogging();
+builder.AddOpenTelemetryObservability("AK.Payments.API");
 
 // Non-secret startup confirmation: record WHETHER Key Vault configuration was loaded, and from
 // which vault URI (a non-secret value). Secret values are never logged.
@@ -78,6 +80,7 @@ app.UseEntraAuth();
 app.MapPaymentEndpoints();
 app.MapSavedCardEndpoints();
 app.MapDefaultHealthChecks();
+app.MapObservabilityEndpoints();
 
 app.Run();
 
