@@ -48,16 +48,15 @@ This couples the handler to EF Core. Testing requires a real database or an in-m
 A Repository is a **typed data access interface** for one aggregate root. The handler depends on the interface, not the concrete EF Core implementation.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#888888'}}}%%
-flowchart LR
+flowchart TB
     classDef app fill:#27AE60,stroke:#1E8449,color:#fff
     classDef iface fill:#F39C12,stroke:#D68910,color:#fff
     classDef infra fill:#8E44AD,stroke:#6C3483,color:#fff
     classDef db fill:#2C3E50,stroke:#1A252F,color:#fff
 
-    H["Handler\n(Application layer)"]:::app
-    I["IOrderRepository\n(interface in Application)"]:::iface
-    R["OrderRepository\n(EF Core implementation\nin Infrastructure)"]:::infra
+    H["Handler<br/>(Application layer)"]:::app
+    I["IOrderRepository<br/>(interface in Application)"]:::iface
+    R["OrderRepository<br/>(EF Core implementation<br/>in Infrastructure)"]:::infra
     DB[("PostgreSQL")]:::db
 
     H -->|"depends on"| I
@@ -117,8 +116,7 @@ When a handler needs to save changes across multiple repositories, who controls 
 Unit of Work (UoW) wraps a set of repositories that share a single database transaction. The handler uses the repositories to make changes, then calls `SaveChangesAsync()` once on the UoW — all changes commit atomically or roll back together.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#888888'}}}%%
-flowchart TD
+flowchart TB
     classDef hand fill:#27AE60,stroke:#1E8449,color:#fff
     classDef uow fill:#F39C12,stroke:#D68910,color:#fff
     classDef repo fill:#8E44AD,stroke:#6C3483,color:#fff
@@ -126,12 +124,12 @@ flowchart TD
 
     H["Handler"]:::hand
 
-    UoW["IUnitOfWork\n.SaveChangesAsync()"]:::uow
+    UoW["IUnitOfWork<br/>.SaveChangesAsync()"]:::uow
 
-    R1["IOrderRepository\n.AddAsync(order)"]:::repo
-    R2["IOrderItemRepository\n.AddRangeAsync(items)"]:::repo
+    R1["IOrderRepository<br/>.AddAsync(order)"]:::repo
+    R2["IOrderItemRepository<br/>.AddRangeAsync(items)"]:::repo
 
-    DB[("Database\nSingle transaction\ncommit or rollback")]:::db
+    DB[("Database<br/>Single transaction<br/>commit or rollback")]:::db
 
     H --> UoW
     UoW --> R1
@@ -214,17 +212,16 @@ var orders = await context.Orders
 A Specification encapsulates a query criterion as a **named, reusable object**. The repository accepts a specification and applies it — the query logic lives in one place, has a meaningful name, and can be tested independently of the database.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#888888'}}}%%
-flowchart LR
+flowchart TB
     classDef hand fill:#27AE60,stroke:#1E8449,color:#fff
     classDef spec fill:#E67E22,stroke:#D35400,color:#fff
     classDef repo fill:#8E44AD,stroke:#6C3483,color:#fff
     classDef db fill:#2C3E50,stroke:#1A252F,color:#fff
 
     H["Handler"]:::hand
-    S1["ActiveOrdersByUserSpec\n(userId, page, pageSize)"]:::spec
-    S2["OrdersByStatusSpec\n(status)"]:::spec
-    R["IOrderRepository\n.GetAsync(spec)"]:::repo
+    S1["ActiveOrdersByUserSpec<br/>(userId, page, pageSize)"]:::spec
+    S2["OrdersByStatusSpec<br/>(status)"]:::spec
+    R["IOrderRepository<br/>.GetAsync(spec)"]:::repo
     DB[("Database")]:::db
 
     H -->|"new spec"| S1
@@ -332,8 +329,7 @@ public sealed class GetUserOrdersQueryHandler(IUnitOfWork unitOfWork)
 ## How all three patterns work together
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#888888'}}}%%
-flowchart TD
+flowchart TB
     classDef ep fill:#4A90D9,stroke:#2471A3,color:#fff
     classDef app fill:#27AE60,stroke:#1E8449,color:#fff
     classDef spec fill:#E67E22,stroke:#D35400,color:#fff
@@ -341,12 +337,12 @@ flowchart TD
     classDef infra fill:#8E44AD,stroke:#6C3483,color:#fff
     classDef db fill:#2C3E50,stroke:#1A252F,color:#fff
 
-    EP["API Endpoint\n(Application layer boundary)"]:::ep
-    HAND["MediatR Handler\n(Application layer)"]:::app
-    SPEC["Specification\n(encapsulates query criteria)"]:::spec
-    UoW["IUnitOfWork\n(transaction boundary)"]:::uow
-    REPO["IRepository\n(data access interface)"]:::infra
-    IMPL["Repository Implementation\n(EF Core / MongoDB / Redis)"]:::infra
+    EP["API Endpoint<br/>(Application layer boundary)"]:::ep
+    HAND["MediatR Handler<br/>(Application layer)"]:::app
+    SPEC["Specification<br/>(encapsulates query criteria)"]:::spec
+    UoW["IUnitOfWork<br/>(transaction boundary)"]:::uow
+    REPO["IRepository<br/>(data access interface)"]:::infra
+    IMPL["Repository Implementation<br/>(EF Core / MongoDB / Redis)"]:::infra
     DB[("Database")]:::db
 
     EP -->|"sender.Send(query)"| HAND

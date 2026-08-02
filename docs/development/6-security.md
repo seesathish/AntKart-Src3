@@ -9,7 +9,7 @@ Security rests on two ideas: **no stored secrets anywhere**, and **defence in de
 From the Terraform service principal, through the real Terraform modules, to the identities and grants they create — secret-lessly.
 
 ```mermaid
-flowchart TD
+flowchart TB
     SP["Terraform service principal<br/>sp-antkart-terraform-dev<br/>(ARM_* env vars)"]:::identity
 
     subgraph OIDC["module: github-oidc"]
@@ -55,7 +55,7 @@ flowchart TD
 ## Security posture
 
 ```mermaid
-flowchart TD
+flowchart TB
     Client["Client"]:::external
 
     subgraph PUBLIC["Public — internet-facing"]
@@ -102,7 +102,7 @@ flowchart TD
 **Target state per [ADR-020](../adr/ADR-020-api-management-managed-edge-gateway.md) — Azure API Management is NOT yet provisioned.**
 
 ```mermaid
-flowchart TD
+flowchart TB
     Client["Client"]:::external
 
     subgraph TARGET["Target state — ADR-020 · not yet provisioned"]
