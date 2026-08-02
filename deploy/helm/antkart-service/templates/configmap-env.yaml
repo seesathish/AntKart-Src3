@@ -10,4 +10,9 @@ data:
   {{- range $key, $value := .Values.env }}
   {{ $key }}: {{ $value | quote }}
   {{- end }}
+  {{- if .Values.metricsPort.enabled }}
+  # Signals AK.Discount to open a second Kestrel listener on this port serving HTTP/1.1
+  # for /metrics (the main port is HTTP/2-only h2c for gRPC). .NET maps __ to the : separator.
+  Metrics__HttpPort: {{ .Values.metricsPort.port | quote }}
+  {{- end }}
 {{- end }}

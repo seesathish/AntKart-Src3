@@ -17,6 +17,8 @@ Argo CD is a Kubernetes controller that continuously compares a **desired state*
 | `appproject-antkart.yaml` | A dedicated **AppProject** scoping the Applications to this repo → the `antkart` namespace → namespaced resources only (least-privilege alternative to the built-in `default` project). |
 | `applicationset-antkart.yaml` | **RECOMMENDED.** One **ApplicationSet** that templates all six Applications from a list — a single source of truth. |
 | `applications/ak-*.yaml` | **ALTERNATIVE.** The same six as standalone **Application** manifests. Use these *or* the ApplicationSet, **never both** (identical names would collide). |
+| `appproject-monitoring.yaml` | A **separate** AppProject for the cluster monitoring stack — scoped to the prometheus-community chart repo + this repo, the `monitoring` namespace, and an *enumerated* set of cluster-scoped kinds (CRDs/ClusterRoles/webhooks). Kept apart from `antkart` so the stack's privileges never widen the app project. |
+| `applications/monitoring-kube-prometheus-stack.yaml` | The **kube-prometheus-stack** Application (Prometheus + Grafana), pinned chart version, `ServerSideApply=true` for the oversized CRDs. Runs under the `monitoring` project. |
 
 ### ApplicationSet vs six standalone Applications
 
@@ -156,6 +158,24 @@ kubectl apply -f deploy/argocd/applications/
 > **Gateway host.** The `ak-gateway` element/manifest already carries the live host `api.antkart.in` (kept in sync between `applications/ak-gateway.yaml` and `applicationset-antkart.yaml`). If you deploy into a different environment, change that one value first — to your own domain, or a `<public-ip>.nip.io` fallback (see the command above) — and commit **before** syncing `ak-gateway`, so it never renders an ingress for the wrong host.
 
 Because there is **no `automated:` block**, applying these does **not** change the cluster yet — each Application comes up `OutOfSync` (or `Synced` if the live state already matches Git) and waits for a manual sync.
+
+### Monitoring stack (kube-prometheus-stack)
+
+The monitoring stack is a **separate** project + Application (Prometheus + Grafana). Apply its project first, create the Grafana admin secret **out of band** (the chart reads it via `grafana.admin.existingSecret` — no password is in Git), then apply and sync the Application:
+
+```bash
+kubectl apply -f deploy/argocd/appproject-monitoring.yaml
+
+kubectl create namespace monitoring   # the Application also has CreateNamespace=true; the secret must exist before Grafana starts
+kubectl create secret generic grafana-admin -n monitoring \
+  --from-literal=admin-user=admin \
+  --from-literal=admin-password='<choose-a-strong-password>'
+
+kubectl apply -f deploy/argocd/applications/monitoring-kube-prometheus-stack.yaml
+argocd app sync monitoring-kube-prometheus-stack   # ServerSideApply=true installs the oversized CRDs
+```
+
+No ServiceMonitors are shipped yet — wiring the services' `/metrics` into Prometheus is a follow-up, once this stack's CRDs exist. `AK.Discount.Grpc` serves `/metrics` on a dedicated HTTP/1.1 port (8081) because its gRPC port is HTTP/2-only; the other five serve it on 8080.
 
 ---
 

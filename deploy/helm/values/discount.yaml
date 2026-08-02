@@ -12,6 +12,12 @@ service:
   # Declares the port speaks gRPC (HTTP/2). Metadata only for a ClusterIP; the
   # in-cluster caller (AK.Products) reaches it as http://ak-discount:8080 over h2c.
   appProtocol: grpc
+# The main gRPC port (8080) is HTTP/2-only (h2c) and rejects an HTTP/1.1 Prometheus
+# scrape, so this service — and ONLY this service — opens a dedicated HTTP/1.1 port
+# for /metrics. Injects Metrics__HttpPort=8081, and adds the port to the Deployment and
+# Service. The other five serve /metrics on 8080 over HTTP/1.1 and leave this off (KI-008).
+metricsPort:
+  enabled: true
 image:
   tag: "eb9bc74"
 # Inherits only the common env default (KeyVault__Uri) — the DiscountDb connection
