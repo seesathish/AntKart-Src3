@@ -1,4 +1,5 @@
 using AK.BuildingBlocks.Authentication;
+using AK.BuildingBlocks.Configuration;
 using AK.BuildingBlocks.HealthChecks;
 using AK.BuildingBlocks.Observability;
 using AK.BuildingBlocks.Logging;
@@ -41,6 +42,13 @@ if (!File.Exists(Path.Combine(builder.Environment.ContentRootPath, ocelotFile)))
     ocelotFile = "ocelot.json";
 }
 builder.Configuration.AddJsonFile(ocelotFile, optional: false, reloadOnChange: true);
+
+// The gateway reads no secrets of its own (Ocelot routes come from a ConfigMap and the Entra
+// JWT validation settings are non-secret), but it still needs Key Vault as a configuration
+// source so ApplicationInsights:ConnectionString resolves — otherwise OpenTelemetry collects the
+// gateway's traces but cannot export them to Application Insights. Must run BEFORE
+// AddOpenTelemetryObservability below, or the connection string is not available to the exporter.
+builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 builder.AddSerilogLogging();
 builder.AddOpenTelemetryObservability("AK.Gateway.API");
