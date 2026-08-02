@@ -371,6 +371,13 @@ Always run `dotnet restore` from the repo root so this config is picked up. Neve
 | Serilog.Sinks.Console | 6.0.0 | BuildingBlocks |
 | Serilog.Sinks.File | 6.0.0 | BuildingBlocks |
 | Serilog.Formatting.Compact | 2.0.0 | BuildingBlocks (cloud JSON console) |
+| OpenTelemetry.Extensions.Hosting | 1.13.0 | BuildingBlocks (OTel wiring) |
+| OpenTelemetry.Instrumentation.AspNetCore | 1.13.0 | BuildingBlocks (traces + metrics) |
+| OpenTelemetry.Instrumentation.Http | 1.13.0 | BuildingBlocks (outbound HttpClient traces) |
+| OpenTelemetry.Instrumentation.GrpcNetClient | 1.13.0-beta.1 | BuildingBlocks (outbound gRPC traces; beta-only line) |
+| OpenTelemetry.Instrumentation.Runtime | 1.13.0 | BuildingBlocks (runtime metrics) |
+| OpenTelemetry.Exporter.Prometheus.AspNetCore | 1.13.0-beta.1 | BuildingBlocks (/metrics scrape; beta-only line) |
+| Azure.Monitor.OpenTelemetry.Exporter | 1.4.0 | BuildingBlocks (traces → App Insights; last on OTel 1.12/Extensions 9.x) |
 | MassTransit | 8.3.6 | BuildingBlocks, Order, Products, ShoppingCart |
 | MassTransit.Azure.ServiceBus.Core | 8.3.6 | BuildingBlocks (Azure Service Bus transport, Entra auth) |
 | MassTransit.EntityFrameworkCore | 8.3.6 | Order Infrastructure (outbox + saga) |

@@ -1,5 +1,6 @@
 using AK.BuildingBlocks.Authentication;
 using AK.BuildingBlocks.HealthChecks;
+using AK.BuildingBlocks.Observability;
 using AK.BuildingBlocks.Logging;
 using AK.BuildingBlocks.Middleware;
 using Ocelot.DependencyInjection;
@@ -42,6 +43,7 @@ if (!File.Exists(Path.Combine(builder.Environment.ContentRootPath, ocelotFile)))
 builder.Configuration.AddJsonFile(ocelotFile, optional: false, reloadOnChange: true);
 
 builder.AddSerilogLogging();
+builder.AddOpenTelemetryObservability("AK.Gateway.API");
 
 // JWT validation at the gateway edge — Ocelot checks the Bearer token before forwarding the request.
 // Downstream services also validate JWTs independently (defence in depth).
@@ -77,6 +79,7 @@ app.UseEntraAuth();
 // gateway is consistent with the platform. The registered check is the shallow "self" check
 // (no downstream calls), so liveness/readiness never depend on a downstream service.
 app.MapDefaultHealthChecks();
+app.MapObservabilityEndpoints();
 
 // CRITICAL — Ocelot's middleware is TERMINAL: any path that reaches it is treated as a proxy
 // request, and anything without a matching downstream route gets a 404. Mapping the health

@@ -1,6 +1,7 @@
 using AK.BuildingBlocks.Authentication;
 using AK.BuildingBlocks.Configuration;
 using AK.BuildingBlocks.HealthChecks;
+using AK.BuildingBlocks.Observability;
 using AK.BuildingBlocks.Logging;
 using AK.BuildingBlocks.Swagger;
 using AK.BuildingBlocks.Versioning;
@@ -27,6 +28,7 @@ builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 // Analytics in the cloud) and a local rolling file.
 // Must be called before any other service registration so early startup logs are captured.
 builder.AddSerilogLogging();
+builder.AddOpenTelemetryObservability("AK.Order.API");
 
 // AddApplication: MediatR, FluentValidation pipeline, validators, mappers
 builder.Services.AddApplication();
@@ -94,6 +96,7 @@ app.UseEntraAuth();
 
 app.MapOrderEndpoints();
 app.MapDefaultHealthChecks();
+app.MapObservabilityEndpoints();
 
 app.Run();
 

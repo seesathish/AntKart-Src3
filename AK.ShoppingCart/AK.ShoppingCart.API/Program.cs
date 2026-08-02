@@ -1,6 +1,7 @@
 using AK.BuildingBlocks.Authentication;
 using AK.BuildingBlocks.Configuration;
 using AK.BuildingBlocks.HealthChecks;
+using AK.BuildingBlocks.Observability;
 using AK.BuildingBlocks.Logging;
 using AK.BuildingBlocks.Swagger;
 using AK.ShoppingCart.API.Endpoints;
@@ -18,6 +19,7 @@ builder.WebHost.ConfigureKestrel(o => o.AddServerHeader = false);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 builder.AddSerilogLogging();
+builder.AddOpenTelemetryObservability("AK.ShoppingCart.API");
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -64,6 +66,7 @@ app.UseEntraAuth();
 
 app.MapCartEndpoints();
 app.MapDefaultHealthChecks();
+app.MapObservabilityEndpoints();
 
 app.Run();
 

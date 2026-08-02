@@ -48,3 +48,10 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "app_insights_connection_string" {
+  description = "Application Insights connection string, stored as the vaulted secret 'ApplicationInsights--ConnectionString' (which the services read as the config key ApplicationInsights:ConnectionString). Sourced from the observability unit's output; leave null to not create the secret. NOTE: the identity running Terraform needs the data-plane 'Key Vault Secrets Officer' role on the vault to write this secret (the vault uses RBAC authorization)."
+  type        = string
+  default     = null
+  sensitive   = true
+}

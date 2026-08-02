@@ -1,5 +1,6 @@
 using AK.BuildingBlocks.Configuration;
 using AK.BuildingBlocks.HealthChecks;
+using AK.BuildingBlocks.Observability;
 using AK.BuildingBlocks.Logging;
 using AK.BuildingBlocks.Middleware;
 using AK.Discount.Application.Extensions;
@@ -26,6 +27,7 @@ builder.WebHost.ConfigureKestrel(o =>
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 builder.AddSerilogLogging();
+builder.AddOpenTelemetryObservability("AK.Discount.Grpc");
 builder.Services.AddGrpc(opts =>
 {
     opts.Interceptors.Add<AuthInterceptor>();
@@ -49,6 +51,7 @@ app.MapGrpcService<DiscountService>();
 if (app.Environment.IsDevelopment())
     app.MapGrpcReflectionService();
 app.MapDefaultHealthChecks();
+app.MapObservabilityEndpoints();
 app.MapGet("/", () => "AK.Discount gRPC service. Use a gRPC client.");
 await app.MigrateAsync();
 app.Run();
