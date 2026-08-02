@@ -1,29 +1,29 @@
 # Observability — how it is seen
 
-> **Diagrams pending review:** _Observability pipeline_ is carried across as-is and will be reworked.
-
-Observability is **partly delivered**: structured logging is in place across every service and Function; metrics and distributed tracing are planned. What ships today is a code-side-secret-less log path — Serilog writes structured logs to the console, and Azure Monitor collects that stream in the cloud. This section is deliberately honest about the gap: much of the target picture is not yet wired.
+Observability is **mostly delivered**: structured logging and distributed tracing are in place across every service; metrics are *exposed* but not yet scraped. Two secret-less paths ship today — Serilog writes JSON logs to the console, collected by the AKS OMS agent into **Log Analytics** (`ContainerLog`), and OpenTelemetry exports **traces to Application Insights** (`AppRequests` / `AppDependencies`). A Prometheus `/metrics` endpoint is exposed on every service, but nothing scrapes it yet.
 
 ## Observability pipeline
 
 ```mermaid
 flowchart TD
     subgraph DELIVERED["Delivered"]
-        SVC["Services + Functions<br/>Serilog structured logs"]:::service
-        CON["Console sink"]:::cicd
-        AI["Application Insights"]:::paas
-        LA["Log Analytics · KQL"]:::paas
+        SVC["Services + Functions<br/>Serilog JSON + OpenTelemetry"]:::service
+        CON["Console (stdout)"]:::cicd
+        OMS["AKS OMS agent"]:::paas
+        LA["Log Analytics<br/>ContainerLog · KQL"]:::paas
+        AI["Application Insights<br/>AppRequests / AppDependencies"]:::paas
+        METRICS["/metrics<br/>Prometheus format (exposed)"]:::service
     end
 
-    subgraph PLANNED["Planned"]
-        OTEL["OpenTelemetry tracing"]:::issue
-        PROM["Prometheus metrics"]:::issue
+    subgraph PLANNED["Planned — not deployed"]
+        PROM["Prometheus scrape"]:::issue
         GRAF["Grafana dashboards"]:::issue
     end
 
-    SVC --> CON --> AI --> LA
-    SVC -. "planned" .-> OTEL -.-> AI
-    SVC -. "planned" .-> PROM -.-> GRAF
+    SVC -->|"Serilog logs"| CON --> OMS --> LA
+    SVC -->|"OTel traces"| AI
+    SVC -->|"exposes"| METRICS
+    METRICS -. "nothing scrapes it yet" .-> PROM -.-> GRAF
 
     classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
     classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
@@ -37,20 +37,57 @@ flowchart TD
 
 **What to notice**
 
-- **Logging is delivered:** every service and Function emits **Serilog** structured logs to the **Console**, collected in the cloud by **Application Insights / Log Analytics** and queried with **KQL** — no code-side sink credentials.
-- **No Elasticsearch/Kibana:** the console stream is the transport; the collector is Azure Monitor, not an ELK stack.
-- **Tracing and metrics are planned (red):** OpenTelemetry tracing, Prometheus metrics, and Grafana dashboards are **not** wired yet — drawn as red-dashed planned nodes.
-- **Two prospective sinks:** planned traces would flow to Application Insights alongside logs; planned metrics would flow Prometheus → Grafana.
-- **Correlation is in place at the request edge:** each service carries the `X-Correlation-Id` middleware, so a request can be followed across services in the logs even before distributed tracing lands.
+- **Logging is delivered — via the OMS agent into Log Analytics, NOT Application Insights.** Every service and Function emits **Serilog** `RenderedCompactJsonFormatter` JSON to the **console**; the AKS **OMS agent** ships container stdout into **Log Analytics**, landing in the legacy **`ContainerLog`** table (the cluster is on the pre-DCR collection path — `useAADAuth=false`, no data collection rules, so not `ContainerLogV2`). Because each line is JSON, `ServiceName`, `Environment`, `CorrelationId` and `TraceId`/`SpanId` are queryable via `parse_json(LogEntry)`. No code-side sink credentials.
+- **Tracing is delivered — to Application Insights.** All six services export **OpenTelemetry** traces via the Azure Monitor exporter; spans land in **`AppRequests`** (server) and **`AppDependencies`** (client). Instrumented: AspNetCore, HttpClient, gRPC client, MassTransit (Service Bus), Npgsql (PostgreSQL), MongoDB (Cosmos Mongo API) and StackExchange.Redis.
+- **Logs stay on Serilog, not OTel.** `AppTraces` contains only `func-antkart-notifications-dev` (the Functions app's classic App Insights SDK); the six AKS services deliberately do **not** enable OTel log export — Serilog already covers logs, and logs are joined to traces by the `TraceId`/`SpanId` enrichment instead. See [ADR-025](../adr/ADR-025-observability-architecture.md).
+- **Metrics are exposed but not yet scraped.** Each service serves `/metrics` in Prometheus exposition format. The **kube-prometheus-stack** (Prometheus + Grafana) is now added as a manually-applied Argo CD Application (see [Metrics stack](#metrics-stack--kube-prometheus-stack-via-argo-cd)); the scrape itself (ServiceMonitors) is not wired yet. `AK.Discount.Grpc` now serves `/metrics` on a **dedicated HTTP/1.1 port (8081)** because its main port is HTTP/2-only (h2c) for gRPC — addressing [KI-008](../KNOWN_ISSUES.md).
+- **Correlation and trace-linking are in place.** The `X-Correlation-Id` middleware follows a request across services in the logs; OTel additionally propagates W3C `traceparent` across HttpClient/gRPC/MassTransit, and each log line carries `TraceId`/`SpanId` so a slow span in Application Insights pivots to its log lines.
+
+## Working KQL
+
+Run against the `log-antkart-dev` workspace. On **Windows**, Azure CLI strips inner double quotes, so KQL **string literals must use single quotes** when passed via `--analytics-query`.
+
+**Structured logs with correlation** (from the JSON console stream in `ContainerLog`):
+
+```kql
+ContainerLog | where TimeGenerated > ago(1h)
+| extend L=parse_json(LogEntry)
+| where isnotempty(L.CorrelationId)
+| project TimeGenerated, tostring(L.ServiceName),
+          tostring(L.CorrelationId), tostring(L['@m'])
+```
+
+**Which services are reporting traces:**
+
+```kql
+AppRequests | summarize Requests=count(),
+              Failed=countif(Success == false) by AppRoleName
+```
+
+**Dependencies by type** (postgresql, mongodb, redis, servicebus, gRPC):
+
+```kql
+AppDependencies | summarize Calls=count(), AvgMs=round(avg(DurationMs),1)
+                  by AppRoleName, DependencyType, Target
+```
+
+**A distributed trace spanning services:**
+
+```kql
+union AppRequests, AppDependencies
+| summarize Services=make_set(AppRoleName), Spans=count() by OperationId
+| where array_length(Services) > 1
+```
 
 ## How it was built
 
-- The logging approach, the sinks, and the planned metrics/tracing work: [Observability design](../guides/observability-concepts.md).
-- Health-probe surfaces (`/health/live`, `/health/ready`, `/health/deps`) are a complementary signal — see the health-check wiring described in [AK.BuildingBlocks](../../AK.BuildingBlocks/BUILDING_BLOCKS.md).
+- The architecture and the decisions behind it — Serilog for logs, OpenTelemetry for traces/metrics, why OTel log export is off, and the OTel version pin — are in [ADR-025 — Observability Architecture](../adr/ADR-025-observability-architecture.md).
+- Health-probe surfaces (`/health/live`, `/health/ready`, `/health/deps`) are a complementary signal — see the health-check wiring in [AK.BuildingBlocks](../../AK.BuildingBlocks/BUILDING_BLOCKS.md). _(For historical background only, the superseded [observability concepts](../guides/observability-concepts.md) note describes the earlier Phase-1 intent.)_
 
 ## Decisions
 
 - [ADR-013 — Key Vault RBAC and Observability Foundation](../adr/ADR-013-key-vault-rbac-and-observability-foundation.md)
+- [ADR-025 — Observability Architecture](../adr/ADR-025-observability-architecture.md)
 
 ## Metrics stack — kube-prometheus-stack (via Argo CD)
 
@@ -69,7 +106,4 @@ kubectl create secret generic grafana-admin -n monitoring \
 
 No password — not even a placeholder — is stored in Git.
 
-## Open items
-
-- **Distributed tracing is planned, not delivered** — OpenTelemetry tracing is on the [Roadmap](../ROADMAP.md).
-- **Metrics are exposed and Prometheus/Grafana are deployed, but scrape wiring (ServiceMonitors) is the next step** — the services expose `/metrics`; connecting Prometheus to them via ServiceMonitors follows once this stack's CRDs are installed.
+- **The metrics scrape is not wired yet.** Every service exposes `/metrics`, and `AK.Discount.Grpc` now serves it on a **dedicated HTTP/1.1 port (8081)** — addressing the h2c scrape-reachability gap in [KI-008](../KNOWN_ISSUES.md). The **kube-prometheus-stack** is added as a manually-applied Argo CD Application (see [Metrics stack](#metrics-stack--kube-prometheus-stack-via-argo-cd) above); connecting Prometheus to the services via **ServiceMonitors** is the next step, once the stack's CRDs are installed.

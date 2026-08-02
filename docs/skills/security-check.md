@@ -1,6 +1,6 @@
 # Skill: Run Security Checks
 
-> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [architecture diagram index](../architecture/diagrams/README.md).
+> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [C4 diagram renders](../C4Renders/renders/README.md).
 
 **Purpose:** Execute the full 15-category ethical security test suite from `docs/test/SECURITY_TESTS.md` against the running platform. Reports each test as PASS/FAIL/WARN and flags any regressions from the last known-good baseline.
 

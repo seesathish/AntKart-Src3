@@ -45,11 +45,11 @@ Infrastructure is code, and a new environment is new inputs — not new code:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/C4Renders/renders/AzureServices-dark.svg">
-  <img alt="AntKart on Azure: a customer request passes through API Management into the Kubernetes cluster, where the gateway routes to Products, Cart, Order, Payments and Discount, which use Cosmos DB, Redis and PostgreSQL, publish to Service Bus and Event Grid, and trigger a serverless function that sends email through Communication Services" src="docs/C4Renders/renders/AzureServices.svg">
+  <img alt="AntKart on Azure: a customer request passes through the planned API Management edge into the Kubernetes cluster, where the gateway routes to Products, Cart, Order, Payments and Discount, which use Cosmos DB, Redis and PostgreSQL, publish to Service Bus and Event Grid, and trigger a serverless function that sends email through Communication Services" src="docs/C4Renders/renders/AzureServices.svg">
 </picture>
 
 1. The customer calls `https://api.antkart.in`.
-2. API Management validates the token and forwards the request into the cluster.
+2. The **planned** API Management edge (not yet deployed — [ADR-020](docs/adr/ADR-020-api-management-managed-edge-gateway.md)) will validate the token before the cluster. **Today** the request reaches the cluster's ingress-nginx directly, and the in-cluster gateway validates the Entra JWT.
 3. The gateway routes each path to the service that owns it.
 4. Products asks Discount for pricing over gRPC.
 5. Products reads the catalogue from Cosmos DB.

@@ -1,12 +1,12 @@
 # Architecture Diagram Plan
 
-> **The plan and contract for the cloud-native diagram set** (visual language, tooling, the list, source of truth). The **13 Mermaid diagrams are now Drafted** in [`diagrams/`](diagrams/); the **6 C4 diagrams remain Planned** (awaiting the `workspace.dsl` redraw). Statuses are tracked in §4.
+> **The plan and contract for the cloud-native diagram set** (visual language, tooling, the list, source of truth). The **13 Mermaid diagrams are Delivered** — inline in the section docs ([`docs/development/0-*.md` … `6-*.md`](../development/)); the **6 C4 diagrams are In progress** — being redrawn as cloud-native Structurizr renders in the `hero-*/` workspaces, landing in [`renders/`](renders/). Statuses are tracked in §4.
 
 ## 1. Purpose
 
 A single, coherent diagram set for the **cloud-native AntKart platform** — the delivered system of six services on AKS with GitOps delivery, secret-less identity, managed data/messaging, and a managed edge. The set exists so a reader (or interviewer) can move from a one-glance system context down to component internals, and across the operational planes — network, identity, CI/CD, GitOps, observability — with one consistent visual language.
 
-**The existing C4 model and PNG renders in `docs/architecture` are SUPERSEDED.** [`C4Architecture.md`](C4Architecture.md), [`workspace.dsl`](workspace.dsl), [`workspace.json`](workspace.json), and the `c4-*.png` files describe the **earlier Phase 1 platform running locally** (Docker Compose, local RabbitMQ/Keycloak/Mailhog, no cloud managed services, no AKS/GitOps). **All diagrams are being redrawn** for the cloud-native platform. The old assets are **retained until replaced** — each is removed only as its cloud-native successor is produced (see §4), so the reference is never empty.
+**The earlier Phase-1 C4 assets are SUPERSEDED.** The `c4-*.png` renders and the root [`workspace.dsl`](workspace.dsl) / [`workspace.json`](workspace.json) describe the **earlier Phase 1 platform running locally** (Docker Compose, local RabbitMQ/Keycloak/Mailhog, no cloud managed services, no AKS/GitOps). They have since been **redrawn** for the cloud-native platform — the C4 views as the `hero-*/` Structurizr workspaces rendered into [`renders/`](renders/), the operational diagrams as Mermaid inline in the section docs. The old `C4Architecture.md` index has been **removed**; the `c4-*.png` files are retained for historical reference only.
 
 ## 2. Locked visual language
 
@@ -44,38 +44,38 @@ Two tools, chosen per diagram type so each renders where it is read best.
 
 ## 4. The diagram set (19)
 
-The **13 Mermaid diagrams (06–10, 12–19) are now Drafted** — produced in `docs/architecture/diagrams/`, pending review. The **6 C4 diagrams (01–05, 11) remain Planned** (authored in `workspace.dsl`, not yet redrawn). "Source of truth in this repo" is where the diagram is authored/kept.
+The **13 Mermaid diagrams (06–10, 12–19) are Delivered** — inline in the section docs (`docs/development/0-*.md` … `6-*.md`). The **6 C4 diagrams (01–05, 11) are In progress** — being redrawn as cloud-native Structurizr renders in the `hero-*/` workspaces, landing in `renders/`. "Source of truth in this repo" is where the diagram is authored/kept.
 
 | # | Name | Question it answers | Tool | Source of truth in repo | Status |
 |---|------|---------------------|------|-------------------------|--------|
-| 01 | L1 System Context | Who uses AntKart and what external systems does it depend on? | C4 | `workspace.dsl` (Structurizr) | Planned |
-| 02 | L2 Container — services + Azure PaaS + **APIM** | What are the deployable pieces and the managed services behind the edge? | C4 | `workspace.dsl` | Planned |
-| 03 | L3 Component — inside AK.Order | How is AK.Order structured internally (API → application → domain → infrastructure)? | C4 | `workspace.dsl` | Planned |
-| 04 | Dynamic — full saga through to Paid | How does an order flow through the orchestrated saga to a Paid state? | C4 | `workspace.dsl` | Planned |
-| 05 | Azure resource topology | What Azure resources exist and how are they grouped/related? | C4 (deployment view) | `workspace.dsl` | Planned |
-| 06 | Terragrunt unit dependency graph (18 units) | In what order do the IaC units apply, and what depends on what? | Mermaid | `docs/architecture/DIAGRAM-PLAN.md` → the guide it lands in (`infrastructure/README.md`) | Drafted |
-| 07 | Network & traffic path — DNS → TLS → **APIM** → ingress → gateway | How does a request physically reach a service, and where is TLS terminated? | Mermaid | `docs/guides/aks-guide.md` | Drafted |
-| 08 | Identity & trust chain — Terraform SP → GitHub OIDC → workload identity → RBAC | How does trust flow from provisioning to runtime, secret-lessly? | Mermaid | `docs/guides/identity-concepts.md` | Drafted |
-| 09 | Security posture & trust boundaries — secret-less chain, public vs ClusterIP, **KI-002** | What is exposed vs internal, and where do the known gaps sit? | Mermaid | `docs/test/SECURITY_TESTS.md` / `docs/KNOWN_ISSUES.md` | Drafted |
-| 10 | **APIM** edge — policy chain, JWT validation, two-gateway model (ADR-020) | What does the managed edge do before traffic reaches the cluster ingress? | Mermaid | `docs/adr/ADR-020-api-management-managed-edge-gateway.md` | Drafted |
-| 11 | Cluster topology | How are namespaces, workloads, and ingress laid out inside AKS? | C4 (deployment view) | `workspace.dsl` | Planned |
-| 12 | Workload identity token flow | How does a pod get an Entra token with no stored secret? | Mermaid (sequence) | `docs/guides/identity-concepts.md` | Drafted |
-| 13 | Helm chart & values precedence | How does one generic chart become six services, and which values win? | Mermaid | `deploy/helm/README.md` | Drafted |
-| 14 | CI pipeline | What runs on a pull request, and what gates the merge? | Mermaid | `docs/guides/devops-cicd-guide.md` | Drafted |
-| 15 | CD pipeline | What happens on merge — build, push, tag-bump — and with what identity? | Mermaid | `docs/guides/devops-cicd-guide.md` | Drafted |
-| 16 | GitOps reconciliation loop | How does a Git change become a running pod via Argo CD? | Mermaid | `docs/guides/gitops-guide.md` | Drafted |
-| 17 | Environment promotion — dev vs QA | How does a change move from dev to QA, and what differs between them? | Mermaid | `docs/ROADMAP.md` (until an environments guide exists) | Drafted |
-| 18 | Observability pipeline | How do logs, metrics, and traces flow to their sinks and dashboards? | Mermaid | `docs/guides/observability-concepts.md` | Drafted |
-| 19 | Delivery architecture — commit to running pod | How does a commit become a running pod? | Mermaid | `docs/architecture/diagrams/19-delivery-architecture.md` | Drafted |
+| 01 | L1 System Context | Who uses AntKart and what external systems does it depend on? | C4 | `hero-*/` → `renders/` | In progress |
+| 02 | L2 Container — services + Azure PaaS + **APIM** | What are the deployable pieces and the managed services behind the edge? | C4 | `hero-*/` → `renders/` | In progress |
+| 03 | L3 Component — inside AK.Order | How is AK.Order structured internally (API → application → domain → infrastructure)? | C4 | `hero-*/` → `renders/` | In progress |
+| 04 | Dynamic — full saga through to Paid | How does an order flow through the orchestrated saga to a Paid state? | C4 | `hero-*/` → `renders/` | In progress |
+| 05 | Azure resource topology | What Azure resources exist and how are they grouped/related? | C4 (deployment view) | `hero-*/` → `renders/` | In progress |
+| 06 | Terragrunt unit dependency graph (18 units) | In what order do the IaC units apply, and what depends on what? | Mermaid | `docs/development/1-infrastructure-as-code.md` | Delivered |
+| 07 | Network & traffic path — DNS → TLS → **APIM** → ingress → gateway | How does a request physically reach a service, and where is TLS terminated? | Mermaid | `docs/guides/aks-guide.md` | Delivered |
+| 08 | Identity & trust chain — Terraform SP → GitHub OIDC → workload identity → RBAC | How does trust flow from provisioning to runtime, secret-lessly? | Mermaid | `docs/guides/identity-concepts.md` | Delivered |
+| 09 | Security posture & trust boundaries — secret-less chain, public vs ClusterIP, **KI-002** | What is exposed vs internal, and where do the known gaps sit? | Mermaid | `docs/test/SECURITY_TESTS.md` / `docs/KNOWN_ISSUES.md` | Delivered |
+| 10 | **APIM** edge — policy chain, JWT validation, two-gateway model (ADR-020) | What does the managed edge do before traffic reaches the cluster ingress? | Mermaid | `docs/adr/ADR-020-api-management-managed-edge-gateway.md` | Delivered |
+| 11 | Cluster topology | How are namespaces, workloads, and ingress laid out inside AKS? | C4 (deployment view) | `hero-*/` → `renders/` | In progress |
+| 12 | Workload identity token flow | How does a pod get an Entra token with no stored secret? | Mermaid (sequence) | `docs/guides/identity-concepts.md` | Delivered |
+| 13 | Helm chart & values precedence | How does one generic chart become six services, and which values win? | Mermaid | `deploy/helm/README.md` | Delivered |
+| 14 | CI pipeline | What runs on a pull request, and what gates the merge? | Mermaid | `docs/guides/devops-cicd-guide.md` | Delivered |
+| 15 | CD pipeline | What happens on merge — build, push, tag-bump — and with what identity? | Mermaid | `docs/guides/devops-cicd-guide.md` | Delivered |
+| 16 | GitOps reconciliation loop | How does a Git change become a running pod via Argo CD? | Mermaid | `docs/guides/gitops-guide.md` | Delivered |
+| 17 | Environment promotion — dev vs QA | How does a change move from dev to QA, and what differs between them? | Mermaid | `docs/ROADMAP.md` (until an environments guide exists) | Delivered |
+| 18 | Observability pipeline | How do logs, metrics, and traces flow to their sinks and dashboards? | Mermaid | `docs/guides/observability-concepts.md` | Delivered |
+| 19 | Delivery architecture — commit to running pod | How does a commit become a running pod? | Mermaid | `docs/development/4-devops.md` | Delivered |
 
 > **Diagram numbers are stable identifiers, not a sort order.** A number is assigned once and never reused; it does not imply the diagram's tier or reading order. For example **19** (a DevOps end-to-end overview, belonging with 14–17) is numbered after **18** (cross-cutting) simply because it was added later.
 
 ## 5. Status
 
-**13 Drafted, 6 Planned.** The 13 Mermaid diagrams (06–10, 12–19) are drafted in [`diagrams/`](diagrams/) (indexed in [diagrams/README.md](diagrams/README.md)); the 6 C4 diagrams (01–05, 11) remain Planned pending the `workspace.dsl` redraw. This file is updated as each diagram advances (Planned → Drafted → produced) and as each superseded old asset is removed.
+**13 Delivered, 6 in progress.** The 13 Mermaid diagrams (06–10, 12–19) live inline in the section docs ([`docs/development/`](../development/)); the 6 C4 diagrams (01–05, 11) are being redrawn as cloud-native Structurizr renders in the `hero-*/` workspaces, landing in [`renders/`](renders/) (indexed in [renders/README.md](renders/README.md)). The superseded Phase-1 `c4-*.png` assets are retained for historical reference.
 
 ## See also
 
-- [ROADMAP](../ROADMAP.md) — the diagram set is a near-term planned item.
-- [C4Architecture.md](C4Architecture.md) — the **superseded** Phase-1 diagrams (retained until replaced).
+- [ROADMAP](../ROADMAP.md) — where the diagram set sits in the delivery plan.
+- [renders/README.md](renders/README.md) — the delivered cloud-native C4 renders.
 - [ADR-020](../adr/ADR-020-api-management-managed-edge-gateway.md) — the managed-edge decision reflected in diagrams 02, 07, and 10.

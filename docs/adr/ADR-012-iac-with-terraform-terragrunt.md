@@ -82,7 +82,7 @@ Without the explicit argument, `find_in_parent_folders()` would match the neares
 
 ### Remote state
 
-Terraform state is stored in Azure Blob Storage (`stantkarttfstate2026` / container `tfstate`). Each module gets its own state key derived from its folder path via `path_relative_to_include()`. State locking uses Azure Blob Storage's native lease mechanism.
+Terraform state is stored in Azure Blob Storage (`stantkarttfstate` / container `tfstate`). Each module gets its own state key derived from its folder path via `path_relative_to_include()`. State locking uses Azure Blob Storage's native lease mechanism.
 
 ### Authentication
 

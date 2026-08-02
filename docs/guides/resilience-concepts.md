@@ -121,7 +121,7 @@ Azure Cosmos DB enforces a provisioned-throughput (RU) budget. When exceeded it 
 - **Mechanism (BuildingBlocks).** `AddDataStoreRetry` builds a Polly v8 retry whose `DelayGenerator` returns the caller-supplied Retry-After verbatim when present (no jitter added on top), and falls back to exponential-backoff-with-jitter when absent. It takes two delegates — `isTransient` and `getRetryAfter` — so the shared library carries **no** `MongoDB.Driver` dependency.
 - **Cosmos specifics (Products).** `CosmosResilience.IsTransient` retries `MongoCommandException` 16500 (429) / 50 (timeout) and connection-level faults; `GetRetryAfter` reads `RetryAfterMs` off the 429 error document. `ProductRepository` runs **every** Cosmos call through the `"cosmos"` pipeline — resilience lives at the data-access call site, where idempotency and the `CancellationToken` are known.
 
-> **Service Bus** consumer retry stays the single MassTransit `UseMessageRetry` (incremental 3×) — deliberately **not** double-wrapped. The **Event Grid** side-effect publisher is fire-and-forget and swallows failures (see [EVENTBUS](EVENTBUS.md)).
+> **Service Bus** consumer retry stays the single MassTransit `UseMessageRetry` (incremental 3×) — deliberately **not** double-wrapped. The **Event Grid** side-effect publisher is fire-and-forget and swallows failures (see [Event Bus concepts](eventbus-concepts.md)).
 
 ---
 

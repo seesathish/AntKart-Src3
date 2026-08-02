@@ -19,7 +19,7 @@ service:
 metricsPort:
   enabled: true
 image:
-  tag: "fb925d8"
+  tag: "eb9bc74"
 # Inherits only the common env default (KeyVault__Uri) — the DiscountDb connection
 # string is a secret resolved from Key Vault at runtime. No Entra__* is injected:
 # AK.Discount does NOT bind the Entra section; its gRPC AuthInterceptor merely
