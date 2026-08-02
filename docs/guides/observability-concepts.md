@@ -1,6 +1,6 @@
 # AntKart — Observability Technical Design
 
-> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [Development Guide](../../DevelopmentGuide.md).
+> **⛔ SUPERSEDED — Phase-1 design; the specifics here do NOT describe the delivered platform.** This file predates the delivered observability work, and several details are now wrong: the query tables, the KQL, and the App-Insights-collects-logs claim. In reality, the AKS services' logs are collected by the OMS agent into **Log Analytics (`ContainerLog`)** — **not** Application Insights — and OpenTelemetry traces (a Phase-1 gap) are now exported to Application Insights (`AppRequests`/`AppDependencies`). Retained for historical reference only. For how observability actually works today, and the **working** KQL, see [Observability — how it is seen](../development/5-observability.md) and [ADR-025 — Observability Architecture](../adr/ADR-025-observability-architecture.md).
 
 ## Overview
 
@@ -28,7 +28,7 @@ The cloud telemetry path is provided by **Application Insights** (wired via its 
 | AK.ShoppingCart | AK.ShoppingCart.API | Redis |
 | AK.Order | AK.Order.API | PostgreSQL + SAGA |
 | AK.Payments | AK.Payments.API | PostgreSQL + Razorpay |
-| AK.Discount | AK.Discount.Grpc | SQLite gRPC |
+| AK.Discount | AK.Discount.Grpc | gRPC · **PostgreSQL** (SQLite in Phase-1; migrated in the data-tier move) |
 | AK.Notification.Functions | AK.Notification.Functions | Serverless notifications (Event Grid-triggered) |
 
 ---
@@ -60,23 +60,9 @@ PaymentId={PaymentId} reason={Reason}                                        ←
 
 ---
 
-## Querying logs (Application Insights / Log Analytics)
+## Querying logs
 
-In the cloud, logs land in Application Insights / Log Analytics and are queried with **Kusto (KQL)**. The Serilog enrichment properties (`ServiceName`, `CorrelationId`, `SourceContext`, severity) are available as custom dimensions:
-
-```kusto
-// Errors across all services
-traces | where severityLevel >= 3
-
-// One service only
-traces | where customDimensions.ServiceName == "AK.Order.API"
-
-// Trace one request end-to-end (the same id flows across services via X-Correlation-Id)
-traces | where customDimensions.CorrelationId == "<correlation-id>"
-
-// SAGA activity
-traces | where customDimensions.SourceContext has "OrderSaga"
-```
+> **The KQL that was here did not work against the delivered platform and has been removed.** It queried the Application Insights `traces` table filtered on `customDimensions.ServiceName`, which returns **zero rows**: the AKS services do not write logs to Application Insights (only `func-antkart-notifications-dev` does), and the delivered log table is **`ContainerLog`**, not `traces`. For the **working** queries — structured logs via `parse_json(LogEntry)` on `ContainerLog`, and traces via `AppRequests`/`AppDependencies` — see [Observability — how it is seen → Working KQL](../development/5-observability.md#working-kql).
 
 Locally, the Console sink prints the same structured entries (and the rolling file under `logs/`).
 
