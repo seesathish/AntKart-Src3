@@ -137,7 +137,7 @@ ocelot:
         QuotaExceededMessage: "Rate limit exceeded. Please slow down."
         HttpStatusCode: 429
 image:
-  tag: "eb9bc74"
+  tag: "a7c93a8"
 # Scrape /metrics on the main HTTP port (serviceMonitor.portName defaults to service.portName).
 serviceMonitor:
   enabled: true
