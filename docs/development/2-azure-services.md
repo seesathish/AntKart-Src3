@@ -14,7 +14,7 @@ _C4 deployment view — will render from [`docs/C4Renders/`](../C4Renders/) (`wo
 ## Network and traffic path
 
 ```mermaid
-flowchart TD
+flowchart TB
     User["Client / Browser"]:::external
     DNS["GoDaddy DNS<br/>api.antkart.in A record"]:::external
     IP["Ingress LoadBalancer<br/>public IP 20.246.197.150"]:::edge

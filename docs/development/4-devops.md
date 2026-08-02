@@ -9,7 +9,7 @@ Delivery is a two-workflow pattern per service (twelve workflows across six serv
 The whole loop at a glance; the three diagrams below are the detail.
 
 ```mermaid
-flowchart TD
+flowchart TB
     DEV["Developer commit"]:::external
     PR["Pull request"]:::cicd
     CI["CI quality gate<br/>build · test · SonarCloud · Trivy<br/>4 required checks + branch protection"]:::cicd
@@ -45,7 +45,7 @@ flowchart TD
 ## CI pipeline
 
 ```mermaid
-flowchart TD
+flowchart TB
     PR["Pull request → master<br/>path-filtered (service + BuildingBlocks + tests)"]:::cicd
 
     subgraph CI["service-ci.yml"]
@@ -86,7 +86,7 @@ flowchart TD
 ## CD pipeline
 
 ```mermaid
-flowchart TD
+flowchart TB
     MERGE["Push to master · path-filtered<br/>service-cd.yml"]:::cicd
 
     subgraph J1["job: build-and-push"]
@@ -126,7 +126,7 @@ flowchart TD
 ## GitOps reconciliation
 
 ```mermaid
-flowchart TD
+flowchart TB
     GIT[("Git · master<br/>deploy/helm/values/service.yaml")]:::cicd
     ARGO["Argo CD Application controller<br/>(in-cluster)"]:::cicd
     LIVE["Live cluster state<br/>Deployments / Services"]:::paas
