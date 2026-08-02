@@ -47,33 +47,6 @@ service:
   # service so future ingress / mesh treats it as HTTP/2. Empty for REST services.
   appProtocol: ""
 
-# Optional dedicated HTTP/1.1 port for the Prometheus /metrics scrape. OFF by default:
-# the five REST services serve /metrics on the main 8080 port over HTTP/1.1, so this
-# stays disabled and their rendered output is unchanged. ONLY AK.Discount enables it
-# (deploy/helm/values/discount.yaml) — its main port is HTTP/2-only (h2c) for gRPC and
-# rejects an HTTP/1.1 scrape. When enabled, the container opens a second Kestrel listener
-# on this port (driven by the Metrics__HttpPort env injected into the ConfigMap) and both
-# the Deployment and Service expose it. See docs/KNOWN_ISSUES.md (KI-008).
-metricsPort:
-  enabled: false
-  port: 8081
-  name: metrics
-
-# Prometheus scrape wiring. OFF by default; every per-service values file enables it.
-# When enabled the chart renders ONE ServiceMonitor for the service — which requires
-# the Prometheus operator CRDs (installed by the monitoring stack). Prometheus runs in
-# the `monitoring` namespace and is configured to discover ServiceMonitors in `antkart`
-# regardless of label (see deploy/argocd/monitoring/kube-prometheus-stack.yaml), so no
-# discovery label is needed here.
-serviceMonitor:
-  enabled: false
-  # Named Service port to scrape. Empty => the main HTTP port (service.portName).
-  # AK.Discount overrides this to its dedicated HTTP/1.1 metrics port ("metrics"),
-  # because its main port is HTTP/2-only (h2c) gRPC and must NOT be scraped.
-  portName: ""
-  path: /metrics
-  interval: 30s
-
 # Probe strategy for a .NET service that loads Azure Key Vault at startup:
 #   * A startupProbe gives the process up to failureThreshold*periodSeconds to
 #     come up (Key Vault load + Kestrel bind can take several seconds) WITHOUT the

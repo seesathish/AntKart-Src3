@@ -138,6 +138,3 @@ ocelot:
         HttpStatusCode: 429
 image:
   tag: "eb9bc74"
-# Scrape /metrics on the main HTTP port (serviceMonitor.portName defaults to service.portName).
-serviceMonitor:
-  enabled: true

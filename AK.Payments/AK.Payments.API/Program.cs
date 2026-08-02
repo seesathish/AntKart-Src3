@@ -80,7 +80,6 @@ app.UseEntraAuth();
 app.MapPaymentEndpoints();
 app.MapSavedCardEndpoints();
 app.MapDefaultHealthChecks();
-app.MapObservabilityEndpoints();
 
 app.Run();
 

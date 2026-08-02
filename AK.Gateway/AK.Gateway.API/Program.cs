@@ -87,7 +87,6 @@ app.UseEntraAuth();
 // gateway is consistent with the platform. The registered check is the shallow "self" check
 // (no downstream calls), so liveness/readiness never depend on a downstream service.
 app.MapDefaultHealthChecks();
-app.MapObservabilityEndpoints();
 
 // CRITICAL — Ocelot's middleware is TERMINAL: any path that reaches it is treated as a proxy
 // request, and anything without a matching downstream route gets a 404. Mapping the health

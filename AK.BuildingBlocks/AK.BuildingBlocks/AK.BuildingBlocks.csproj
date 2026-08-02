@@ -32,17 +32,16 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
     <PackageReference Include="Serilog.Formatting.Compact" Version="2.0.0" />
-    <!-- OpenTelemetry — pinned to the 1.13.x line, the LAST that depends on
-         Microsoft.Extensions.* 9.0.0 (1.14.0+ requires 10.x and breaks this net9
-         solution). Azure.Monitor.OpenTelemetry.Exporter 1.4.0 targets OpenTelemetry
-         1.12.0, so it stays on the same 9.x graph. GrpcNetClient and Prometheus.AspNetCore
-         ship only as -beta on this line (their long-standing prerelease status). -->
+    <!-- OpenTelemetry — TRACING ONLY. Pinned to the 1.13.x line, the LAST that depends on
+         Microsoft.Extensions.* 9.0.0 (1.14.0+ requires 10.x and breaks this net9 solution).
+         Azure.Monitor.OpenTelemetry.Exporter 1.4.0 targets OpenTelemetry 1.12.0, so it stays on
+         the same 9.x graph. GrpcNetClient and StackExchangeRedis ship only as -beta on this line
+         (their long-standing prerelease status). The metrics packages (Prometheus exporter and
+         Runtime metrics instrumentation) were removed with the self-hosted metrics stack — ADR-025. -->
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.13.0" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.13.0" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.13.0" />
     <PackageReference Include="OpenTelemetry.Instrumentation.GrpcNetClient" Version="1.13.0-beta.1" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.13.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.13.0-beta.1" />
     <PackageReference Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.13.0-beta.1" />
     <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" Version="1.4.0" />
   </ItemGroup>

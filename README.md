@@ -97,9 +97,9 @@ The developer opens a pull request; from there delivery is automatic and pull-ba
 ## Observability
 
 > **Diagram: Observability** — _not yet drawn_
-> **Must show:** Serilog structured logging and OpenTelemetry feeding Application Insights and Log Analytics, plus Prometheus scraping and Grafana dashboards. Mark clearly what is delivered and what is planned. Answers "how do you know it is working".
+> **Must show:** Serilog structured logging and OpenTelemetry traces feeding Log Analytics and Application Insights. Mark clearly what is delivered and what is planned. Answers "how do you know it is working".
 
-Structured logging is delivered: every service and Function emits Serilog logs to the console, collected in the cloud by Application Insights and Log Analytics. Distributed tracing and metrics — OpenTelemetry, Prometheus, and Grafana — are planned, not yet wired.
+Structured logging and distributed tracing are delivered: every service and Function emits Serilog JSON logs to the console (collected by the AKS OMS agent into Log Analytics) and exports OpenTelemetry traces to Application Insights. **Metrics are not currently collected** — a self-hosted Prometheus/Grafana stack was built and then deliberately removed in favour of a managed platform (Datadog, under evaluation); see [ADR-025](docs/adr/ADR-025-observability-architecture.md).
 
 → [Observability](docs/development/5-observability.md)
 

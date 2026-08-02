@@ -101,7 +101,6 @@ if (runSeedOnStartup)
 
 app.MapProductEndpoints();
 app.MapDefaultHealthChecks();
-app.MapObservabilityEndpoints();
 
 app.Run();
 
