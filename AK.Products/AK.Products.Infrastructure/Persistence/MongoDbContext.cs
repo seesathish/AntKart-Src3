@@ -1,5 +1,6 @@
 using MongoDB.Bson;
 using MongoDB.Driver;
+using MongoDB.Driver.Core.Extensions.DiagnosticSources;
 using Microsoft.Extensions.Options;
 
 namespace AK.Products.Infrastructure.Persistence;
@@ -16,7 +17,12 @@ public sealed class MongoDbContext
         // wire-compatible — the same MongoDB driver and data-access code are used unchanged.
         // The connection string is a SECRET resolved from Key Vault at runtime (see the
         // Infrastructure ServiceCollectionExtensions); it never appears in committed config.
-        var client = new MongoClient(s.ConnectionString);
+        // Subscribe the diagnostics event subscriber on the cluster so the driver emits command
+        // activities (ActivitySource "MongoDB.Driver.Core.Extensions.DiagnosticSources"), which OTel
+        // records — otherwise Cosmos (Mongo API) reads/writes are invisible in every trace.
+        var mongoSettings = MongoClientSettings.FromConnectionString(s.ConnectionString);
+        mongoSettings.ClusterConfigurator = cb => cb.Subscribe(new DiagnosticsActivityEventSubscriber());
+        var client = new MongoClient(mongoSettings);
         _database = client.GetDatabase(s.DatabaseName);
 
         EnsureShardedCollection(s.DatabaseName, s.ProductsCollection);
