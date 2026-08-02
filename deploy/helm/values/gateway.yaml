@@ -137,4 +137,4 @@ ocelot:
         QuotaExceededMessage: "Rate limit exceeded. Please slow down."
         HttpStatusCode: 429
 image:
-  tag: "ff0f5a3"
+  tag: "eb9bc74"
