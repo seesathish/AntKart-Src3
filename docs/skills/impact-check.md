@@ -1,6 +1,6 @@
 # Skill: Impact Check Before a Change
 
-> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [architecture diagram index](../architecture/diagrams/README.md).
+> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [C4 diagram renders](../C4Renders/renders/README.md).
 
 **Purpose:** Before touching any shared code — a BuildingBlocks type, an integration event contract, `ocelot.json`, a base entity, or an EF migration — enumerate every service, test, endpoint, consumer, and document that will be affected. Run this before writing a single line of change.
 

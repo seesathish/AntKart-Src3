@@ -56,12 +56,21 @@ To call the APIs you need a token. For the interactive sign-in that obtains a de
 
 The platform is verified against the **cluster** through its public HTTPS entry point — the ingress in front of the gateway — using a Postman collection that targets the **gateway routes** (not the individual services, which are internal `ClusterIP`). The base URL is the custom domain **`https://api.antkart.in`** (GoDaddy A record → the ingress public IP), which terminates TLS with a **trusted Let's Encrypt production certificate** — no need to disable TLS verification in Postman.
 
-The verified journey:
+The verified journey runs the **full orchestrated saga to its `Paid` terminal state** (the "AntKart Cloud E2E Saga" Postman flow), then the **payment-failure branch** to `PaymentFailed`:
 
 1. **Health** — `GET /gateway/health/{products|cart|orders|payments}` returns 200 for each backing service; the gateway's own `GET /health/live` and `/health/ready` return 200.
 2. **Browse** — `GET /gateway/products` (and `/gateway/products/{id}`) returns the catalogue.
 3. **Add to cart** — `POST /gateway/cart/items`, then `GET /gateway/cart` returns the current user's cart.
-4. **Create order** — `POST /gateway/orders` drives server-authoritative price revalidation, the orchestrated SAGA (stock reservation → order confirmation), cart clearing, and both notification emails delivered via **Event Grid → Functions → ACS**.
+4. **Create order** — `POST /gateway/orders` drives server-authoritative price revalidation and starts the orchestrated SAGA. The order is created `Pending`; the `OrderCreated` notification email is sent.
+5. **Get order — expect `Confirmed`** — `GET /gateway/orders/{id}`. On successful stock reservation the saga advances the order `Pending → Confirmed`.
+6. **Initiate payment** — `POST /gateway/payments/initiate` for the order returns a `razorpayOrderId` (the outbound Razorpay egress leg) and persists a pending `Payment` (capturing `customerEmail`).
+7. **Pay on Razorpay (sandbox)** — complete the checkout with a test card (Visa `4111 1111 1111 1111`, OTP `1234 1234`); Razorpay returns the payment id and signature.
+8. **Verify payment** — `POST /gateway/payments/verify` with the Razorpay order id, payment id, and signature. The HMAC signature is verified locally, the `Payment` moves to `Succeeded`, and `PaymentSucceeded` is published — both as the integration event the saga consumes and as the `PaymentSucceeded` notification to Event Grid.
+9. **Saga applies the outcome** — the order saga consumes `PaymentSucceeded` and transitions the order `Confirmed → Paid` (the transition added in [KI-009](../KNOWN_ISSUES.md)).
+10. **Cart cleared / notifications** — the cart was cleared on order confirmation (`GET /gateway/cart` returns empty); the `OrderConfirmed` and `PaymentSucceeded` emails are delivered via **Event Grid → Functions → ACS**.
+11. **Get order — expect `Paid`** — `GET /gateway/orders/{id}` shows `Paid`, the positive terminal state.
+
+**Payment-failure branch.** Repeat steps 4–8 with a payment that fails verification (a declined test card or a deliberately invalid signature): `verify` returns failure, the `Payment` moves to `Failed`, `PaymentFailed` is published, and the saga transitions the order `Confirmed → PaymentFailed` (the other transition added in [KI-009](../KNOWN_ISSUES.md)); a `PaymentFailed` notification email is sent. `GET /gateway/orders/{id}` then shows `PaymentFailed`. Note the stock reserved earlier is **not yet released** on this path — a known, deferred compensation gap ([KI-005](../KNOWN_ISSUES.md)).
 
 Calls need a delegated Entra token in the `Authorization: Bearer` header (see [OAuth2 Authorization Code + PKCE Concepts](../guides/oauth2-pkce-concepts.md)).
 
