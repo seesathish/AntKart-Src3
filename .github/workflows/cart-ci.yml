@@ -148,7 +148,7 @@ jobs:
             /d:sonar.token="$SONAR_TOKEN" \
             /d:sonar.host.url="https://sonarcloud.io" \
             /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
-            /d:sonar.coverage.exclusions="**/Program.cs,**/Logging/SerilogExtensions.cs"
+            /d:sonar.coverage.exclusions="**/Program.cs,**/Logging/SerilogExtensions.cs,**/Observability/OpenTelemetryExtensions.cs"
 
           dotnet build "${{ env.CART_API }}" -c Release
           dotnet build "${{ env.CART_TESTS }}" -c Release
