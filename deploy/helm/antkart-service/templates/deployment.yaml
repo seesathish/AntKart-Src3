@@ -35,6 +35,14 @@ spec:
             - name: {{ .Values.service.portName }}
               containerPort: {{ .Values.containerPort }}
               protocol: TCP
+            {{- if .Values.metricsPort.enabled }}
+            # Optional dedicated HTTP/1.1 port for the Prometheus /metrics scrape. Only
+            # AK.Discount enables it (its main port is HTTP/2-only h2c for gRPC); the app
+            # opens this listener when Metrics__HttpPort is set (injected via the ConfigMap).
+            - name: {{ .Values.metricsPort.name }}
+              containerPort: {{ .Values.metricsPort.port }}
+              protocol: TCP
+            {{- end }}
           {{- if .Values.env }}
           envFrom:
             - configMapRef:

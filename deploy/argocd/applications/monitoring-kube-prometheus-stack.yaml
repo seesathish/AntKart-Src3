@@ -1,0 +1,129 @@
+# kube-prometheus-stack — Prometheus + Grafana for the cluster, delivered by Argo CD.
+#
+# Scoped to the dedicated `monitoring` AppProject (appproject-monitoring.yaml), NOT
+# the least-privilege `antkart` project — this stack needs cluster-scoped kinds the
+# AntKart project deliberately forbids. Apply the project FIRST.
+#
+# Like the AntKart Applications, this is applied manually by the operator (there is no
+# automated: block) — it comes up OutOfSync and waits for a reviewed manual sync.
+#
+# NOTE: this PR does NOT add any ServiceMonitor. The ServiceMonitor CRD does not exist
+# until this stack has synced; shipping one now would make the AntKart Applications fail
+# to sync on an unknown kind. Wiring the services' /metrics into Prometheus is the next PR.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-kube-prometheus-stack
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: monitoring
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    # Pinned, never floated (no "*" / no "latest"): a floating version would let a
+    # background chart bump change the cluster on the next reconcile with no review.
+    # 88.0.1 is the current stable release (operator app v0.93.0; kubeVersion >=1.25,
+    # satisfied by aks-antkart-dev). Bump deliberately in a reviewed commit.
+    targetRevision: 88.0.1
+    helm:
+      # Everything is inline so Git is the single source of truth (GitOps has no --set
+      # at sync time). The footprint is kept small on purpose: the cluster is 2x
+      # Standard_D2s_v3, and an unbounded Prometheus would evict AntKart pods — so every
+      # component below sets BOTH requests and limits.
+      values: |
+        # --- Alertmanager: DISABLED. No alert routing/receivers are configured yet, so
+        # running it would only consume memory. Enable in a later PR when routing exists.
+        alertmanager:
+          enabled: false
+
+        # --- Prometheus ---
+        prometheus:
+          prometheusSpec:
+            # 3-day retention on an EPHEMERAL emptyDir (no storageSpec => emptyDir). No
+            # persistent volume is provisioned on these tight nodes; a pod restart loses
+            # history, which is an acceptable trade for a demo/interview cluster.
+            retention: 3d
+            resources:
+              requests:
+                cpu: 150m
+                memory: 400Mi
+              limits:
+                cpu: 500m
+                memory: 700Mi
+
+        # --- Prometheus operator (and its short-lived admission-webhook patch Job) ---
+        prometheusOperator:
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 200m
+              memory: 192Mi
+          admissionWebhooks:
+            patch:
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
+
+        # --- Grafana ---
+        grafana:
+          enabled: true
+          # NO persistence — dashboards/state live in an emptyDir and are recreated from
+          # the provisioned config on restart. Keeps the footprint small, no PVC.
+          persistence:
+            enabled: false
+          # Admin password is NOT in Git. The chart reads it from a Secret created out of
+          # band (see docs/development/5-observability.md for the exact kubectl command):
+          #   kubectl create secret generic grafana-admin -n monitoring \
+          #     --from-literal=admin-user=admin --from-literal=admin-password='<password>'
+          admin:
+            existingSecret: grafana-admin
+            userKey: admin-user
+            passwordKey: admin-password
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 150m
+              memory: 192Mi
+
+        # --- kube-state-metrics (subchart) ---
+        kube-state-metrics:
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+
+        # --- node-exporter (subchart; a DaemonSet — one pod per node) ---
+        prometheus-node-exporter:
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    # No automated block — synced manually, like the AntKart Applications.
+    syncOptions:
+      # Create the monitoring namespace on first sync.
+      - CreateNamespace=true
+      # REQUIRED, not optional: the CRDs in this chart (e.g. the Prometheus CRD) exceed
+      # the 262144-byte limit that client-side apply's last-applied-configuration
+      # annotation imposes, so a client-side apply fails with "Too long". Server-side
+      # apply has no such annotation and is the supported way to install these CRDs.
+      - ServerSideApply=true

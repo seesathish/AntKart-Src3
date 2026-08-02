@@ -52,6 +52,24 @@ flowchart TD
 
 - [ADR-013 — Key Vault RBAC and Observability Foundation](../adr/ADR-013-key-vault-rbac-and-observability-foundation.md)
 
+## Metrics stack — kube-prometheus-stack (via Argo CD)
+
+Prometheus + Grafana are deployed as the `monitoring-kube-prometheus-stack` Argo CD Application ([deploy/argocd/applications/](../../deploy/argocd/applications/monitoring-kube-prometheus-stack.yaml)), into a dedicated `monitoring` namespace under a **separate, scoped** `monitoring` AppProject ([deploy/argocd/appproject-monitoring.yaml](../../deploy/argocd/appproject-monitoring.yaml)) — kept apart from the least-privilege `antkart` project so the stack's cluster-scoped needs (CRDs, ClusterRoles, admission webhooks) never widen the AntKart project. The chart version is **pinned** and the Application syncs with `ServerSideApply=true` (the chart's CRDs exceed the client-side-apply annotation limit). No ServiceMonitors are wired yet — that is a follow-up once the stack's CRDs exist.
+
+Prometheus scrapes over **HTTP/1.1**. Five services serve `/metrics` on their main 8080 port; `AK.Discount.Grpc`'s main port is **HTTP/2-only (h2c)** for gRPC and rejects an HTTP/1.1 scrape, so it serves `/metrics` on a **dedicated HTTP/1.1 port 8081** (a second Kestrel listener, enabled only in the cluster). It must not use `Http1AndHttp2` on the gRPC port — over cleartext h2c there is no ALPN, so that would fall back to HTTP/1.1 and break gRPC.
+
+**Grafana admin password — created out of band, never committed.** The chart reads the admin credentials from a Kubernetes Secret via `grafana.admin.existingSecret`. Create it **before** syncing the Application (the Grafana pod needs it at startup):
+
+```bash
+kubectl create namespace monitoring   # if not already created by the Application's CreateNamespace=true
+kubectl create secret generic grafana-admin -n monitoring \
+  --from-literal=admin-user=admin \
+  --from-literal=admin-password='<choose-a-strong-password>'
+```
+
+No password — not even a placeholder — is stored in Git.
+
 ## Open items
 
-- **Metrics and distributed tracing are planned, not delivered** — OpenTelemetry, Prometheus, and Grafana are on the [Roadmap](../ROADMAP.md). This section will grow as that work lands.
+- **Distributed tracing is planned, not delivered** — OpenTelemetry tracing is on the [Roadmap](../ROADMAP.md).
+- **Metrics are exposed and Prometheus/Grafana are deployed, but scrape wiring (ServiceMonitors) is the next step** — the services expose `/metrics`; connecting Prometheus to them via ServiceMonitors follows once this stack's CRDs are installed.

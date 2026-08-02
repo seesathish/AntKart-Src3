@@ -47,6 +47,18 @@ service:
   # service so future ingress / mesh treats it as HTTP/2. Empty for REST services.
   appProtocol: ""
 
+# Optional dedicated HTTP/1.1 port for the Prometheus /metrics scrape. OFF by default:
+# the five REST services serve /metrics on the main 8080 port over HTTP/1.1, so this
+# stays disabled and their rendered output is unchanged. ONLY AK.Discount enables it
+# (deploy/helm/values/discount.yaml) — its main port is HTTP/2-only (h2c) for gRPC and
+# rejects an HTTP/1.1 scrape. When enabled, the container opens a second Kestrel listener
+# on this port (driven by the Metrics__HttpPort env injected into the ConfigMap) and both
+# the Deployment and Service expose it. See docs/KNOWN_ISSUES.md (KI-008).
+metricsPort:
+  enabled: false
+  port: 8081
+  name: metrics
+
 # Probe strategy for a .NET service that loads Azure Key Vault at startup:
 #   * A startupProbe gives the process up to failureThreshold*periodSeconds to
 #     come up (Key Vault load + Kestrel bind can take several seconds) WITHOUT the

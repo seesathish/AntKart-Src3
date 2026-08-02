@@ -19,3 +19,11 @@ spec:
       # port speaks HTTP/2 (h2c) for the future ingress/mesh — see the README.
       appProtocol: {{ .Values.service.appProtocol }}
       {{- end }}
+    {{- if .Values.metricsPort.enabled }}
+    # Matching Service port for the optional HTTP/1.1 /metrics listener (AK.Discount only),
+    # so a Prometheus ServiceMonitor (added in a later PR) can select it by port name.
+    - name: {{ .Values.metricsPort.name }}
+      port: {{ .Values.metricsPort.port }}
+      targetPort: {{ .Values.metricsPort.port }}
+      protocol: TCP
+    {{- end }}
