@@ -17,8 +17,6 @@ Argo CD is a Kubernetes controller that continuously compares a **desired state*
 | `appproject-antkart.yaml` | A dedicated **AppProject** scoping the Applications to this repo → the `antkart` namespace → namespaced resources only (least-privilege alternative to the built-in `default` project). |
 | `applicationset-antkart.yaml` | **RECOMMENDED.** One **ApplicationSet** that templates all six Applications from a list — a single source of truth. |
 | `applications/ak-*.yaml` | **ALTERNATIVE.** The same six as standalone **Application** manifests. Use these *or* the ApplicationSet, **never both** (identical names would collide). |
-| `appproject-monitoring.yaml` | A **separate** AppProject for the cluster monitoring stack — scoped to the prometheus-community chart repo + this repo, the `monitoring` namespace, and an *enumerated* set of cluster-scoped kinds (CRDs/ClusterRoles/webhooks). Kept apart from `antkart` so the stack's privileges never widen the app project. |
-| `monitoring/kube-prometheus-stack.yaml` | The **kube-prometheus-stack** Application (Prometheus + Grafana), pinned chart version, `ServerSideApply=true` for the oversized CRDs. Runs under the `monitoring` project. Deliberately **outside** `applications/` — it is not part of the either/or below (different project, source repo, and chart); apply it explicitly. |
 
 ### ApplicationSet vs six standalone Applications
 
@@ -158,28 +156,6 @@ kubectl apply -f deploy/argocd/applications/
 > **Gateway host.** The `ak-gateway` element/manifest already carries the live host `api.antkart.in` (kept in sync between `applications/ak-gateway.yaml` and `applicationset-antkart.yaml`). If you deploy into a different environment, change that one value first — to your own domain, or a `<public-ip>.nip.io` fallback (see the command above) — and commit **before** syncing `ak-gateway`, so it never renders an ingress for the wrong host.
 
 Both delivery paths now commit `automated: { selfHeal: true, prune: false }` (the standalone Applications and the ApplicationSet template alike), so once applied, Argo CD **auto-syncs** Git changes and reverts live drift — `prune` stays off, so a Git deletion never cascades into the cluster. The manual `argocd app sync` steps in §5 remain the recommended **first** adoption of already-running services (diff before applying); to reproduce that cautious flow, temporarily disable automation with `argocd app set <name> --sync-policy none`.
-
-### Monitoring stack (kube-prometheus-stack)
-
-The monitoring stack sits **outside** the ApplicationSet-vs-standalone either/or above — it uses a **different AppProject** (`monitoring`), a **different source repo** (the prometheus-community Helm repo), and a **different chart** (`kube-prometheus-stack`), so it lives in `deploy/argocd/monitoring/`, **not** `applications/` (where `kubectl apply -f applications/` would sweep it in alongside the six service Applications). Apply its project first, create the Grafana admin secret **out of band** (the chart reads it via `grafana.admin.existingSecret` — no password is in Git), then apply and sync the Application:
-
-```bash
-kubectl apply -f deploy/argocd/appproject-monitoring.yaml
-
-kubectl create namespace monitoring   # the Application also has CreateNamespace=true; the secret must exist before Grafana starts
-kubectl create secret generic grafana-admin -n monitoring \
-  --from-literal=admin-user=admin \
-  --from-literal=admin-password='<choose-a-strong-password>'
-
-kubectl apply -f deploy/argocd/monitoring/kube-prometheus-stack.yaml
-argocd app sync monitoring-kube-prometheus-stack   # ServerSideApply=true installs the oversized CRDs
-```
-
-Once synced, Prometheus discovers the six AntKart **ServiceMonitors** (rendered by the service chart when `serviceMonitor.enabled: true`, which every service now sets) **across the namespace boundary** — the Application sets `serviceMonitorSelectorNilUsesHelmValues: false` and a `serviceMonitorNamespaceSelector` matching the `antkart` namespace, so no per-ServiceMonitor label is required. `AK.Discount.Grpc` is scraped on its dedicated HTTP/1.1 port (8081); the other five and the gateway on their main HTTP port. Grafana ships with the stack's default Kubernetes dashboards out of the box.
-
-> **⚠️ Sync the monitoring stack BEFORE the six AntKart Applications on a fresh cluster.** The service chart now renders a `ServiceMonitor` for every service (`serviceMonitor.enabled: true`), and the `ServiceMonitor` **CRD does not exist until this stack installs it**. If the six sync first, each fails with **`one or more synchronization tasks are not valid`** (the API server rejects the unknown `ServiceMonitor` kind) — and Argo CD **does not auto-retry the same Git revision**, so even with auto-sync on they stay `OutOfSync` until you sync them again by hand (`argocd app sync <name>`) once the CRD is present. Order on a clean cluster: **(1)** apply + sync `monitoring-kube-prometheus-stack` and wait for its CRDs, **then (2)** apply + sync the AntKart Applications. (This is a first-install ordering only — it does not recur once the CRDs exist.)
->
-> **On AKS the control-plane scrape targets are disabled** (`kubeEtcd`/`kubeProxy`/`kubeControllerManager`/`kubeScheduler`/`coreDns`): the control plane is managed by Azure, so those targets are unreachable, and the chart would otherwise create their Services in `kube-system` — which the scoped `monitoring` project (correctly) forbids. `kubeApiServer` stays enabled. See the comment in `monitoring/kube-prometheus-stack.yaml`.
 
 ---
 

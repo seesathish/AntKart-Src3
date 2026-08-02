@@ -96,7 +96,6 @@ app.UseEntraAuth();
 
 app.MapOrderEndpoints();
 app.MapDefaultHealthChecks();
-app.MapObservabilityEndpoints();
 
 app.Run();
 

@@ -1,9 +1,13 @@
 # ADR-025 — Observability Architecture: Serilog for Logs, OpenTelemetry for Traces and Metrics
 
-**Status:** Accepted
+**Status:** Accepted — **metrics portion superseded** (see [Superseded decision](#superseded-decision--self-hosted-metrics-removed))
 **Date:** 2026-08-02
 **Area:** Observability
 **Relates to:** ADR-013 (Key Vault RBAC and observability foundation — the Log Analytics workspace and Application Insights resource), ADR-018 (AKS and workload identity — the cluster whose OMS agent collects container logs), ADR-019 (serverless notification Functions — the one component still on the classic Application Insights SDK)
+
+---
+
+> **Update (2026-08-04) — the metrics half of this decision was SUPERSEDED.** Decision point 3 (OpenTelemetry metrics exposed at `/metrics`), and the self-hosted Prometheus/Grafana stack later built on it (`kube-prometheus-stack` via Argo CD, per-service ServiceMonitors, the AK.Discount HTTP/1.1 metrics port), were **implemented and then deliberately removed** — see [Superseded decision — self-hosted metrics removed](#superseded-decision--self-hosted-metrics-removed) below. The **logs and traces** decisions are unchanged and remain in force. The original text is left intact as the historical record.
 
 ---
 
@@ -79,6 +83,27 @@ Head- or tail-based sampling would cap trace-ingest cost. Rejected **for now**: 
 - **Metrics are exposed but not scraped.** `/metrics` is live on every service, but Prometheus and Grafana are **not deployed** — there are no metric dashboards yet. Tracked on the Roadmap.
 - **`AK.Discount.Grpc` `/metrics` is unreachable by a standard scrape.** Its single Kestrel listener is HTTP/2-only (cleartext `h2c`) to serve gRPC, and a Prometheus scrape speaks HTTP/1.1. The correct fix is a **second HTTP/1.1 listener** dedicated to `/metrics`; switching the gRPC port to `Http1AndHttp2` is not acceptable (no TLS/ALPN over `h2c`, so gRPC breaks). See [KI-008](../KNOWN_ISSUES.md).
 - **The Notification Functions app is still on the classic Application Insights SDK**, not OpenTelemetry — so it reports to `AppTraces`/`AppRequests` through the classic path rather than the OTel exporter. Aligning it onto OTel is deferred; recorded so the split is understood, not mistaken for a gap.
+
+---
+
+## Superseded decision — self-hosted metrics removed
+
+**Date:** 2026-08-04 · **Supersedes:** Decision point 3 (metrics) above, and the self-hosted metrics stack built on it.
+
+The metrics half of this ADR was carried well past "exposed but not scraped": a full **self-hosted kube-prometheus-stack** was delivered — Prometheus + Grafana deployed via Argo CD under a scoped `monitoring` AppProject, a per-service `ServiceMonitor` scraping each `/metrics` endpoint (with cross-namespace discovery), the AKS control-plane scrape targets disabled, and a dedicated **HTTP/1.1 metrics listener on AK.Discount.Grpc** (which resolved the h2c-scrape problem noted under *Known limitations* above). It worked end to end.
+
+It was then **deliberately removed**, for two reasons:
+
+- **Operational complexity disproportionate to a two-node dev cluster.** Prometheus + Grafana — with their CRDs, RBAC, cross-namespace discovery, first-install sync ordering, and sizing on a tight node pool — is a standing maintenance cost out of proportion to the value delivered on a small dev cluster.
+- **A deliberate choice not to present depth that has not been earned.** A shallow, half-maintained metrics stack is worse than none.
+
+**What was removed:** the `deploy/argocd/monitoring/` Application and the `monitoring` AppProject; the chart's `servicemonitor.yaml` template, the `serviceMonitor`/`metricsPort` values, and the optional metrics port on the Deployment/Service; the OpenTelemetry **metrics pipeline** in `AK.BuildingBlocks` (`AddPrometheusExporter`, the runtime-metrics instrumentation, `MapObservabilityEndpoints`, and the Prometheus exporter package); and AK.Discount's second HTTP/1.1 Kestrel listener (back to a single HTTP/2-only gRPC endpoint).
+
+**What is unchanged:** everything about **logs and traces** — Serilog → Log Analytics, OpenTelemetry **tracing** and the Azure Monitor trace exporter, the `ActivityEnricher`, and the OTel 1.13.x version pin — plus the reasoning in *Why OTel log export is deliberately NOT enabled*. `KI-008` (the Discount h2c-scrape limitation) is now **moot** and marked Withdrawn.
+
+**Replacement direction:** a **managed observability platform — Datadog, under evaluation** — for metrics (and potentially a single pane over logs and traces too). Tracked on the [Roadmap](../ROADMAP.md). Note that the *Azure Managed Grafana* alternative above was rejected in favour of the self-hosted path; with that path now withdrawn, the managed-platform question is reopened on different terms — a full product evaluation, not a dashboards add-on.
+
+The original decision above is left intact as the historical record: this section supersedes its metrics portion, it does not rewrite it.
 
 ---
 

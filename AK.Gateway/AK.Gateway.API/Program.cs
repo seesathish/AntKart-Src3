@@ -87,26 +87,20 @@ app.UseEntraAuth();
 // gateway is consistent with the platform. The registered check is the shallow "self" check
 // (no downstream calls), so liveness/readiness never depend on a downstream service.
 app.MapDefaultHealthChecks();
-app.MapObservabilityEndpoints();
 
 // CRITICAL — Ocelot's middleware is TERMINAL: any path that reaches it is treated as a proxy
 // request, and anything without a matching downstream route gets a 404. Mapping the health
-// and metrics endpoints "before" UseOcelot is NOT sufficient, because WebApplication defers
-// endpoint EXECUTION to the end of the pipeline (UseEndpoints) — Ocelot short-circuits first,
-// so /health/* would still 404 (the Kubernetes probe would restart-loop the pod) and /metrics
-// would 404 (the Prometheus scrape target would report DOWN).
+// endpoints "before" UseOcelot is NOT sufficient, because WebApplication defers endpoint
+// EXECUTION to the end of the pipeline (UseEndpoints) — Ocelot short-circuits first, so
+// /health/* would still 404 and the Kubernetes probe would restart-loop the pod.
 //
-// Fix: run Ocelot ONLY for paths that are neither /health nor /metrics via MapWhen, so both
-// bypass Ocelot entirely and fall through to endpoint routing, which executes the mapped
-// health checks (MapDefaultHealthChecks) and the Prometheus scrape endpoint
-// (MapObservabilityEndpoints). Both exclusions use StartsWithSegments so they are
-// segment-boundary aware and consistent with each other. Every proxied upstream route is
-// under /gateway/*, so excluding /health and /metrics removes nothing Ocelot needs to serve.
-// UseOcelot is async; it configures the branch pipeline once at startup, so resolving it
-// synchronously here is safe (it is not a per-request call).
+// Fix: run Ocelot ONLY for non-/health paths via MapWhen, so /health/* bypasses Ocelot
+// entirely and falls through to endpoint routing, which executes the mapped health checks.
+// Every proxied upstream route is under /gateway/*, so excluding /health removes nothing
+// Ocelot needs to serve. UseOcelot is async; it configures the branch pipeline once at
+// startup, so resolving it synchronously here is safe (it is not a per-request call).
 app.MapWhen(
-    context => !context.Request.Path.StartsWithSegments("/health")
-            && !context.Request.Path.StartsWithSegments("/metrics"),
+    context => !context.Request.Path.StartsWithSegments("/health"),
     ocelotApp => ocelotApp.UseOcelot().GetAwaiter().GetResult());
 
 app.Run();

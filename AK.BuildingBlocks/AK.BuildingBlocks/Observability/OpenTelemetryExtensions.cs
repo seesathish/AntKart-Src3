@@ -1,22 +1,20 @@
 using System.Reflection;
 using Azure.Monitor.OpenTelemetry.Exporter;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry;
-using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
 namespace AK.BuildingBlocks.Observability;
 
 // OpenTelemetry wiring shared by every service. Distributed traces are exported to
-// Application Insights (Azure Monitor); metrics are exposed on a Prometheus scrape
-// endpoint. OTel propagates W3C traceparent automatically across HttpClient, gRPC and
-// MassTransit, so a request is correlated end-to-end without hand-plumbing headers.
-// Logs are NOT exported here — Serilog already owns logging (see SerilogExtensions).
+// Application Insights (Azure Monitor). OTel propagates W3C traceparent automatically across
+// HttpClient, gRPC and MassTransit, so a request is correlated end-to-end without hand-plumbing
+// headers. Metrics are NOT collected here — the self-hosted Prometheus/Grafana metrics stack was
+// deliberately removed (see ADR-025); logs are NOT exported here either — Serilog owns logging.
 public static class OpenTelemetryExtensions
 {
     // Vaulted secret ApplicationInsights--ConnectionString maps to this config key.
@@ -57,12 +55,7 @@ public static class OpenTelemetryExtensions
 
                 if (hasAzureMonitor)
                     tracing.AddAzureMonitorTraceExporter(options => options.ConnectionString = connectionString);
-            })
-            .WithMetrics(metrics => metrics
-                .AddAspNetCoreInstrumentation()
-                .AddHttpClientInstrumentation()
-                .AddRuntimeInstrumentation()
-                .AddPrometheusExporter());
+            });
 
         if (!hasAzureMonitor)
             // Local development has no Key Vault; the service must still start. Traces are
@@ -72,13 +65,6 @@ public static class OpenTelemetryExtensions
                 ConnectionStringKey, serviceName);
 
         return builder;
-    }
-
-    // Prometheus scrape endpoint at /metrics (the exporter's default path).
-    public static WebApplication MapObservabilityEndpoints(this WebApplication app)
-    {
-        app.MapPrometheusScrapingEndpoint();
-        return app;
     }
 
     // Matches /health, /health/live, /health/ready, /health/deps (segment-boundary aware,

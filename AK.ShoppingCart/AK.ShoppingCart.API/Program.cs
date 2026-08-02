@@ -66,7 +66,6 @@ app.UseEntraAuth();
 
 app.MapCartEndpoints();
 app.MapDefaultHealthChecks();
-app.MapObservabilityEndpoints();
 
 app.Run();
 

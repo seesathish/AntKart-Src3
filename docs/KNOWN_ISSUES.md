@@ -47,13 +47,6 @@ Related: the [Platform Roadmap](ROADMAP.md) tracks delivered/in-progress/planned
 
 ## Resolved
 
-### KI-008 · AK.Discount.Grpc `/metrics` unreachable by a standard Prometheus scrape · Resolved
-
-- **Component:** `AK.Discount/AK.Discount.Grpc` — its Kestrel listener configuration; and the `antkart-service` Helm chart (the metrics port + the ServiceMonitor).
-- **Cause:** the service's only Kestrel endpoint was **HTTP/2-only (cleartext `h2c`)** so it could serve gRPC. A Prometheus scrape speaks **HTTP/1.1**, which that endpoint rejects, so `/metrics` was **unreachable to the scraper** — unlike the five REST services whose `/metrics` is HTTP/1.1-capable.
-- **Fix:** a **second Kestrel listener on port 8081 serving HTTP/1.1** was added for `/metrics`, with the gRPC port left HTTP/2-only — **not** `Http1AndHttp2`, which would break gRPC over cleartext `h2c` (no ALPN to negotiate) (PR #18). This PR then **wires the scrape**: a per-service **ServiceMonitor** (`serviceMonitor.enabled`) targets Discount's `metrics` port **by name**, and the monitoring stack's Prometheus is configured for cross-namespace discovery (`serviceMonitorSelectorNilUsesHelmValues: false` plus a `serviceMonitorNamespaceSelector` matching the `antkart` namespace). Discount's `/metrics` is now actually scraped.
-- **Lesson:** an HTTP/2-only (h2c) port cannot also serve an HTTP/1.1 scrape — put the scrape on its own HTTP/1.1 listener rather than downgrading the gRPC port's protocol.
-
 ### KI-009 · Order state machine rejected `Confirmed → Paid` / `Confirmed → PaymentFailed` · Resolved
 
 - **Component:** `AK.Order/AK.Order.Domain` — `Order.cs`, the `_allowedTransitions` map.
@@ -77,7 +70,14 @@ Related: the [Platform Roadmap](ROADMAP.md) tracks delivered/in-progress/planned
 | — | AK.Gateway | **Development-profile startup failure resolved.** `Program.cs` loaded `ocelot.json` and `ocelot.Development.json` via `AddJsonFile`, which merged their `Routes` arrays by index and produced a duplicate upstream route so Ocelot refused to start. The gateway now loads exactly one ocelot file selected by environment; verified to start and route correctly in both Development and Production. |
 | — | Documentation | **Broken anchor links resolved.** `DevelopmentGuide.md` linked `README.md#architecture-overview`, which did not resolve (the heading is "Architecture"); corrected, and a repo-wide anchor-link sweep fixed any others. |
 
+## Withdrawn
+
+### KI-008 · AK.Discount.Grpc `/metrics` unreachable by a standard Prometheus scrape · Withdrawn
+
+- **Status:** Withdrawn — **no longer applicable.** The self-hosted Prometheus/Grafana metrics stack, and all metrics collection, were **removed** from the platform ([ADR-025 — Superseded decision](adr/ADR-025-observability-architecture.md#superseded-decision--self-hosted-metrics-removed)). There is no scrape and no `/metrics` endpoint on any service, and `AK.Discount.Grpc` reverted to a single HTTP/2-only Kestrel endpoint — so the reachability problem this item tracked cannot occur.
+- **History:** the issue tracked that Discount's HTTP/2-only (h2c) gRPC port could not serve an HTTP/1.1 Prometheus scrape. It was resolved with a dedicated HTTP/1.1 metrics listener (PR #18) and wired into Prometheus (PR #19); both — along with the entire metrics stack — have since been removed. Recorded here rather than deleted so the change history stays visible.
+
 ## Notes
 
-- Resolved items are recorded here (and in the change history) once verified.
+- Resolved items are recorded here (and in the change history) once verified. **Withdrawn** items are ones that became moot before/after resolution because the feature they concerned was removed.
 - New deferred issues are added under **Open** with a unique `KI-NNN` id, a severity, the affected component, the impact, the current mitigation, and a planned resolution.
