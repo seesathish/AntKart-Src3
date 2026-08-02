@@ -177,6 +177,10 @@ argocd app sync monitoring-kube-prometheus-stack   # ServerSideApply=true instal
 
 Once synced, Prometheus discovers the six AntKart **ServiceMonitors** (rendered by the service chart when `serviceMonitor.enabled: true`, which every service now sets) **across the namespace boundary** — the Application sets `serviceMonitorSelectorNilUsesHelmValues: false` and a `serviceMonitorNamespaceSelector` matching the `antkart` namespace, so no per-ServiceMonitor label is required. `AK.Discount.Grpc` is scraped on its dedicated HTTP/1.1 port (8081); the other five and the gateway on their main HTTP port. Grafana ships with the stack's default Kubernetes dashboards out of the box.
 
+> **⚠️ Sync the monitoring stack BEFORE the six AntKart Applications on a fresh cluster.** The service chart now renders a `ServiceMonitor` for every service (`serviceMonitor.enabled: true`), and the `ServiceMonitor` **CRD does not exist until this stack installs it**. If the six sync first, each fails with **`one or more synchronization tasks are not valid`** (the API server rejects the unknown `ServiceMonitor` kind) — and Argo CD **does not auto-retry the same Git revision**, so even with auto-sync on they stay `OutOfSync` until you sync them again by hand (`argocd app sync <name>`) once the CRD is present. Order on a clean cluster: **(1)** apply + sync `monitoring-kube-prometheus-stack` and wait for its CRDs, **then (2)** apply + sync the AntKart Applications. (This is a first-install ordering only — it does not recur once the CRDs exist.)
+>
+> **On AKS the control-plane scrape targets are disabled** (`kubeEtcd`/`kubeProxy`/`kubeControllerManager`/`kubeScheduler`/`coreDns`): the control plane is managed by Azure, so those targets are unreachable, and the chart would otherwise create their Services in `kube-system` — which the scoped `monitoring` project (correctly) forbids. `kubeApiServer` stays enabled. See the comment in `monitoring/kube-prometheus-stack.yaml`.
+
 ---
 
 ## 4. View sync status
