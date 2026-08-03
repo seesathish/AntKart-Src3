@@ -193,7 +193,7 @@ ENTRYPOINT ["dotnet", "AK.<Name>.API.dll"]
 
 ## Step 7 — Add to the Cloud Deployment Configuration
 
-This repository targets cloud deployment — there is no local docker-compose stack (the docker-compose-based Phase-1 orchestration is preserved in the public AntKart reference repository). Register the new service in the deployment configuration with its container image and the standard settings:
+This repository targets cloud deployment — there is no local docker-compose stack (the docker-compose-based Phase-1 orchestration is preserved in [the public AntKart reference repository](https://github.com/seesathish/AntKart-MS)). Register the new service in the deployment configuration with its container image and the standard settings:
 
 - Image `antkart-<name>-api`, built from `AK.<Name>/AK.<Name>.API/Dockerfile` (build context = repo root)
 - `ASPNETCORE_ENVIRONMENT=Production`

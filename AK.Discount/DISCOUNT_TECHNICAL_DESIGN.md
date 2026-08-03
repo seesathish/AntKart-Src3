@@ -840,7 +840,7 @@ The Dockerfile adds `RUN mkdir -p /app/data && chown -R $APP_UID:$APP_UID /app/d
 
 ### 18.3 Running the Service
 
-This repository targets cloud deployment — run the service locally against live cloud services or via cloud port-forwarding. The docker-compose-based Phase-1 local orchestration (compose files, port overrides, named volumes) is preserved in the public AntKart reference repository.
+This repository targets cloud deployment — run the service locally against live cloud services or via cloud port-forwarding. The docker-compose-based Phase-1 local orchestration (compose files, port overrides, named volumes) is preserved in [the public AntKart reference repository](https://github.com/seesathish/AntKart-MS).
 
 ```bash
 cd AK.Discount/AK.Discount.Grpc && dotnet run

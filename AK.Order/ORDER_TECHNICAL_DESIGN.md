@@ -712,7 +712,7 @@ cd AK.Order/AK.Order.API && dotnet run
 
 ### Running the service
 
-This repository targets cloud deployment — run the service locally against live cloud services or via cloud port-forwarding. The docker-compose-based Phase-1 local stack is preserved in the public AntKart reference repository.
+This repository targets cloud deployment — run the service locally against live cloud services or via cloud port-forwarding. The docker-compose-based Phase-1 local stack is preserved in [the public AntKart reference repository](https://github.com/seesathish/AntKart-MS).
 
 ```bash
 cd AK.Order/AK.Order.API && dotnet run

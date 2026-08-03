@@ -135,7 +135,7 @@ cd AK.Order/AK.Order.API && dotnet run
 cd AK.Order/AK.Order.API && dotnet run
 ```
 
-The migration applies on startup. The docker-compose-based Phase-1 local stack is preserved in the public AntKart reference repository.
+The migration applies on startup. The docker-compose-based Phase-1 local stack is preserved in [the public AntKart reference repository](https://github.com/seesathish/AntKart-MS).
 
 Expected log line: `Applying pending EF Core migrations...` followed by the migration name and no errors.
 

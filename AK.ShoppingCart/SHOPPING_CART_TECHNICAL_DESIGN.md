@@ -1019,7 +1019,7 @@ _uow.Setup(u => u.SaveChangesAsync(default)).ReturnsAsync(1);
 
 ### Docker Compose
 
-> **Note (2026-07-23):** the Docker Compose definition below is the **Phase-1 local stack** (self-hosted RabbitMQ, Redis, and identity), preserved in the public AntKart reference repository. The current platform runs on AKS against managed Azure services (Azure Managed Redis, Azure Service Bus, Microsoft Entra ID); see the [AKS Guide](../docs/guides/aks-guide.md) and [Container Configuration](../docs/guides/container-configuration.md).
+> **Note (2026-07-23):** the Docker Compose definition below is the **Phase-1 local stack** (self-hosted RabbitMQ, Redis, and identity), preserved in [the public AntKart reference repository](https://github.com/seesathish/AntKart-MS). The current platform runs on AKS against managed Azure services (Azure Managed Redis, Azure Service Bus, Microsoft Entra ID); see the [AKS Guide](../docs/guides/aks-guide.md) and [Container Configuration](../docs/guides/container-configuration.md).
 
 ```yaml
 redis:

@@ -162,13 +162,13 @@ dotnet test
 
 ## Manual E2E Testing (Docker Compose)
 
-> **Note (2026-07-23): this section describes the Phase-1 local stack, not the current cloud-native platform.** The container names and services below (`antkart-rabbitmq`, `antkart-elasticsearch`, `antkart-keycloak`, MongoDB) belong to the docker-compose-based Phase-1 environment, preserved in the public AntKart reference repository. In the current platform, messaging is **Azure Service Bus**, identity is **Microsoft Entra ID**, the product store is **Azure Cosmos DB**, and observability is **Azure Monitor / Application Insights**. For end-to-end verification of the current platform, see [Full-cloud end-to-end](../docs/test/1-full-cloud-end-to-end.md).
+> **Note (2026-07-23): this section describes the Phase-1 local stack, not the current cloud-native platform.** The container names and services below (`antkart-rabbitmq`, `antkart-elasticsearch`, `antkart-keycloak`, MongoDB) belong to the docker-compose-based Phase-1 environment, preserved in [the public AntKart reference repository](https://github.com/seesathish/AntKart-MS). In the current platform, messaging is **Azure Service Bus**, identity is **Microsoft Entra ID**, the product store is **Azure Cosmos DB**, and observability is **Azure Monitor / Application Insights**. For end-to-end verification of the current platform, see [Full-cloud end-to-end](../docs/test/1-full-cloud-end-to-end.md).
 
 The automated tests above use an in-memory harness. The steps below walk the **full live async flow** — real RabbitMQ, real PostgreSQL, real MongoDB, real Razorpay sandbox.
 
 ### Prerequisites
 
-The live flow runs against real RabbitMQ, PostgreSQL, MongoDB, and the Razorpay sandbox. Bring the AntKart services up — cloud-deployed, or run locally against live cloud services / via cloud port-forwarding (the docker-compose-based Phase-1 stack is preserved in the public AntKart reference repository).
+The live flow runs against real RabbitMQ, PostgreSQL, MongoDB, and the Razorpay sandbox. Bring the AntKart services up — cloud-deployed, or run locally against live cloud services / via cloud port-forwarding (the docker-compose-based Phase-1 stack is preserved in [the public AntKart reference repository](https://github.com/seesathish/AntKart-MS)).
 
 Confirm the backing services are healthy:
 

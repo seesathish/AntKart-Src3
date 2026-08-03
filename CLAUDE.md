@@ -496,7 +496,7 @@ When asked to build a new service `AK.<Name>`, follow this order:
   - Never `antcart-`.
 - **Seeding:** Startup auto-seeding is opt-in and resilient — gated behind the `Seeding:RunOnStartup` flag (default `false`) and wrapped in try/catch so a seed failure logs a warning and never crashes startup. Routine data seeding is a deliberate, separate operation (dedicated loader), not a boot-time side effect.
 
-> **No local docker-compose stack.** This repository targets cloud deployment — run services locally against live cloud services or via cloud port-forwarding. The docker-compose-based Phase-1 local orchestration (compose files, `.dockerignore`, healthchecks, `depends_on` wiring, named volumes) is preserved in the public AntKart reference repository.
+> **No local docker-compose stack.** This repository targets cloud deployment — run services locally against live cloud services or via cloud port-forwarding. The docker-compose-based Phase-1 local orchestration (compose files, `.dockerignore`, healthchecks, `depends_on` wiring, named volumes) is preserved in [the public AntKart reference repository](https://github.com/seesathish/AntKart-MS).
 
 ---
 
