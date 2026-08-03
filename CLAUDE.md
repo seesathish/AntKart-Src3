@@ -70,7 +70,8 @@ AntKart/
 │   └── AK.Tools.DiscountSeedLoader.Tests/  Unit tests for the deterministic selection rules + idempotent EF upsert
 ├── AK.Seed-Data/         Committed product seed dataset (products.csv + README)
 ├── AntKart.sln
-├── AntKart.postman_collection.json
+├── AntKart-Cloud-E2E-Saga-Positive.postman_collection.json  Cloud E2E happy-path saga vs api.antkart.in (single collection — not per-service)
+├── LICENSE.txt           Repository licence (added via GitHub)
 ├── KNOWN-ISSUES.md       Pointer to the known-issues register (moved to docs/KNOWN_ISSUES.md, KI-NNN ids)
 ├── docs/
 │   ├── adr/              Architecture Decision Records
@@ -79,6 +80,14 @@ AntKart/
 │   ├── guides/           Concept & build guides (incl. eventbus/observability/resilience-concepts) linked from the section docs
 │   ├── skills/           Step-by-step development & maintenance guides (private — linked from nowhere)
 │   └── test/             Test section docs (1-test-from-service-code, 2-full-cloud-end-to-end) + SECURITY_TESTS — indexed by /DevTestGuide.md
+├── deploy/               Kubernetes delivery — Helm chart + GitOps (no runtime secrets)
+│   ├── helm/antkart-service/  ONE generic Helm chart; per-service inputs in helm/values/*.yaml (6: products/cart/discount/order/payments/gateway)
+│   ├── argocd/           Argo CD GitOps — least-privilege AppProject + ApplicationSet + applications/ak-*.yaml (6)
+│   └── cert-manager/     ClusterIssuer manifests (Let's Encrypt prod + staging)
+├── infrastructure/       Terraform + Terragrunt IaC (walkthrough: docs/guides/environment-provisioning-runbook.md)
+│   ├── modules/          18 reusable module blueprints (aks, cosmosdb, redis, postgresql, servicebus, eventgrid, key-vault, workload-identity, observability, …)
+│   └── environments/dev/  18 Terragrunt units + root.hcl (backend/provider/versions generated DRY); qa planned
+├── .github/workflows/    12 GitHub Actions — one CI + one CD per service (build-test, image → ACR via OIDC federation, GitOps tag bump)
 ├── nuget.config
 └── CLAUDE.md             ← this file
 ```
@@ -467,7 +476,7 @@ When asked to build a new service `AK.<Name>`, follow this order:
 
 11. **Update `README.md`** — add row to the Microservices table, link to design doc
 
-12. **Update `AntKart.postman_collection.json`** — add new service folder with all requests
+12. **Update `AntKart-Cloud-E2E-Saga-Positive.postman_collection.json`** — only if the new service participates in the end-to-end happy-path saga (add/adjust the ordered step); it is not a per-service request catalogue
 
 13. **Update `CLAUDE.md`** — add the service to the Completed Services section
 
@@ -493,12 +502,14 @@ When asked to build a new service `AK.<Name>`, follow this order:
 
 ## Postman Collection
 
-Single file: `AntKart.postman_collection.json` at repo root.
+Single file: `AntKart-Cloud-E2E-Saga-Positive.postman_collection.json` at repo root — a **cloud end-to-end happy-path saga** run against the live platform at `https://api.antkart.in`, not a per-service request catalogue. (The old per-service `AntKart.postman_collection.json` and the localhost `AntKart.Local.postman_environment.json` were removed — the platform is cloud-only, no local stack.)
 
-- One top-level folder per microservice
-- Collection variables: `productsUrl`, `discountGrpc` — add `<serviceName>Url` for each new service
-- gRPC services: include grpcurl commands as request descriptions (Postman gRPC tab also supported)
-- When adding a new REST service, add its requests as a new folder; do not create separate collection files
+- **12 ordered requests (`01`–`12`)** walk one PAYMENT-SUCCESS journey: health/token → list products → add to cart → create order → confirm (saga) → stock decremented → cart cleared → initiate + verify payment → order Paid.
+- **Auth:** collection-level OAuth 2.0 Authorization Code + PKCE against Entra ID — click *Get New Access Token* once per session; no token is ever pasted into a variable.
+- **Collection variables:** `baseUrl`, `entraTenantId`. **Environment values to fill before the first run:** `entraClientId` (the public-client app registration id) and `razorpayKeySecret` (from Key Vault).
+- Run with the **Collection Runner**, *Delay between requests* = 8000 ms — the saga is asynchronous and steps 07/12 self-retry.
+- Request bodies are built in pre-request scripts via `JSON.stringify` (catalogue names contain quotes/apostrophes that break hand-built JSON).
+- Only results executed against cloud resources through `https://api.antkart.in` are valid.
 
 ---
 

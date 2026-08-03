@@ -1,0 +1,867 @@
+{
+  "info": {
+    "_postman_id": "ak-cloud-e2e-saga-positive-v2-2026-07-28",
+    "name": "AntKart Cloud E2E Saga - Positive",
+    "description": "PAYMENT SUCCESS path end to end against the live AKS platform through https://api.antkart.in.\n\nTOKEN: collection-level OAuth 2.0, Authorization Code with PKCE against Entra ID. Click 'Get New Access Token' on the collection's Authorization tab once per session, complete sign-in and MFA, then 'Use Token'. No token is ever pasted into a variable.\n\nFILL TWO ENVIRONMENT VALUES BEFORE THE FIRST RUN:\n  entraClientId      - the PUBLIC CLIENT app registration id (not the API's id)\n  razorpayKeySecret  - az keyvault secret show --vault-name kv-antkart-dev --name \"Razorpay--KeySecret\" --query value -o tsv\n\nRUN with the Collection Runner, 'Delay between requests' = 8000 ms. The saga is asynchronous; steps 07 and 12 self-retry up to 6 times, which only works in the Runner.\n\nAll request bodies are built in pre-request scripts with JSON.stringify rather than by substituting {{variables}} into raw JSON. Product names in the catalogue can contain double quotes and apostrophes, which break hand-built JSON and produce an empty HTTP 400.\n\nAll paths and payloads come from the service contracts in AntKart-Src3. Only tests executed against cloud resources through https://api.antkart.in are valid.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "oauth2",
+    "oauth2": [
+      {
+        "key": "tokenName",
+        "value": "AntKart Entra delegated token",
+        "type": "string"
+      },
+      {
+        "key": "grant_type",
+        "value": "authorization_code_with_pkce",
+        "type": "string"
+      },
+      {
+        "key": "authUrl",
+        "value": "https://login.microsoftonline.com/{{entraTenantId}}/oauth2/v2.0/authorize",
+        "type": "string"
+      },
+      {
+        "key": "accessTokenUrl",
+        "value": "https://login.microsoftonline.com/{{entraTenantId}}/oauth2/v2.0/token",
+        "type": "string"
+      },
+      {
+        "key": "clientId",
+        "value": "{{entraClientId}}",
+        "type": "string"
+      },
+      {
+        "key": "clientSecret",
+        "value": "",
+        "type": "string"
+      },
+      {
+        "key": "redirect_uri",
+        "value": "https://oauth.pstmn.io/v1/callback",
+        "type": "string"
+      },
+      {
+        "key": "scope",
+        "value": "api://antkart-api-dev/access_as_user openid profile offline_access",
+        "type": "string"
+      },
+      {
+        "key": "challengeAlgorithm",
+        "value": "S256",
+        "type": "string"
+      },
+      {
+        "key": "client_authentication",
+        "value": "body",
+        "type": "string"
+      },
+      {
+        "key": "addTokenTo",
+        "value": "header",
+        "type": "string"
+      },
+      {
+        "key": "useBrowser",
+        "value": true,
+        "type": "boolean"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://api.antkart.in",
+      "type": "string"
+    },
+    {
+      "key": "entraTenantId",
+      "value": "4cacc56a-0d38-46c4-ba20-429d51d7b449",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Health check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health/live",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health",
+            "live"
+          ]
+        },
+        "description": "No auth. Proves DNS, ingress, the trusted Let's Encrypt production certificate and the gateway pod are alive. Clears leftover runtime variables.",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Gateway reachable over trusted HTTPS', function () { pm.response.to.have.status(200); });",
+              "pm.test('HSTS header present', function () { pm.expect(pm.response.headers.has('Strict-Transport-Security')).to.be.true; });",
+              "",
+              "['productId','productName','productSku','productPrice','initialStock','cartItemBody','orderBody','paymentBody','verifyBody','orderId','orderNumber','orderAmount','paymentId','razorpayOrderId','razorpayPaymentId','razorpaySignature','orderPollAttempt'].forEach(function (k) { pm.environment.unset(k); });",
+              "console.log('Preflight OK - runtime variables cleared.');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Token check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/gateway/products?page=1&pageSize=1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "gateway",
+            "products"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "pageSize",
+              "value": "1"
+            }
+          ]
+        },
+        "description": "Confirms the collection-level Entra token is accepted. A 401 here is nearly always a SCOPE problem: a token issued for Microsoft Graph looks valid but carries the wrong audience and is rejected before any role check."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 401) {",
+              "    console.error('401 - no valid token, or wrong audience.');",
+              "    console.error('Collection > Authorization > Get New Access Token, then Use Token.');",
+              "    console.error('Scope must be: api://antkart-api-dev/access_as_user openid profile offline_access');",
+              "}",
+              "pm.test('Entra token accepted (not 401)', function () { pm.expect(pm.response.code).to.not.eql(401); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 List products",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/gateway/products?page=1&pageSize=10",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "gateway",
+            "products"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "pageSize",
+              "value": "10"
+            }
+          ]
+        },
+        "description": "Returns PagedResult<ProductDto> from Cosmos DB. Captures an in-stock product. Fails loudly here if any required field is missing, rather than letting a bad value poison a later request."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "function safeJson() {",
+              "    const t = pm.response.text();",
+              "    if (!t || !t.trim()) {",
+              "        console.error('EMPTY response body. HTTP ' + pm.response.code + ' - the request JSON was almost certainly malformed.');",
+              "        return null;",
+              "    }",
+              "    try { return JSON.parse(t); }",
+              "    catch (e) { console.error('NON-JSON body: ' + t.substring(0, 400)); return null; }",
+              "}",
+              "",
+              "pm.test('Products returned', function () { pm.response.to.have.status(200); });",
+              "",
+              "const body = safeJson();",
+              "if (!body) { throw new Error('Could not read the product list.'); }",
+              "const list = body.items || body;",
+              "pm.expect(list.length, 'at least one product').to.be.above(0);",
+              "",
+              "const p = list.find(function (x) { return x.stockQuantity > 1 && x.sku && x.name && x.price > 0; }) || list[0];",
+              "",
+              "pm.environment.set('productId', p.id);",
+              "pm.environment.set('productName', p.name);",
+              "pm.environment.set('productSku', p.sku);",
+              "pm.environment.set('productPrice', p.price);",
+              "pm.environment.set('initialStock', p.stockQuantity);",
+              "",
+              "console.log('--- captured product ---');",
+              "console.log('id    : ' + p.id);",
+              "console.log('name  : ' + JSON.stringify(p.name) + '   (quoted so you can spot stray characters)');",
+              "console.log('sku   : ' + JSON.stringify(p.sku));",
+              "console.log('price : ' + p.price + '  (type ' + typeof p.price + ')');",
+              "console.log('stock : ' + p.stockQuantity);",
+              "",
+              "pm.test('All fields needed downstream are present', function () {",
+              "    pm.expect(p.id, 'id').to.be.a('string').and.not.empty;",
+              "    pm.expect(p.name, 'name').to.be.a('string').and.not.empty;",
+              "    pm.expect(p.sku, 'sku').to.be.a('string').and.not.empty;",
+              "    pm.expect(p.price, 'price').to.be.a('number').and.above(0);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Add to cart",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/gateway/cart/items",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "gateway",
+            "cart",
+            "items"
+          ]
+        },
+        "description": "POST /api/v1/cart/items, stored in Redis under AKCart:cart:{userId} with a 30-day TTL. The userId is never in the URL - it comes from the JWT, which is the IDOR protection designed into this service. The body is built by the pre-request script so special characters are escaped safely.",
+        "body": {
+          "mode": "raw",
+          "raw": "{{cartItemBody}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Build the JSON in code so quotes, apostrophes and inch marks in the product",
+              "// name are escaped correctly. Substituting {{vars}} into raw JSON breaks the",
+              "// body whenever a value contains a double quote - which returns an empty 400.",
+              "const name = String(pm.environment.get('productName') || '');",
+              "const sku  = String(pm.environment.get('productSku') || '');",
+              "const price = Number(pm.environment.get('productPrice'));",
+              "const id = String(pm.environment.get('productId') || '');",
+              "",
+              "if (!id || !name || !sku || !isFinite(price) || price <= 0) {",
+              "    throw new Error('Missing product data - re-run step 03. id=' + id + ' name=' + name + ' sku=' + sku + ' price=' + price);",
+              "}",
+              "",
+              "const item = {",
+              "    productId: id,",
+              "    productName: name.substring(0, 200),",
+              "    sku: sku.substring(0, 50),",
+              "    price: price,",
+              "    quantity: 1",
+              "};",
+              "",
+              "pm.environment.set('cartItemBody', JSON.stringify(item));",
+              "console.log('POST body -> ' + JSON.stringify(item));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "function safeJson() {",
+              "    const t = pm.response.text();",
+              "    if (!t || !t.trim()) {",
+              "        console.error('EMPTY response body. HTTP ' + pm.response.code + ' - the request JSON was almost certainly malformed.');",
+              "        return null;",
+              "    }",
+              "    try { return JSON.parse(t); }",
+              "    catch (e) { console.error('NON-JSON body: ' + t.substring(0, 400)); return null; }",
+              "}",
+              "",
+              "if (pm.response.code === 400) {",
+              "    console.error('400 - body sent was: ' + pm.environment.get('cartItemBody'));",
+              "    console.error('An EMPTY 400 means malformed JSON. A 400 WITH a body means a validation rule failed.');",
+              "    console.error('Validation rules: productId/productName/sku non-empty, name <=200, sku <=50, price > 0, quantity > 0.');",
+              "}",
+              "",
+              "pm.test('Item added to cart', function () { pm.response.to.have.status(200); });",
+              "",
+              "const cart = safeJson();",
+              "if (cart) {",
+              "    pm.test('Cart contains the product', function () {",
+              "        const found = cart.items.some(function (i) { return i.productId === pm.environment.get('productId'); });",
+              "        pm.expect(found).to.be.true;",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Get cart",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/gateway/cart",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "gateway",
+            "cart"
+          ]
+        },
+        "description": "Reads the cart back from Redis to confirm the write landed."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "function safeJson() {",
+              "    const t = pm.response.text();",
+              "    if (!t || !t.trim()) {",
+              "        console.error('EMPTY response body. HTTP ' + pm.response.code + ' - the request JSON was almost certainly malformed.');",
+              "        return null;",
+              "    }",
+              "    try { return JSON.parse(t); }",
+              "    catch (e) { console.error('NON-JSON body: ' + t.substring(0, 400)); return null; }",
+              "}",
+              "",
+              "pm.test('Cart retrieved', function () { pm.response.to.have.status(200); });",
+              "const cart = safeJson();",
+              "if (cart) { console.log('Cart items: ' + cart.items.length + ' | total: ' + (cart.totalPrice || cart.total || 'n/a')); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Create order",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/gateway/orders",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "gateway",
+            "orders"
+          ]
+        },
+        "description": "Starts the saga. 409 means PriceChanged (submitted price below catalogue) or ProductUnavailable - pricing is server-authoritative. On success the saga reserves stock over Service Bus, publishes OrderConfirmed, clears the cart and raises notifications through Event Grid.",
+        "body": {
+          "mode": "raw",
+          "raw": "{{orderBody}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const name = String(pm.environment.get('productName') || '');",
+              "const sku  = String(pm.environment.get('productSku') || '');",
+              "const price = Number(pm.environment.get('productPrice'));",
+              "const id = String(pm.environment.get('productId') || '');",
+              "",
+              "if (!id || !name || !sku || !isFinite(price) || price <= 0) {",
+              "    throw new Error('Missing product data - re-run step 03.');",
+              "}",
+              "",
+              "const order = {",
+              "    shippingAddress: {",
+              "        fullName: 'Sathish Kumar',",
+              "        addressLine1: '12 Anna Salai',",
+              "        addressLine2: null,",
+              "        city: 'Chennai',",
+              "        state: 'Tamil Nadu',",
+              "        postalCode: '600002',",
+              "        country: 'India',",
+              "        phone: '9876543210'",
+              "    },",
+              "    items: [{",
+              "        productId: id,",
+              "        productName: name.substring(0, 200),",
+              "        sku: sku.substring(0, 50),",
+              "        price: price,",
+              "        quantity: 1",
+              "    }],",
+              "    notes: 'Cloud E2E positive path'",
+              "};",
+              "",
+              "pm.environment.set('orderBody', JSON.stringify(order));",
+              "console.log('POST body -> ' + JSON.stringify(order));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "function safeJson() {",
+              "    const t = pm.response.text();",
+              "    if (!t || !t.trim()) {",
+              "        console.error('EMPTY response body. HTTP ' + pm.response.code + ' - the request JSON was almost certainly malformed.');",
+              "        return null;",
+              "    }",
+              "    try { return JSON.parse(t); }",
+              "    catch (e) { console.error('NON-JSON body: ' + t.substring(0, 400)); return null; }",
+              "}",
+              "",
+              "if (pm.response.code === 409) {",
+              "    console.error('409 - server-authoritative pricing rejected this order. Re-run step 03 to refresh the price.');",
+              "}",
+              "if (pm.response.code === 400) {",
+              "    console.error('400 - body sent was: ' + pm.environment.get('orderBody'));",
+              "}",
+              "",
+              "pm.test('Order created', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+              "",
+              "const o = safeJson();",
+              "if (!o) { throw new Error('Order not created - see the error above.'); }",
+              "",
+              "pm.environment.set('orderId', o.id);",
+              "pm.environment.set('orderNumber', o.orderNumber);",
+              "pm.environment.set('orderAmount', o.totalAmount);",
+              "pm.environment.unset('orderPollAttempt');",
+              "",
+              "console.log('Order ' + o.orderNumber + ' | id ' + o.id + ' | total ' + o.totalAmount);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Get order expect Confirmed",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/gateway/orders/{{orderId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "gateway",
+            "orders",
+            "{{orderId}}"
+          ]
+        },
+        "description": "The saga is asynchronous. Self-retries up to 6 times until the order reaches Confirmed, which happens once stock is reserved and OrderConfirmed is consumed. Retries require the Collection Runner."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "function safeJson() {",
+              "    const t = pm.response.text();",
+              "    if (!t || !t.trim()) {",
+              "        console.error('EMPTY response body. HTTP ' + pm.response.code + ' - the request JSON was almost certainly malformed.');",
+              "        return null;",
+              "    }",
+              "    try { return JSON.parse(t); }",
+              "    catch (e) { console.error('NON-JSON body: ' + t.substring(0, 400)); return null; }",
+              "}",
+              "",
+              "const o = safeJson();",
+              "if (!o) { throw new Error('Could not read the order.'); }",
+              "",
+              "let attempt = parseInt(pm.environment.get('orderPollAttempt') || '0', 10);",
+              "console.log('Attempt ' + attempt + ' - order status: ' + o.status);",
+              "",
+              "if (o.status !== 'Confirmed' && attempt < 6) {",
+              "    pm.environment.set('orderPollAttempt', attempt + 1);",
+              "    postman.setNextRequest('07 Get order expect Confirmed');",
+              "} else {",
+              "    pm.environment.unset('orderPollAttempt');",
+              "    pm.test('Saga reserved stock and confirmed the order', function () { pm.expect(o.status).to.eql('Confirmed'); });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Get product expect stock decremented",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/gateway/products/{{productId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "gateway",
+            "products",
+            "{{productId}}"
+          ]
+        },
+        "description": "Proves the saga's stock reservation reached the Products service over Service Bus and was applied in Cosmos DB."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "function safeJson() {",
+              "    const t = pm.response.text();",
+              "    if (!t || !t.trim()) {",
+              "        console.error('EMPTY response body. HTTP ' + pm.response.code + ' - the request JSON was almost certainly malformed.');",
+              "        return null;",
+              "    }",
+              "    try { return JSON.parse(t); }",
+              "    catch (e) { console.error('NON-JSON body: ' + t.substring(0, 400)); return null; }",
+              "}",
+              "",
+              "const p = safeJson();",
+              "if (!p) { throw new Error('Could not read the product.'); }",
+              "const before = parseInt(pm.environment.get('initialStock'), 10);",
+              "console.log('Stock before ' + before + ' | after ' + p.stockQuantity);",
+              "pm.test('Stock decremented by 1', function () { pm.expect(p.stockQuantity).to.eql(before - 1); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Get cart expect cleared",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/gateway/cart",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "gateway",
+            "cart"
+          ]
+        },
+        "description": "The cart is cleared when the order is confirmed. A 404 is a valid outcome - the service returns NotFound when no cart exists in Redis."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Cart cleared after confirmation', function () {",
+              "    if (pm.response.code === 404) { pm.expect(true).to.be.true; return; }",
+              "    pm.response.to.have.status(200);",
+              "    pm.expect(pm.response.json().items.length).to.eql(0);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Initiate payment",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/gateway/payments/initiate",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "gateway",
+            "payments",
+            "initiate"
+          ]
+        },
+        "description": "method 1 = Card (2 SavedCard, 3 UPI, 4 NetBanking). A real razorpayOrderId proves two things at once: outbound egress from the cluster works, and the Razorpay key was read from Key Vault through workload identity with no stored secret.",
+        "body": {
+          "mode": "raw",
+          "raw": "{{paymentBody}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const amount = Number(pm.environment.get('orderAmount'));",
+              "const orderId = String(pm.environment.get('orderId') || '');",
+              "const orderNumber = String(pm.environment.get('orderNumber') || '');",
+              "",
+              "if (!orderId || !orderNumber || !isFinite(amount) || amount <= 0) {",
+              "    throw new Error('Missing order data - step 06 did not complete.');",
+              "}",
+              "",
+              "const payload = {",
+              "    orderId: orderId,",
+              "    orderNumber: orderNumber,",
+              "    amount: amount,",
+              "    method: 1,",
+              "    customerContact: '9876543210'",
+              "};",
+              "",
+              "pm.environment.set('paymentBody', JSON.stringify(payload));",
+              "console.log('POST body -> ' + JSON.stringify(payload));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "function safeJson() {",
+              "    const t = pm.response.text();",
+              "    if (!t || !t.trim()) {",
+              "        console.error('EMPTY response body. HTTP ' + pm.response.code + ' - the request JSON was almost certainly malformed.');",
+              "        return null;",
+              "    }",
+              "    try { return JSON.parse(t); }",
+              "    catch (e) { console.error('NON-JSON body: ' + t.substring(0, 400)); return null; }",
+              "}",
+              "",
+              "if (pm.response.code >= 400) { console.error('Body sent was: ' + pm.environment.get('paymentBody')); }",
+              "",
+              "pm.test('Payment initiated', function () { pm.response.to.have.status(200); });",
+              "",
+              "const r = safeJson();",
+              "if (!r) { throw new Error('Payment initiate failed.'); }",
+              "",
+              "pm.environment.set('paymentId', r.paymentId);",
+              "pm.environment.set('razorpayOrderId', r.razorpayOrderId);",
+              "",
+              "pm.test('Razorpay order id returned (egress + Key Vault OK)', function () {",
+              "    pm.expect(r.razorpayOrderId).to.be.a('string').and.not.empty;",
+              "});",
+              "",
+              "console.log('paymentId ' + r.paymentId + ' | razorpayOrderId ' + r.razorpayOrderId);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Verify payment VALID signature",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/gateway/payments/verify",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "gateway",
+            "payments",
+            "verify"
+          ]
+        },
+        "description": "The pre-request script computes the real HMAC-SHA256 signature exactly as the browser checkout widget would. The service recomputes it with the Key Vault secret and compares - it never calls Razorpay to ask whether the payment exists, so a self-computed signature is genuinely valid, not a workaround.",
+        "body": {
+          "mode": "raw",
+          "raw": "{{verifyBody}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const secret = pm.environment.get('razorpayKeySecret');",
+              "if (!secret) {",
+              "    throw new Error('razorpayKeySecret is empty. Run: az keyvault secret show --vault-name kv-antkart-dev --name \"Razorpay--KeySecret\" --query value -o tsv');",
+              "}",
+              "",
+              "const rzpOrderId = String(pm.environment.get('razorpayOrderId') || '');",
+              "if (!rzpOrderId) { throw new Error('razorpayOrderId is empty - step 10 did not run or failed.'); }",
+              "",
+              "const rzpPaymentId = 'pay_e2e_' + Date.now();",
+              "",
+              "const signature = CryptoJS",
+              "    .HmacSHA256(rzpOrderId + '|' + rzpPaymentId, String(secret).trim())",
+              "    .toString(CryptoJS.enc.Hex);",
+              "",
+              "const payload = {",
+              "    paymentId: String(pm.environment.get('paymentId')),",
+              "    razorpayOrderId: rzpOrderId,",
+              "    razorpayPaymentId: rzpPaymentId,",
+              "    razorpaySignature: signature",
+              "};",
+              "",
+              "pm.environment.set('razorpayPaymentId', rzpPaymentId);",
+              "pm.environment.set('razorpaySignature', signature);",
+              "pm.environment.set('verifyBody', JSON.stringify(payload));",
+              "",
+              "console.log('Signed payload: ' + rzpOrderId + '|' + rzpPaymentId);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "function safeJson() {",
+              "    const t = pm.response.text();",
+              "    if (!t || !t.trim()) {",
+              "        console.error('EMPTY response body. HTTP ' + pm.response.code + ' - the request JSON was almost certainly malformed.');",
+              "        return null;",
+              "    }",
+              "    try { return JSON.parse(t); }",
+              "    catch (e) { console.error('NON-JSON body: ' + t.substring(0, 400)); return null; }",
+              "}",
+              "",
+              "pm.test('Verify returned 200', function () { pm.response.to.have.status(200); });",
+              "",
+              "const p = safeJson();",
+              "if (!p) { throw new Error('Verify failed - body sent was: ' + pm.environment.get('verifyBody')); }",
+              "",
+              "console.log('Payment status: ' + p.status + (p.failureReason ? ' | reason: ' + p.failureReason : ''));",
+              "",
+              "if (p.status === 'Failed') {",
+              "    console.error('Signature rejected. Check razorpayKeySecret matches Key Vault exactly - no quotes, no trailing newline.');",
+              "}",
+              "",
+              "pm.test('Payment succeeded', function () { pm.expect(p.status).to.eql('Succeeded'); });",
+              "pm.environment.unset('orderPollAttempt');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Get order expect Paid",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/gateway/orders/{{orderId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "gateway",
+            "orders",
+            "{{orderId}}"
+          ]
+        },
+        "description": "PaymentSucceeded travels over Service Bus to the Order service, which moves the order to Paid. Self-retries up to 6 times. This is the final link in the success chain - screenshot it."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "function safeJson() {",
+              "    const t = pm.response.text();",
+              "    if (!t || !t.trim()) {",
+              "        console.error('EMPTY response body. HTTP ' + pm.response.code + ' - the request JSON was almost certainly malformed.');",
+              "        return null;",
+              "    }",
+              "    try { return JSON.parse(t); }",
+              "    catch (e) { console.error('NON-JSON body: ' + t.substring(0, 400)); return null; }",
+              "}",
+              "",
+              "const o = safeJson();",
+              "if (!o) { throw new Error('Could not read the order.'); }",
+              "",
+              "let attempt = parseInt(pm.environment.get('orderPollAttempt') || '0', 10);",
+              "console.log('Attempt ' + attempt + ' - status: ' + o.status + ' | paymentStatus: ' + o.paymentStatus);",
+              "",
+              "if (o.status !== 'Paid' && attempt < 6) {",
+              "    pm.environment.set('orderPollAttempt', attempt + 1);",
+              "    postman.setNextRequest('12 Get order expect Paid');",
+              "} else {",
+              "    pm.environment.unset('orderPollAttempt');",
+              "    pm.test('Order reached Paid - full positive saga complete', function () { pm.expect(o.status).to.eql('Paid'); });",
+              "}"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
