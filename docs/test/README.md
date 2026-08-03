@@ -19,17 +19,17 @@ dotnet test
 | Project | Tests |
 |---------|-------|
 | AK.Products.Tests | 218 |
-| AK.Order.Tests | 133 |
+| AK.Order.Tests | 144 |
 | AK.ShoppingCart.Tests | 88 |
 | AK.Payments.Tests | 73 |
 | AK.Discount.Tests | 49 |
 | AK.Notification.Tests | 23 |
-| AK.BuildingBlocks.Tests | 6 |
+| AK.BuildingBlocks.Tests | 10 |
 | AK.Tools.ProductsSeedLoader.Tests | 11 |
 | AK.Tools.DiscountSeedLoader.Tests | 12 |
-| **Unit subtotal** | **613** |
+| **Unit subtotal** | **628** |
 
-With the **28** integration tests below, the full automated suite is **641 tests** (all passing).
+With the **28** integration tests below, the full automated suite is **656 tests** (all passing).
 
 ---
 
@@ -94,7 +94,7 @@ Both a **bare** route (`/gateway/products`, `/gateway/cart`, `/gateway/orders`) 
 
 ## Security Tests
 
-The [Security Test Guide](SECURITY_TESTS.md) covers ethical black-box and grey-box security testing — authentication and authorization boundaries, ownership enforcement, input validation, and token handling — run against the live, running services.
+[Security testing](SECURITY_TESTS.md) is being **rebuilt** — the detailed procedures were cleared pending the planned security work (the Security / ethical-hacking guide and the broader Security programme on the [Roadmap](../ROADMAP.md)). The boundaries enforced today are described in [Security — how it is secured](../development/6-security.md); the automated `dotnet test` suites already cover authorization, ownership, and input-validation rules at the handler level.
 
 ---
 

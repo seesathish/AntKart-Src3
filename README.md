@@ -115,7 +115,7 @@ Security rests on no stored secrets anywhere and defence in depth on tokens: eve
 ## Explore
 
 - [Development Guide](DevelopmentGuide.md) — how the platform is built, layer by layer.
-- [Test Guide](DevTestGuide.md) — how it is verified: cloud-only, through the live platform at `api.antkart.in`, plus the automated `dotnet test` CI baseline.
+- [Testing](docs/test/README.md) — how it is verified: the automated `dotnet test` baseline (unit + integration) plus cloud-only end-to-end and security testing against the live platform at `api.antkart.in`.
 - [Environment Provisioning Runbook](docs/guides/environment-provisioning-runbook.md) — stand up a complete new environment from an empty subscription, step by step.
 - [Architecture decisions](docs/adr/README.md) — the ADRs and why each choice was made.
 - [Known Issues Register](docs/KNOWN_ISSUES.md) — open defects and deferred fixes, notably KI-002 and KI-005.

@@ -39,7 +39,7 @@ Root README (hero diagrams, the "what")
     -> docs/development/N-<layer>.md (one layer each)
       -> docs/adr/ (why), docs/guides/ (how), docs/KNOWN_ISSUES.md (gaps)
 ```
-Separately: `DevTestGuide.md` -> `docs/test/` covers verification — **cloud-only**: the full-cloud end-to-end journey driven by the `AntKart Cloud E2E Saga` Postman collection, plus data and security testing against live cloud resources through the cluster. The automated `dotnet test` unit + integration suites are the layer-agnostic CI baseline. There is no valid localhost verification path (the Phase-1 manual guide was retired).
+Separately: `docs/test/README.md` is the verification index — **cloud-only**. It consolidates the four valid test types: the automated `dotnet test` unit + integration suites (the layer-agnostic CI baseline), the full-cloud end-to-end journey driven by the `AntKart Cloud E2E Saga` Postman collection, and security testing against the live cluster. There is no valid localhost path (the Phase-1 manual guide and the root `DevTestGuide.md` were retired).
 
 ### The promise the docs make
 A stranger with an empty Azure subscription should be able to follow the `DevelopmentGuide` and build this platform. When writing or editing any doc, check that promise still holds — no unexplained step, no reference to a resource only Sathish has, no instruction that assumes prior context.
@@ -79,7 +79,7 @@ AntKart/
 │   ├── C4Renders/        C4 image source of truth + Structurizr workspace + DIAGRAM-PLAN.md (renamed from architecture/)
 │   ├── guides/           Concept & build guides (incl. eventbus/observability/resilience-concepts) linked from the section docs
 │   ├── skills/           Step-by-step development & maintenance guides (private — linked from nowhere)
-│   └── test/             Cloud test docs (1-full-cloud-end-to-end + SECURITY_TESTS) — indexed by /DevTestGuide.md; verification is cloud-only, no localhost path
+│   └── test/             Verification index (README — the 4 valid test types) + cloud test docs (1-full-cloud-end-to-end, SECURITY_TESTS placeholder) — cloud-only, no localhost path
 ├── deploy/               Kubernetes delivery — Helm chart + GitOps (no runtime secrets)
 │   ├── helm/antkart-service/  ONE generic Helm chart; per-service inputs in helm/values/*.yaml (6: products/cart/discount/order/payments/gateway)
 │   ├── argocd/           Argo CD GitOps — least-privilege AppProject + ApplicationSet + applications/ak-*.yaml (6)
@@ -164,7 +164,7 @@ AK.<Service>/
 - **Price revalidation at order creation (server-authoritative, fail-closed):** `CreateOrderCommandHandler` revalidates every line against the catalogue **before persisting**, via `ICatalogPriceProvider` (Application) → `HttpCatalogPriceProvider` (Infrastructure typed `HttpClient` to AK.Products `GET /api/v1/products/{id}`, `AllowAnonymous`, wrapped in `AddHttpResilienceWithCircuitBreaker`; base URL from non-secret `ProductsApi:BaseUrl`, local `http://localhost:5077/`, cloud via `ProductsApi__BaseUrl` env var — not Key Vault). Effective price = `DiscountPrice ?? Price`. The policy is **asymmetric**: the order is always charged the catalogue effective price; the client's submitted price is advisory. A price **increase** → `409 PriceChanged` (ask to confirm); equal or a **drop** → accepted and charged the lower price; not-found/inactive → `422 ProductUnavailable`; catalogue unreachable after retries → `503 PricingUnavailable`, **nothing persisted**. The order is built from the effective prices, never the client-submitted ones.
 - **API versioning:** `AddStandardApiVersioning()` registered — v1.0 default, URL segment or `api-version` header. Other services adopt by calling the same single method.
 - **Event Grid notification side-effects (commit-then-notify):** publishes the shared `AK.BuildingBlocks.Messaging.Notifications` contracts as fire-and-forget side-effects via `IEventGridSideEffectPublisher.TryPublishAsync` (never-throws), **strictly after the durable commit** — `OrderCreatedNotification` (CreateOrderCommandHandler), `OrderConfirmedNotification` (OrderConfirmedConsumer, now using the shared contract — no ad-hoc shape), `OrderCancelledNotification` (OrderCancelledConsumer — the single sink for both the customer-cancel and saga-cancel paths, so one notification per cancellation). A publish failure can never roll back or fail the business operation. Non-secret `EventGrid:TopicEndpoint` in `appsettings`
-- **Tests:** 133 passing (domain, features, validators, behaviors, infrastructure with EF InMemory, OrderConfirmed/OrderCancelled consumer side-effects + decoupling, OrderCreated publish + publish-failure tolerance, price revalidation: match/drop/increase/not-found/inactive/unreachable + the typed catalogue client)
+- **Tests:** 144 passing (domain, features, validators, behaviors, infrastructure with EF InMemory, OrderConfirmed/OrderCancelled consumer side-effects + decoupling, OrderCreated publish + publish-failure tolerance, PaymentSucceeded/PaymentFailed saga transitions Confirmed→Paid/PaymentFailed, price revalidation: match/drop/increase/not-found/inactive/unreachable + the typed catalogue client)
 - **Swagger:** `http://localhost:5080/swagger` (Development only)
 - **Design doc:** [AK.Order/ORDER_TECHNICAL_DESIGN.md](AK.Order/ORDER_TECHNICAL_DESIGN.md)
 

@@ -628,7 +628,7 @@ export ARM_SUBSCRIPTION_ID="<subscription-id>"
 
 ## L. External provider verification — Razorpay (payments)
 
-> **When you need this:** during payment testing, to confirm the **Razorpay sandbox** credentials the platform holds are valid and to inspect a specific test payment/order from the provider side. This verifies an **external provider**, not an AntKart service — the AntKart payment flow itself is exercised in [Full-cloud end-to-end](../test/1-full-cloud-end-to-end.md) and the [Security Test Guide](../test/SECURITY_TESTS.md) (Tests 7 & 14). Sandbox test cards/OTP: see [AK.Payments design doc](../../AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md).
+> **When you need this:** during payment testing, to confirm the **Razorpay sandbox** credentials the platform holds are valid and to inspect a specific test payment/order from the provider side. This verifies an **external provider**, not an AntKart service — the AntKart payment flow itself is exercised in [Full-cloud end-to-end](../test/1-full-cloud-end-to-end.md). Sandbox test cards/OTP: see [AK.Payments design doc](../../AK.Payments/PAYMENTS_TECHNICAL_DESIGN.md).
 
 > **Secrets:** the Razorpay key id/secret are **sandbox** credentials stored in Key Vault as `Razorpay--KeyId` / `Razorpay--KeySecret` (see [section B → Key Vault](#b-azure-cli--resource-provisioning-and-inspection)) — never committed. Show them below only as placeholders. Read them at test time from the vault; do not paste real values into a shell history file.
 

@@ -43,5 +43,5 @@ Behind the endpoints, verify the managed stores hold the expected state — reac
 
 ## Related
 
-- The authoritative security probes: [Security Test Guide](SECURITY_TESTS.md).
+- Security testing (being rebuilt — see the Roadmap): [Security Testing](SECURITY_TESTS.md).
 - The automated code-level baseline (`dotnet test` — layer-agnostic unit + integration suites in CI) and the full strategy and gateway route table: [Testing index](README.md).
