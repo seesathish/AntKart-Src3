@@ -26,7 +26,7 @@ $ENV = "qa"
 
 # ---- Derived names (dev convention: <resource>-antkart-<env>) ----------------
 $LOCATION      = "eastus"
-$LOCATION_PG   = "eastus2"                       # see 1.4 — eastus is offer-restricted
+$LOCATION_DATA = "eastus2"                       # see 1.4 — Postgres AND Redis
 $RG            = "rg-antkart-$ENV-eastus"
 $VNET          = "vnet-antkart-$ENV-eastus"
 $AKS           = "aks-antkart-$ENV"
@@ -74,7 +74,35 @@ disappointment.
 - **Stop what you start.** AKS and PostgreSQL are the expensive resources. Phase 7 is teardown.
 - **One wave at a time.** Do not run `run-all apply` across the whole tree on a first build.
 
-### 0.4 The one-way doors
+### 0.5 The five ideas behind every command in this runbook
+
+If Terraform is new to you, these five ideas explain most of what follows.
+
+**1. Terraform describes; it does not script.** You declare the resources you want and
+Terraform works out the calls to get there. Running the same file twice changes nothing
+the second time — that property is called idempotence, and it is why re-running a failed
+step is safe.
+
+**2. State is the memory, and it is the dangerous part.** Terraform records what it
+created in a state file. It compares that record against your files to decide what to
+change. Point a new environment at another environment's state and Terraform concludes
+the live resources are *its* resources — and offers to reshape them. That is the whole
+reason Phase 0 exists.
+
+**3. Terragrunt is a wrapper that removes repetition.** Terraform alone would need the
+backend and provider settings copied into all 18 units. Terragrunt keeps them once in
+`root.hcl` and generates the rest at `init` time. That is why `backend.tf` and
+`provider.tf` are deleted in Phase 1 — they are generated files, not source.
+
+**4. A "unit" is one folder, one state file.** Each folder under the environment is
+applied independently and owns its own state blob. Small blast radius: a mistake in one
+unit cannot corrupt another.
+
+**5. `plan` shows, `apply` does.** Plan is a dry run printing what would change. It is
+free and safe. Every apply in this runbook is preceded by a plan for one reason — the
+plan is where you catch the wrong environment before it costs you.
+
+### 0.6 The one-way doors
 
 Three things in this runbook cannot be undone cheaply. They are called out where they occur.
 
@@ -119,7 +147,7 @@ scope. `(d)` must list `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_I
 
 ### 1.2 Check globally unique names before you create anything
 
-Seven resource types take names from a global namespace. A name that is taken — or soft-deleted
+Eight resource types take names from a global namespace. A name that is taken — or soft-deleted
 elsewhere — fails the apply *midway through a wave*, which is the worst place to find out.
 
 ```powershell
@@ -137,6 +165,10 @@ az servicebus namespace exists --name $SB -o table
 
 # Cosmos DB account name (empty output = available)
 az cosmosdb check-name-exists --name $COSMOS
+
+# Azure Managed Redis — name is globally unique (it forms the hostname)
+az resource list --resource-type "Microsoft.Cache/redisEnterprise" `
+  --query "[?name=='$REDIS'].{name:name, rg:resourceGroup}" -o table
 
 # PostgreSQL flexible server — name is subscription+region unique; list existing
 az postgres flexible-server list --query "[?name=='$PG'].name" -o tsv
@@ -194,7 +226,7 @@ Check whether that is still true rather than copying the workaround blindly:
 az postgres flexible-server list-skus --location eastus -o table
 ```
 
-If the SKU list returns normally, set `$LOCATION_PG = "eastus"` and note the change. If it errors or
+If the SKU list returns normally, set `$LOCATION_DATA = "eastus"` and note the change. If it errors or
 returns restricted offers, keep `eastus2`.
 
 ---
@@ -337,6 +369,10 @@ Resource names by unit:
 > Terragrunt uses when a dependency has not been applied yet, so `plan` can run against an
 > unbuilt graph. They are never real values — but the *resource names* inside them must still be
 > updated, or a plan will validate against dev-shaped paths.
+>
+> A `dependency` block reads another unit's outputs. Terragrunt applies dependencies
+> first and passes real values down; the mock values only stand in for a `plan` run
+> before that unit exists.
 
 ### Verify
 
@@ -371,6 +407,9 @@ exist before a dependent unit reads them.
 
 ### Execute — Wave 0
 
+> `init` downloads the provider and, on first run, generates `backend.tf` and
+> `provider.tf` from `root.hcl` and creates this unit's state blob.
+
 ```powershell
 cd "$ENVDIR/resource-group"
 terragrunt init
@@ -401,20 +440,20 @@ az storage blob list --container-name $STATE_CONTAINER --account-name $STATE_SA 
 
 ### Execute — Wave 1
 
-Plan everything before applying anything:
+Plan every unit first, then apply. `--terragrunt-include-dir` was renamed in newer
+Terragrunt releases and this repo pins no version, so the loop below avoids the flag
+entirely:
 
 ```powershell
+$wave1 = @("networking","observability","container-registry","cosmosdb","postgresql",
+           "redis","servicebus","eventgrid","communication-services","governance")
+
+# Pass 1 — plan everything, change nothing
+foreach ($u in $wave1) {
+  Write-Host "=== plan: $u ===" -ForegroundColor Cyan
+  cd "$ENVDIR/$u"; terragrunt init; terragrunt plan
+}
 cd $ENVDIR
-terragrunt run-all plan --terragrunt-include-dir networking `
-  --terragrunt-include-dir observability `
-  --terragrunt-include-dir container-registry `
-  --terragrunt-include-dir cosmosdb `
-  --terragrunt-include-dir postgresql `
-  --terragrunt-include-dir redis `
-  --terragrunt-include-dir servicebus `
-  --terragrunt-include-dir eventgrid `
-  --terragrunt-include-dir communication-services `
-  --terragrunt-include-dir governance
 ```
 
 Then apply unit by unit. Applying individually on a first build means a failure names its own unit:
@@ -445,7 +484,9 @@ az cosmosdb show -g $RG -n $COSMOS --query "{name:name, kind:kind, state:provisi
 az postgres flexible-server show -g $RG -n $PG --query "{name:name, state:state, version:version}" -o table
 az servicebus namespace show -g $RG -n $SB --query "{name:name, sku:sku.name, state:status}" -o table
 az eventgrid topic show -g $RG -n $EVGT --query "{name:name, state:provisioningState}" -o table
-az redis show -g $RG -n $REDIS --query "{name:name, sku:sku.name, port:sslPort}" -o table 2>$null
+# Azure Managed Redis (azurerm_managed_redis) is NOT Azure Cache for Redis —
+# `az redis show` targets the wrong provider. Look it up generically by name.
+az resource list -g $RG --name $REDIS --query "[].{name:name, type:type, location:location}" -o table
 az monitor log-analytics workspace show -g $RG -n $LOG --query "{name:name, sku:sku.name}" -o table
 az monitor app-insights component show -g $RG -a $APPI --query "{name:name, appId:appId}" -o table
 ```
@@ -474,6 +515,10 @@ cluster does.
 That ordering constraint is already encoded: `workload-identity` declares a dependency on `aks`, so
 Terragrunt sequences it for you. This is worth understanding rather than trusting — it is the single
 most interview-relevant piece of the build.
+
+> This is federated identity: no secret is stored anywhere. The pod presents a token
+> signed by the cluster, Entra trusts that specific issuer and subject, and hands back
+> an Azure token. Change the ServiceAccount name and the trust no longer matches.
 
 ### Execute — Wave 2
 
@@ -623,6 +668,13 @@ kubectl get namespaces
 > This phase is design work, not configuration. It is deliberately a separate session.
 
 ### 5.1 Cluster prerequisites
+
+> **Why a pinned version and not `stable`.** The repo's other install docs use
+> `argo-cd/stable`, which resolves to whatever is current at install time. The dev
+> cluster runs v3.4.5 because that is what `stable` meant on the day it was installed.
+> Using `stable` here would give this environment a different Argo CD than dev, so the
+> version is pinned to match. Confirm with:
+> `kubectl -n argocd get deploy argocd-server -o jsonpath='{.spec.template.spec.containers[0].image}'`
 
 ```powershell
 kubectl create namespace antkart
@@ -794,6 +846,8 @@ az storage container delete --name $STATE_CONTAINER --account-name $STATE_SA --a
 | Argo will not re-sync after a failure | Argo does not auto-retry the same revision | Sync manually |
 | `az` strips inner double quotes on Windows | PowerShell quoting | Single quotes inside a double-quoted KQL string |
 | Postgres SKU unavailable in `eastus` | Regional offer restriction | Provision in `eastus2` |
+| `AllocationFailed` on Redis apply | Region temporarily at capacity | Try a nearby region and re-apply; note the change |
+| `unknown flag: --terragrunt-include-dir` | Flag renamed in newer Terragrunt | Plan per unit instead of run-all |
 
 ## Appendix C — What this runbook does not yet cover
 
