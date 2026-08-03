@@ -116,5 +116,6 @@ Security rests on no stored secrets anywhere and defence in depth on tokens: eve
 
 - [Development Guide](DevelopmentGuide.md) — how the platform is built, layer by layer.
 - [Test Guide](DevTestGuide.md) — how it is verified, from service code to full-cloud end-to-end.
+- [Environment Provisioning Runbook](docs/guides/environment-provisioning-runbook.md) — stand up a complete new environment from an empty subscription, step by step.
 - [Architecture decisions](docs/adr/README.md) — the ADRs and why each choice was made.
 - [Known Issues Register](docs/KNOWN_ISSUES.md) — open defects and deferred fixes, notably KI-002 and KI-005.
