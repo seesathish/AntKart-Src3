@@ -74,7 +74,7 @@ disappointment.
 - **Stop what you start.** AKS and PostgreSQL are the expensive resources. Phase 7 is teardown.
 - **One wave at a time.** Do not run `run-all apply` across the whole tree on a first build.
 
-### 0.5 The five ideas behind every command in this runbook
+### 0.4 The five ideas behind every command in this runbook
 
 If Terraform is new to you, these five ideas explain most of what follows.
 
@@ -102,7 +102,7 @@ unit cannot corrupt another.
 free and safe. Every apply in this runbook is preceded by a plan for one reason — the
 plan is where you catch the wrong environment before it costs you.
 
-### 0.6 The one-way doors
+### 0.5 The one-way doors
 
 Three things in this runbook cannot be undone cheaply. They are called out where they occur.
 
@@ -111,6 +111,102 @@ Three things in this runbook cannot be undone cheaply. They are called out where
 | Key Vault purge protection | Azure will not let it be disabled once enabled; a deleted vault's name is locked for the retention window | 1.3 |
 | Terraform state container name | Changing it after apply orphans every state blob | 0 |
 | Globally unique resource names | Taken names cannot be reused while soft-deleted | 1.2 |
+
+### 0.6 Where everything lives
+
+Two folders do different jobs, and the difference is the core idea.
+
+**`infrastructure/modules/`** holds 18 reusable blueprints — the `.tf` files that describe
+*how* to build each resource type. They are shared by every environment and are never
+copied. Nothing in this runbook edits them.
+
+**`infrastructure/environments/`** holds one folder per environment. Each unit inside is a
+single `terragrunt.hcl` that points at a module and supplies *this* environment's values.
+
+Compare one resource:
+
+```
+infrastructure/modules/redis/             <- the blueprint (shared)
+├── main.tf                               declares azurerm_managed_redis
+├── variables.tf                          what it accepts (name, location, sku...)
+└── outputs.tf                            what it hands to other units
+
+infrastructure/environments/dev/redis/    <- the instance (per environment)
+└── terragrunt.hcl                        "use ../../../modules/redis, name it
+                                          redis-antkart-dev, put it in eastus2"
+```
+
+That is the whole pattern, repeated 18 times.
+
+**Today:**
+
+```
+infrastructure/
+├── modules/                              18 blueprints — shared
+└── environments/
+    └── dev/                              the only environment
+        ├── root.hcl                      backend + provider settings for THIS environment
+        ├── aks/terragrunt.hcl
+        ├── redis/terragrunt.hcl
+        └── ... 16 more units
+```
+
+**After this runbook:**
+
+```
+infrastructure/
+├── modules/                              UNCHANGED — still 18, still shared
+└── environments/
+    ├── dev/
+    │   ├── root.hcl                      state_container = "tfstate"
+    │   └── ... 18 units
+    └── qa/                               NEW — a sibling of dev, not a child
+        ├── root.hcl                      state_container = "tfstate-qa" <-- the isolation lever
+        └── ... 18 units, same names, qa values
+```
+
+Note `root.hcl` sits **inside** each environment folder, not above them. That is why each
+environment can carry its own backend settings — and why the copy must be edited before
+it is ever run.
+
+**Why the state container is the whole safety story.** Terragrunt names each state blob
+after the unit's path relative to `root.hcl`. Since `qa/redis` and `dev/redis` both resolve
+to `redis`, their blob paths are *identical*. Different containers are what keeps them
+apart:
+
+```
+Storage account: stantkarttfstate
+├── tfstate/                              dev's 18 blobs — NEVER TOUCHED
+│   ├── aks/terraform.tfstate
+│   ├── redis/terraform.tfstate
+│   └── ... 16 more
+└── tfstate-qa/                           NEW container, identical internal layout
+    ├── aks/terraform.tfstate
+    ├── redis/terraform.tfstate
+    └── ... 16 more
+```
+
+Same blob names, different containers, zero collision. Leave the container as `tfstate`
+and QA writes straight over dev's records.
+
+**Outside `infrastructure/`.** Two more places gain files, both in session two (Phase 5):
+
+```
+deploy/
+├── helm/
+│   ├── antkart-service/                  one generic chart — shared by all services and environments
+│   └── values/                           6 dev value files today; QA values land here
+│                                         (layout decided in Phase 5.3)
+└── argocd/
+    ├── appproject-antkart.yaml           the guard rails — what Argo may deploy and where
+    └── applications/                     6 Application manifests, currently pointing at dev values
+
+.github/workflows/                        12 workflows (6 CI + 6 CD)
+                                          CD workflows gain QA targeting (Phase 5.5)
+```
+
+**What this runbook does NOT change:** `infrastructure/modules/`, the six service
+codebases, the Helm chart itself, and every file under `environments/dev/`.
 
 ---
 
