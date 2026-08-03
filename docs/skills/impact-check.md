@@ -1,7 +1,5 @@
 # Skill: Impact Check Before a Change
 
-> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [C4 diagram renders](../C4Renders/renders/README.md).
-
 **Purpose:** Before touching any shared code — a BuildingBlocks type, an integration event contract, `ocelot.json`, a base entity, or an EF migration — enumerate every service, test, endpoint, consumer, and document that will be affected. Run this before writing a single line of change.
 
 ---
@@ -36,7 +34,7 @@ Use this matrix to determine what to check based on what you are changing:
 | `ocelot.json` route change | Gateway, affected downstream service, ocelot.Development.json, docs/guides/eventbus-concepts.md if routing changes |
 | Integration event field added (non-breaking) | All consumers — verify they compile; new optional field with default is safe |
 | Integration event field removed or renamed (breaking) | All publishers + all consumers must update simultaneously |
-| Entra ID app registration change (app roles, optional claims) | All services using JWT claims, `docs/test/SECURITY_TESTS.md` |
+| Entra ID app registration change (app roles, optional claims) | All services using JWT claims, `docs/skills/security-check.md` |
 
 ---
 
@@ -121,7 +119,7 @@ Before making the change, write a brief impact report (inline comment or PR desc
 **Docs affected:**
 - CLAUDE.md — BuildingBlocks Authentication section
 - All service design docs mentioning GetUserId()
-- docs/test/SECURITY_TESTS.md — explanation section
+- docs/development/6-security.md — identity / ownership section
 
 **Strategy:** Rename in BuildingBlocks first, then fix all call sites, build, test — single commit.
 ```
@@ -138,7 +136,7 @@ dotnet build
 dotnet test
 
 # If security-relevant change: run security checks
-bash docs/skills/security-check.md   # or follow docs/test/SECURITY_TESTS.md
+bash docs/skills/security-check.md   # the executable ethical security suite
 ```
 
 ---

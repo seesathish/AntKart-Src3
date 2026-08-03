@@ -1,7 +1,5 @@
 # Skill: Verify IDOR Safety
 
-> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [C4 diagram renders](../C4Renders/renders/README.md).
-
 **Purpose:** Audit all endpoints in a service (or a single new endpoint) to confirm they follow AntKart's IDOR-safe patterns: no `userId` in route paths or request DTOs, JWT-derived identity, ownership checks on single-resource operations, and admin-only policy on admin routes.
 
 ---
@@ -116,19 +114,14 @@ Confirm:
 
 ## Step 6 — Live Integration Test
 
-With Docker running, test that cross-user access is blocked:
+With the gateway reachable (the cloud ingress at `https://api.antkart.in`, or `kubectl port-forward` to it), test that cross-user access is blocked:
 
 ```bash
-# Get tokens for two users
-USER1_TOKEN=$(curl -s -X POST http://localhost:5085/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"sectest_user","password":"SecTest@123"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")
-
-USER2_TOKEN=$(curl -s -X POST http://localhost:5085/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"sectest_user2","password":"SecTest@123"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")
+# Two Entra test-user tokens (both non-admin), acquired via the OAuth2 Authorization
+# Code + PKCE flow — there is no application /api/auth/login endpoint under Entra ID
+# (see ../guides/oauth2-pkce-concepts.md).
+USER1_TOKEN="<access token for Entra test user 1>"
+USER2_TOKEN="<access token for Entra test user 2>"
 
 # 1. Create a resource as User1 (e.g. an order) and note the ID
 # 2. Try to access it as User2

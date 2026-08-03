@@ -1,7 +1,5 @@
 # Skill: Add a New Microservice
 
-> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [C4 diagram renders](../C4Renders/renders/README.md).
-
 **Purpose:** Scaffold a complete new `AK.<Name>` microservice — folder structure, all four layers, `Program.cs`, Dockerfile, cloud deployment entry, design doc, and all registration steps. Follow every step in order; skipping any step causes build or runtime failures.
 
 ---

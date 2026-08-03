@@ -1,7 +1,5 @@
 # Skill: Add an EF Core Migration
 
-> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [C4 diagram renders](../C4Renders/renders/README.md).
-
 **Purpose:** Correctly run a code-first EF Core migration for AK.Order, AK.Payments, or AK.Notification — the three services that use PostgreSQL via EF Core. Includes the right `--project` / `--startup-project` flags, verifying the migration, and ensuring it applies cleanly in Docker.
 
 ---

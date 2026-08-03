@@ -1,8 +1,6 @@
 # Skill: Run Security Checks
 
-> **⛔ SUPERSEDED — describes the Phase-1 platform running locally on Docker Compose.** Retained for historical reference. For the current cloud-native platform, see the [README](../../README.md) and the [C4 diagram renders](../C4Renders/renders/README.md).
-
-**Purpose:** Execute the full 15-category ethical security test suite from `docs/test/SECURITY_TESTS.md` against the running platform. Reports each test as PASS/FAIL/WARN and flags any regressions from the last known-good baseline.
+**Purpose:** Execute the ethical security test suite (defined inline below) against the running cloud platform. Reports each test as PASS/FAIL/WARN and flags any regressions from the last known-good baseline. (The prose security guide `docs/test/SECURITY_TESTS.md` is being rebuilt — see the [Roadmap](../ROADMAP.md); this skill is the executable suite.)
 
 > **Identity is Microsoft Entra ID.** There is no application `/api/auth/register` or `/api/auth/login` endpoint — Entra issues tokens directly through standard OAuth flows. Acquire test tokens for the API (`api://antkart-api-dev`) via the OAuth2 Authorization Code + PKCE flow (see [oauth2-pkce-concepts](../guides/oauth2-pkce-concepts.md)); user and app-role administration is done in Entra / Microsoft Graph, and account lockout is enforced by **Entra Smart Lockout**, not an application setting.
 
@@ -189,7 +187,7 @@ check "User2 → admin notifications" \
 echo ""
 echo "══════════════════════════════════════"
 echo "PASS: $PASS | FAIL: $FAIL | WARN: $WARN"
-[ "$FAIL" -gt 0 ] && echo "ACTION REQUIRED: $FAIL test(s) failed. See docs/test/SECURITY_TESTS.md for fix guidance." \
+[ "$FAIL" -gt 0 ] && echo "ACTION REQUIRED: $FAIL test(s) failed. See docs/development/6-security.md for the enforced boundaries." \
   || echo "All tests passed. Review any warnings above."
 echo "══════════════════════════════════════"
 ```

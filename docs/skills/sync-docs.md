@@ -24,7 +24,7 @@
 | Architecture decisions | `docs/adr/ADR-00X-*.md` | A key architectural decision changes |
 | Cloud E2E collection | `AntKart-Cloud-E2E-Saga-Positive.postman_collection.json` | The end-to-end order→pay saga flow changes (not per-endpoint) |
 | Event bus map | `docs/guides/eventbus-concepts.md` | Integration event or consumer added/changed |
-| Security guide | `docs/test/SECURITY_TESTS.md` | Auth pattern changed, vulnerability fixed |
+| Security | `docs/development/6-security.md` + `docs/skills/security-check.md` | Auth pattern changed, vulnerability fixed (SECURITY_TESTS.md is a placeholder) |
 | Observability | `docs/guides/observability-concepts.md` | New service added (new log streams) |
 | Gateway guide | `AK.Gateway/API_GATEWAY.md` | Route added or changed |
 
@@ -154,13 +154,11 @@ grep -A 3 "exchange\|queue" docs/guides/eventbus-concepts.md | head -40
 
 ---
 
-## Step 7 — docs/test/SECURITY_TESTS.md
+## Step 7 — Security docs
 
-Update when:
-- New endpoint added that involves user data → add to test 4/4b/15 examples
-- Auth policy changed → update test 3 expected results
-- Rate limit changed → update test 9 table
-- Vulnerability fixed → update Vulnerability History table and test result baseline
+`docs/test/SECURITY_TESTS.md` is a **placeholder** — the prose security guide is being rebuilt (see the [Roadmap](../ROADMAP.md)). Until it lands, reflect security-relevant changes in:
+- `docs/development/6-security.md` — the enforced boundaries (auth, ownership, input, exposure)
+- `docs/skills/security-check.md` — the executable ethical security suite (add/adjust a check when an endpoint, auth policy, or rate limit changes)
 
 ---
 
@@ -196,7 +194,7 @@ If the team adopts a new documentation surface, add it to this file and to the s
 - [ ] `docs/guides/eventbus-concepts.md` → Exchanges table, Queues table
 
 **If auth or security changed:**
-- [ ] `docs/test/SECURITY_TESTS.md` → baseline table, vulnerability history
+- [ ] `docs/development/6-security.md` / `docs/skills/security-check.md` → security boundary or check updated (SECURITY_TESTS.md is a placeholder)
 
 **If a new service was added:**
 - [ ] `CLAUDE.md` → Completed Services section
