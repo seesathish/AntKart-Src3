@@ -277,12 +277,9 @@ Add a `### ✅ AK.<Name>` section under **Completed Services** with: transport, 
 
 ---
 
-## Step 13 — Update Postman Collection
+## Step 13 — Update Postman Collection (only if the E2E saga changes)
 
-In `AntKart.postman_collection.json`:
-- Add a new top-level folder named `AK.<Name>`
-- Add one request per endpoint: method, URL (using `{{<name>Url}}` collection variable), sample body, auth Bearer token
-- Add the collection variable `<name>Url` pointing to `http://localhost:50XX`
+`AntKart-Cloud-E2E-Saga-Positive.postman_collection.json` is a single **cloud end-to-end happy-path saga** against `https://api.antkart.in` (via the `/gateway/*` routes), not a per-service request catalogue. Only touch it if the new service participates in that end-to-end order→pay journey — add or adjust the ordered step that exercises it through the gateway. A service that is not part of the saga needs no Postman change.
 
 ---
 

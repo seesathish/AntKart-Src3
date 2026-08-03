@@ -109,7 +109,7 @@ CI runs the tiers that need **no live infrastructure**, so the gate is fast and 
 - **Unit tests** — `AK.Products.Tests` (pure, mocked dependencies).
 - **In-memory integration tests** — `AK.IntegrationTests`, using the **MassTransit in-memory harness**: the event-driven flows are exercised with no broker, no database, and no running host.
 
-Live end-to-end verification against the running cluster is a **separate, post-deploy concern** (see the [Developer Test Guide](../test/DevTestGuide.md)), not a PR gate — it needs a deployed environment and would make the gate slow and flaky.
+Live end-to-end verification against the running cluster is a **separate, post-deploy concern** (see [Full-cloud end-to-end](../test/1-full-cloud-end-to-end.md)), not a PR gate — it needs a deployed environment and would make the gate slow and flaky.
 
 ### .NET version and coverage format
 

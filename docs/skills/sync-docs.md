@@ -22,7 +22,7 @@
 | Solution overview | `CLAUDE.md` | Service added, pattern changed, test count changed |
 | README | `README.md` | Service added, port changed, diagram changed |
 | Architecture decisions | `docs/adr/ADR-00X-*.md` | A key architectural decision changes |
-| API contract | `AntKart.postman_collection.json` | Endpoint added, removed, or path changed |
+| Cloud E2E collection | `AntKart-Cloud-E2E-Saga-Positive.postman_collection.json` | The end-to-end order→pay saga flow changes (not per-endpoint) |
 | Event bus map | `docs/guides/eventbus-concepts.md` | Integration event or consumer added/changed |
 | Security guide | `docs/test/SECURITY_TESTS.md` | Auth pattern changed, vulnerability fixed |
 | Observability | `docs/guides/observability-concepts.md` | New service added (new log streams) |
@@ -122,25 +122,20 @@ After creating an ADR:
 
 ---
 
-## Step 5 — Postman Collection (`AntKart.postman_collection.json`)
+## Step 5 — Postman Collection (`AntKart-Cloud-E2E-Saga-Positive.postman_collection.json`)
 
-Update when:
-- **New endpoint added:** Add a request to the service's folder
-- **Route path changed:** Update the URL in existing requests
-- **Request body changed:** Update the body schema
-- **Auth changed:** Update the auth type on the request
+This is a **single cloud end-to-end happy-path saga** run against the live platform at `https://api.antkart.in` through the `/gateway/*` routes — **not** a per-service request catalogue. Most endpoint changes need no Postman edit.
+
+Update only when:
+- **The end-to-end order→pay saga flow itself changes:** a new ordered step is required, or an existing step's gateway path/body changes.
+- **A gateway route on the saga path changes:** update the affected request's URL (external `/gateway/*` form).
 
 ```bash
 # Validate the collection parses as JSON
-python3 -c "import json; json.load(open('AntKart.postman_collection.json')); print('JSON valid')"
+python3 -c "import json; json.load(open('AntKart-Cloud-E2E-Saga-Positive.postman_collection.json')); print('JSON valid')"
 ```
 
-For each new endpoint, a Postman request needs:
-- Name matching the endpoint's `.WithName("...")` value
-- Method + URL (use `{{<service>Url}}` collection variable)
-- Headers: `Content-Type: application/json`, `Authorization: Bearer {{accessToken}}`
-- Sample request body (for POST/PUT)
-- Expected response example in the description
+Conventions for a saga step: an ordered `NN name` request; URL is `{{baseUrl}}/gateway/...`; auth is collection-level OAuth 2.0 + PKCE (no per-request token); request bodies are built in a pre-request script via `JSON.stringify`.
 
 ---
 
@@ -195,7 +190,7 @@ If the team adopts a new documentation surface, add it to this file and to the s
 
 **Service-level changes:**
 - [ ] `<SERVICE>_TECHNICAL_DESIGN.md` → API endpoints, domain model, events, test count
-- [ ] `AntKart.postman_collection.json` → request added/updated for any new/changed endpoint
+- [ ] `AntKart-Cloud-E2E-Saga-Positive.postman_collection.json` → only if the cloud end-to-end saga flow changed (not per-endpoint)
 
 **If events changed:**
 - [ ] `docs/guides/eventbus-concepts.md` → Exchanges table, Queues table

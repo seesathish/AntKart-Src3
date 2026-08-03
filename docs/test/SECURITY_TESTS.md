@@ -107,7 +107,7 @@ curl -s -o /dev/null -w "POST product (user): %{http_code}\n" \
 
 ## Test 4 — IDOR: Orders
 
-**Objective:** confirm users cannot read or cancel another user's orders. (Create an order as user1 first — see the [Developer Test Guide](DevTestGuide.md) — and note its id.)
+**Objective:** confirm users cannot read or cancel another user's orders. (Create an order as user1 first — see the [Full-cloud end-to-end](1-full-cloud-end-to-end.md) — and note its id.)
 
 ```bash
 ORDER_ID="<order-id-belonging-to-user1>"
@@ -310,4 +310,4 @@ curl -s -X POST http://localhost:8000/gateway/payments/initiate \
 
 ## Re-running the tests
 
-Re-run the `curl` commands in this document against the live stack after any change to authentication, routing, or endpoint logic. For the automated regression suites (unit + integration), see the [Testing index](README.md); for the functional end-to-end walk-through, the [Developer Test Guide](DevTestGuide.md); for the cluster end-to-end path, [Cluster End-to-End Verification](README.md#cluster-end-to-end-verification-public-ingress).
+Re-run the `curl` commands in this document against the live stack after any change to authentication, routing, or endpoint logic. For the automated regression suites (unit + integration), see the [Testing index](README.md); for the functional end-to-end walk-through, the [Full-cloud end-to-end](1-full-cloud-end-to-end.md); for the cluster end-to-end path, [Cluster End-to-End Verification](README.md#cluster-end-to-end-verification-public-ingress).

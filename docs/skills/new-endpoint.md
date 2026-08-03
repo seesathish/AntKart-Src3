@@ -232,7 +232,7 @@ Run: `dotnet test AK.<Service>/AK.<Service>.Tests/AK.<Service>.Tests.csproj`
 
 Run [sync-docs.md](sync-docs.md) checklist after adding the endpoint. At minimum:
 - Add the new endpoint to the **API Endpoints** table in `<SERVICE>_TECHNICAL_DESIGN.md`
-- Add the new request to `AntKart.postman_collection.json` under the service folder
+- Update `AntKart-Cloud-E2E-Saga-Positive.postman_collection.json` only if the endpoint changes the cloud end-to-end order→pay saga (it is a single cloud E2E flow through the gateway, not a per-service request catalogue)
 - If this is a new pattern (e.g. first use of `Result<T>` in this service), note it in `CLAUDE.md`
 
 ---

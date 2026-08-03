@@ -7,7 +7,7 @@ This is the whole platform exercised as a user would, through its public HTTPS e
 ## Before you start
 
 - A delegated Entra token in the `Authorization: Bearer` header for each call — see [OAuth2 Authorization Code + PKCE Concepts](../guides/oauth2-pkce-concepts.md). Two distinct test users let you prove cross-user isolation.
-- The Postman collection, targeting the gateway routes. The external-to-internal route mapping is in the [Testing index](README.md#cluster-end-to-end-verification-public-ingress).
+- The **`AntKart Cloud E2E Saga`** Postman collection (`AntKart-Cloud-E2E-Saga-Positive.postman_collection.json` at the repo root), targeting the gateway routes. Run it in the **Collection Runner** with an 8000 ms inter-request delay — the saga is asynchronous and steps self-retry. Auth is collection-level OAuth 2.0 Authorization Code + PKCE against Entra; fill `entraClientId` (the public-client app registration id) and `razorpayKeySecret` (from Key Vault) before the first run. The external-to-internal route mapping is in the [Testing index](README.md#cluster-end-to-end-verification-public-ingress).
 
 ## Positive path — order to completion
 
@@ -32,8 +32,16 @@ The SAGA is designed to unwind cleanly. Two failures are worth driving explicitl
 
 The state machine that governs which order transitions are legal (and which are rejected with `409`) is described with the [Order design](../../AK.Order/ORDER_TECHNICAL_DESIGN.md).
 
+## Data — confirm what the services persisted
+
+Behind the endpoints, verify the managed stores hold the expected state — reach them with `kubectl port-forward` (cluster) or a run against the live service, always secret-less via workload identity ([Kubernetes](../development/3-kubernetes.md), [Security](../development/6-security.md)):
+
+- **Products** — the catalogue is served from Cosmos DB (MongoDB API); reads return seeded products and re-seeding is idempotent ([Products design](../../AK.Products/PRODUCTS_TECHNICAL_DESIGN.md)).
+- **Order / Payments / Discount** — PostgreSQL holds orders, payments, and coupons; an order's status transitions and a payment's outcome persist after the saga settles.
+- **Cart** — Azure Managed Redis holds the per-user cart under `AKCart:cart:{userId}` with a 30-day TTL.
+- **Notification history** — each dispatch writes an audit row via the serverless Core ([Serverless & Eventing Concepts](../guides/serverless-eventing-concepts.md)).
+
 ## Related
 
-- The developer-facing data/security/functional checks: [Testing from the service code](1-test-from-service-code.md).
 - The authoritative security probes: [Security Test Guide](SECURITY_TESTS.md).
-- The full strategy, counts, and gateway route table: [Testing index](README.md).
+- The automated code-level baseline (`dotnet test` — layer-agnostic unit + integration suites in CI) and the full strategy and gateway route table: [Testing index](README.md).

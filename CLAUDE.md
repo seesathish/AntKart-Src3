@@ -39,7 +39,7 @@ Root README (hero diagrams, the "what")
     -> docs/development/N-<layer>.md (one layer each)
       -> docs/adr/ (why), docs/guides/ (how), docs/KNOWN_ISSUES.md (gaps)
 ```
-Separately: `DevTestGuide.md` -> `docs/test/` covers verification — testing from service code locally, and data plus security testing against live cloud resources, including all services through the cluster.
+Separately: `DevTestGuide.md` -> `docs/test/` covers verification — **cloud-only**: the full-cloud end-to-end journey driven by the `AntKart Cloud E2E Saga` Postman collection, plus data and security testing against live cloud resources through the cluster. The automated `dotnet test` unit + integration suites are the layer-agnostic CI baseline. There is no valid localhost verification path (the Phase-1 manual guide was retired).
 
 ### The promise the docs make
 A stranger with an empty Azure subscription should be able to follow the `DevelopmentGuide` and build this platform. When writing or editing any doc, check that promise still holds — no unexplained step, no reference to a resource only Sathish has, no instruction that assumes prior context.
@@ -79,7 +79,7 @@ AntKart/
 │   ├── C4Renders/        C4 image source of truth + Structurizr workspace + DIAGRAM-PLAN.md (renamed from architecture/)
 │   ├── guides/           Concept & build guides (incl. eventbus/observability/resilience-concepts) linked from the section docs
 │   ├── skills/           Step-by-step development & maintenance guides (private — linked from nowhere)
-│   └── test/             Test section docs (1-test-from-service-code, 2-full-cloud-end-to-end) + SECURITY_TESTS — indexed by /DevTestGuide.md
+│   └── test/             Cloud test docs (1-full-cloud-end-to-end + SECURITY_TESTS) — indexed by /DevTestGuide.md; verification is cloud-only, no localhost path
 ├── deploy/               Kubernetes delivery — Helm chart + GitOps (no runtime secrets)
 │   ├── helm/antkart-service/  ONE generic Helm chart; per-service inputs in helm/values/*.yaml (6: products/cart/discount/order/payments/gateway)
 │   ├── argocd/           Argo CD GitOps — least-privilege AppProject + ApplicationSet + applications/ak-*.yaml (6)

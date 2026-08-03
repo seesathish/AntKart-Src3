@@ -4,7 +4,7 @@ This is the single entry point for AntKart's verification strategy. It indexes e
 
 The platform is verified at every layer. **Unit tests** confirm domain logic, validators, and handlers in isolation. **Integration tests** verify the orchestrated SAGA and event-bus flows on an in-memory transport. **End-to-end tests** exercise the running services through their public surface. **Security tests** probe authentication, authorization, and input handling. **Load and performance tests** confirm behaviour under high-volume transaction throughput against cloud services. The unit and integration suites are layer-agnostic — they run identically regardless of where the services are deployed — while the end-to-end, security, and performance tests run against running services and grow with the deployment topology.
 
-> **⛔ Local/localhost testing is SUPERSEDED.** Only tests executed **against cloud resources through the public HTTPS endpoint `https://api.antkart.in`** validate the delivered platform. The unit and in-memory integration suites (`dotnet test`) remain valid as layer-agnostic code checks and run in CI. But any manual end-to-end / security / load procedure that targets `localhost` or a local Docker Compose stack — including the [Developer Manual Test Guide](DevTestGuide.md) (Phase-1 local) — does **not** exercise the cloud platform and its results are not valid. The replacement Full-Cloud E2E, Security, and Load/Performance guides are planned (see the [Roadmap](../ROADMAP.md)).
+> **⛔ Local/localhost testing is SUPERSEDED.** Only tests executed **against cloud resources through the public HTTPS endpoint `https://api.antkart.in`** validate the delivered platform. The unit and in-memory integration suites (`dotnet test`) remain valid as layer-agnostic code checks and run in CI. Any manual end-to-end / security procedure that targets `localhost` or a local Docker Compose stack does **not** exercise the cloud platform and its results are not valid; the Phase-1 local manual guide has been retired. The full-cloud path below — driven by the `AntKart Cloud E2E Saga` Postman collection — is the valid one; a Load/Performance guide is planned (see the [Roadmap](../ROADMAP.md)).
 
 ---
 
@@ -43,12 +43,11 @@ Detail: [AK.IntegrationTests/INTEGRATION_TESTS.md](../../AK.IntegrationTests/INT
 
 ## End-to-End / Functional Tests
 
-The [Developer Testing Guide](DevTestGuide.md) walks every service end-to-end through its public surface — positive flows, negative flows, SAGA compensation scenarios, event-flow monitoring, log/correlation tracing, and notification delivery.
+[Full-cloud end-to-end](1-full-cloud-end-to-end.md), driven by the **`AntKart Cloud E2E Saga`** Postman collection (`AntKart-Cloud-E2E-Saga-Positive.postman_collection.json`), walks every service end-to-end through its public surface — the positive order path, the SAGA compensation path, persisted-data checks, and notification delivery.
 
 To call the APIs you need a token. For the interactive sign-in that obtains a delegated user token from Entra ID via Postman (OAuth2 Authorization Code + PKCE), and the most common pitfalls (the audience claim and 401s), see [OAuth2 Authorization Code + PKCE Concepts](../guides/oauth2-pkce-concepts.md).
 
-- **Full-cloud verification via the ingress (the valid path).** The platform is verified through the public HTTPS ingress at **`https://api.antkart.in`** — see the section below. This is the only valid end-to-end path.
-- **Local-to-code verification (superseded).** The [Developer Manual Test Guide](DevTestGuide.md) is a Phase-1 local (Docker Compose) walkthrough — retained for reference, not a valid verification of the delivered cloud platform.
+**Full-cloud verification via the ingress is the only valid end-to-end path** — the platform is exercised through the public HTTPS ingress at **`https://api.antkart.in`**, detailed in the section below. The former Phase-1 local (Docker Compose) manual walkthrough has been retired.
 
 ---
 
@@ -56,7 +55,7 @@ To call the APIs you need a token. For the interactive sign-in that obtains a de
 
 The platform is verified against the **cluster** through its public HTTPS entry point — the ingress in front of the gateway — using a Postman collection that targets the **gateway routes** (not the individual services, which are internal `ClusterIP`). The base URL is the custom domain **`https://api.antkart.in`** (GoDaddy A record → the ingress public IP), which terminates TLS with a **trusted Let's Encrypt production certificate** — no need to disable TLS verification in Postman.
 
-The verified journey runs the **full orchestrated saga to its `Paid` terminal state** (the "AntKart Cloud E2E Saga" Postman flow), then the **payment-failure branch** to `PaymentFailed`:
+The verified journey runs the **full orchestrated saga to its `Paid` terminal state** (the **`AntKart Cloud E2E Saga`** Postman collection, `AntKart-Cloud-E2E-Saga-Positive.postman_collection.json`), then the **payment-failure branch** to `PaymentFailed`:
 
 1. **Health** — `GET /gateway/health/{products|cart|orders|payments}` returns 200 for each backing service; the gateway's own `GET /health/live` and `/health/ready` return 200.
 2. **Browse** — `GET /gateway/products` (and `/gateway/products/{id}`) returns the catalogue.

@@ -52,6 +52,6 @@ infrastructure/
 docs/
 *.md
 
-# --- Postman / local dev collections ---
-AntKart.postman_collection.json
-AntKart.*.postman_environment.json
+# --- Postman collections ---
+*.postman_collection.json
+*.postman_environment.json
