@@ -126,14 +126,14 @@ single `terragrunt.hcl` that points at a module and supplies *this* environment'
 Compare one resource:
 
 ```
-infrastructure/modules/redis/ <- the blueprint (shared)
-├── main.tf declares azurerm_managed_redis
-├── variables.tf what it accepts (name, location, sku...)
-└── outputs.tf what it hands to other units
+infrastructure/modules/redis/             <- the blueprint (shared)
+├── main.tf                               declares azurerm_managed_redis
+├── variables.tf                          what it accepts (name, location, sku...)
+└── outputs.tf                            what it hands to other units
 
-infrastructure/environments/dev/redis/ <- the instance (per environment)
-└── terragrunt.hcl "use ../../../modules/redis, name it
-redis-antkart-dev, put it in eastus2"
+infrastructure/environments/dev/redis/    <- the instance (per environment)
+└── terragrunt.hcl                        "use ../../../modules/redis, name it
+                                          redis-antkart-dev, put it in eastus2"
 ```
 
 That is the whole pattern, repeated 18 times.
@@ -142,27 +142,27 @@ That is the whole pattern, repeated 18 times.
 
 ```
 infrastructure/
-├── modules/ 18 blueprints — shared
+├── modules/                              18 blueprints — shared
 └── environments/
-└── dev/ the only environment
-├── root.hcl backend + provider settings for THIS environment
-├── aks/terragrunt.hcl
-├── redis/terragrunt.hcl
-└── ... 16 more units
+    └── dev/                              the only environment
+        ├── root.hcl                      backend + provider settings for THIS environment
+        ├── aks/terragrunt.hcl
+        ├── redis/terragrunt.hcl
+        └── ... 16 more units
 ```
 
 **After this runbook:**
 
 ```
 infrastructure/
-├── modules/ UNCHANGED — still 18, still shared
+├── modules/                              UNCHANGED — still 18, still shared
 └── environments/
-├── dev/
-│ ├── root.hcl state_container = "tfstate"
-│ └── ... 18 units
-└── qa/ NEW — a sibling of dev, not a child
-├── root.hcl state_container = "tfstate-qa" <-- the isolation lever
-└── ... 18 units, same names, qa values
+    ├── dev/
+    │   ├── root.hcl                      state_container = "tfstate"
+    │   └── ... 18 units
+    └── qa/                               NEW — a sibling of dev, not a child
+        ├── root.hcl                      state_container = "tfstate-qa" <-- the isolation lever
+        └── ... 18 units, same names, qa values
 ```
 
 Note `root.hcl` sits **inside** each environment folder, not above them. That is why each
@@ -176,14 +176,14 @@ apart:
 
 ```
 Storage account: stantkarttfstate
-├── tfstate/ dev's 18 blobs — NEVER TOUCHED
-│ ├── aks/terraform.tfstate
-│ ├── redis/terraform.tfstate
-│ └── ... 16 more
-└── tfstate-qa/ NEW container, identical internal layout
-├── aks/terraform.tfstate
-├── redis/terraform.tfstate
-└── ... 16 more
+├── tfstate/                              dev's 18 blobs — NEVER TOUCHED
+│   ├── aks/terraform.tfstate
+│   ├── redis/terraform.tfstate
+│   └── ... 16 more
+└── tfstate-qa/                           NEW container, identical internal layout
+    ├── aks/terraform.tfstate
+    ├── redis/terraform.tfstate
+    └── ... 16 more
 ```
 
 Same blob names, different containers, zero collision. Leave the container as `tfstate`
@@ -194,15 +194,15 @@ and QA writes straight over dev's records.
 ```
 deploy/
 ├── helm/
-│ ├── antkart-service/ one generic chart — shared by all services and environments
-│ └── values/ 6 dev value files today; QA values land here
-│ (layout decided in Phase 5.3)
+│   ├── antkart-service/                  one generic chart — shared by all services and environments
+│   └── values/                           6 dev value files today; QA values land here
+│                                         (layout decided in Phase 5.3)
 └── argocd/
-├── appproject-antkart.yaml the guard rails — what Argo may deploy and where
-└── applications/ 6 Application manifests, currently pointing at dev values
+    ├── appproject-antkart.yaml           the guard rails — what Argo may deploy and where
+    └── applications/                     6 Application manifests, currently pointing at dev values
 
-.github/workflows/ 12 workflows (6 CI + 6 CD)
-CD workflows gain QA targeting (Phase 5.5)
+.github/workflows/                        12 workflows (6 CI + 6 CD)
+                                          CD workflows gain QA targeting (Phase 5.5)
 ```
 
 **What this runbook does NOT change:** `infrastructure/modules/`, the six service
