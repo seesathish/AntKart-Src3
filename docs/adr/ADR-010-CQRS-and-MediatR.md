@@ -36,8 +36,7 @@ CQRS splits every operation into one of two buckets:
 | **Query** | Ask something — fetch, search, list | No | DTO or paged result |
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#888888'}}}%%
-flowchart LR
+flowchart TB
     classDef cmd fill:#E74C3C,stroke:#C0392B,color:#fff
     classDef qry fill:#27AE60,stroke:#1E8449,color:#fff
     classDef ep fill:#4A90D9,stroke:#2471A3,color:#fff
@@ -45,13 +44,13 @@ flowchart LR
 
     EP["API Endpoint"]:::ep
 
-    CMD["Command\n(write intent)"]:::cmd
-    CH["Command Handler\n(business logic)"]:::cmd
-    DB1[("Database\nwrite")]:::store
+    CMD["Command<br/>(write intent)"]:::cmd
+    CH["Command Handler<br/>(business logic)"]:::cmd
+    DB1[("Database<br/>write")]:::store
 
-    QRY["Query\n(read intent)"]:::qry
-    QH["Query Handler\n(fetch + map)"]:::qry
-    DB2[("Database\nread")]:::store
+    QRY["Query<br/>(read intent)"]:::qry
+    QH["Query Handler<br/>(fetch + map)"]:::qry
+    DB2[("Database<br/>read")]:::store
 
     EP -->|"POST / PUT / DELETE"| CMD
     CMD --> CH
@@ -75,14 +74,13 @@ This separation makes each handler single-purpose and easy to reason about in is
 MediatR is a .NET library that implements the **Mediator pattern**: instead of calling handlers directly (which creates direct coupling), you send a message to a mediator, and the mediator finds and calls the right handler.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#888888'}}}%%
-flowchart TD
+flowchart TB
     classDef ep fill:#4A90D9,stroke:#2471A3,color:#fff
     classDef med fill:#F39C12,stroke:#D68910,color:#fff
     classDef hand fill:#27AE60,stroke:#1E8449,color:#fff
 
-    EP["Endpoint\nsender.Send(command)"]:::ep
-    MED["MediatR\n(finds the handler)"]:::med
+    EP["Endpoint<br/>sender.Send(command)"]:::ep
+    MED["MediatR<br/>(finds the handler)"]:::med
     H1["CreateOrderCommandHandler"]:::hand
     H2["GetOrderByIdQueryHandler"]:::hand
     H3["CancelOrderCommandHandler"]:::hand
@@ -107,17 +105,16 @@ The endpoint only knows about `ISender`. It does not know which handler exists o
 The power of MediatR is not just dispatching. You can insert **pipeline behaviours** that wrap every request — running before and after the handler. AntKart uses this for **validation**:
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#888888'}}}%%
-flowchart LR
+flowchart TB
     classDef ep fill:#4A90D9,stroke:#2471A3,color:#fff
     classDef beh fill:#8E44AD,stroke:#6C3483,color:#fff
     classDef hand fill:#27AE60,stroke:#1E8449,color:#fff
     classDef err fill:#E74C3C,stroke:#C0392B,color:#fff
 
-    EP["Endpoint\nsender.Send(cmd)"]:::ep
-    VB["ValidationBehavior\nruns FluentValidation\nfor this request type"]:::beh
-    FAIL["throws\nValidationException\n→ HTTP 400"]:::err
-    HAND["Handler\nbusiness logic"]:::hand
+    EP["Endpoint<br/>sender.Send(cmd)"]:::ep
+    VB["ValidationBehavior<br/>runs FluentValidation<br/>for this request type"]:::beh
+    FAIL["throws<br/>ValidationException<br/>→ HTTP 400"]:::err
+    HAND["Handler<br/>business logic"]:::hand
 
     EP --> VB
     VB -->|"validation fails"| FAIL
@@ -242,7 +239,6 @@ The endpoint extracts JWT claims, builds the command, calls `sender.Send()`, and
 ### End-to-end flow
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#888888'}}}%%
 sequenceDiagram
     participant C as Client
     participant EP as Endpoint

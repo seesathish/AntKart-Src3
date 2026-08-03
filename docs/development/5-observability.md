@@ -5,7 +5,7 @@ Observability is **delivered for two signals — logs and traces**. Two secret-l
 ## Observability pipeline
 
 ```mermaid
-flowchart TD
+flowchart TB
     subgraph DELIVERED["Delivered — logs & traces"]
         SVC["Services + Functions<br/>Serilog JSON + OpenTelemetry traces"]:::service
         CON["Console (stdout)"]:::cicd

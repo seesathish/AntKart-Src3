@@ -7,7 +7,7 @@ Every Azure resource is provisioned as code. **Terraform modules** describe *how
 ## Terragrunt unit dependencies
 
 ```mermaid
-flowchart TD
+flowchart TB
     RG["resource-group"]:::paas
     APPREG["app-registration<br/>(independent · directory-plane)"]:::identity
     AKS["aks"]:::paas
@@ -70,7 +70,7 @@ flowchart TD
 ## Environment promotion — dev vs QA
 
 ```mermaid
-flowchart TD
+flowchart TB
     MODULES["infrastructure/modules<br/>(shared, environment-agnostic)"]:::cicd
 
     subgraph DEV["environments/dev — delivered"]

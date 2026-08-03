@@ -40,7 +40,7 @@ sequenceDiagram
 ## Helm chart and values precedence
 
 ```mermaid
-flowchart TD
+flowchart TB
     CHART["deploy/helm/antkart-service<br/>one generic chart · values.yaml defaults"]:::cicd
 
     subgraph VALUES["six per-service values files (deploy/helm/values)"]
