@@ -50,10 +50,15 @@ $STATE_SA        = "stantkarttfstate"
 $STATE_CONTAINER = "tfstate-$ENV"                # NOT "tfstate" — see Phase 0
 
 # ---- Paths ------------------------------------------------------------------
-$ENVDIR = "infrastructure/environments/$ENV"
+$REPO_ROOT = (Get-Location).Path
+$ENVDIR    = Join-Path $REPO_ROOT "infrastructure\environments\$ENV"
 
 Write-Host "Environment=$ENV  RG=$RG  StateContainer=$STATE_CONTAINER"
 ```
+
+> Run section 0.1 from the repository root. `$ENVDIR` is absolute so that `cd "$ENVDIR\<unit>"`
+> works from any directory — a relative path resolves against the current location and
+> fails once you are already inside a unit folder.
 
 Confirm the printed line is what you expect before running anything else.
 
@@ -232,9 +237,29 @@ az account show --query "{name:name, id:id, tenant:tenantId}" -o table
 az role assignment list --assignee "<terraform-sp-appId>" `
   --query "[].{role:roleDefinitionName, scope:scope}" -o table
 
+# (c2) The Terraform service principal needs an Entra DIRECTORY role to create
+#      app registrations. Azure RBAC does not grant this.
+az rest --method GET `
+  --uri "https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments?`$filter=principalId eq '<terraform-sp-objectId>'" `
+  --query "value[].roleDefinitionId" -o tsv
+
 # (d) The four ARM_* variables are set for this shell
 Get-ChildItem Env: | Where-Object { $_.Name -like "ARM_*" } | Select-Object Name
 ```
+
+> **Two permission planes, not one.** Azure RBAC governs subscriptions and resources;
+> Entra ID governs the directory — users, groups, app registrations. Contributor grants
+> nothing in the directory. A service principal can create a resource group and still
+> fail creating an app registration with:
+>
+> `Authorization_RequestDenied: Insufficient privileges to complete the operation`
+>
+> Fix: assign **Cloud Application Administrator** to the service principal in the portal
+> under Entra ID → Roles and administrators. Allow ~2 minutes for propagation. The role
+> assignment picker shows only users until you search by the SP's display name or appId.
+>
+> This is invisible in the first environment if its app registration was created
+> interactively by an administrator rather than by the service principal.
 
 `(c)` must show **Contributor** and **Role Based Access Control Administrator** at subscription
 scope. `(d)` must list `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`,
@@ -562,6 +587,16 @@ az storage blob list --container-name $STATE_CONTAINER --account-name $STATE_SA 
 `resource-group/terraform.tfstate` and `app-registration/terraform.tfstate`.
 
 ### Execute — Wave 1
+
+> **Check the budget start date before applying `governance`.** The unit hardcodes
+> `start_date`, and Azure rejects a monthly budget starting before the current month:
+>
+> `400: Start date for monthly time grain should not be prior to current month.`
+>
+> Set it to the first day of the current month in
+> `$ENVDIR/governance/terragrunt.hcl`. Note that the source environment carries the same
+> hardcoded date, so it can no longer be rebuilt from its own code either — worth an ADR
+> to derive the date dynamically with a `lifecycle { ignore_changes }` guard.
 
 Plan every unit first, then apply. `--terragrunt-include-dir` was renamed in newer
 Terragrunt releases and this repo pins no version, so the loop below avoids the flag
@@ -902,6 +937,9 @@ az postgres flexible-server list --query "[].{name:name, state:state}" -o table
 
 Both must read `Stopped`.
 
+> **Azure force-starts a stopped flexible server after 7 days.** The stop command says so
+> in its output. Set a reminder to re-stop it, or the environment resumes billing silently.
+
 ### Full teardown
 
 Reverse wave order — dependents before dependencies:
@@ -969,7 +1007,8 @@ az storage container delete --name $STATE_CONTAINER --account-name $STATE_SA --a
 | Argo will not re-sync after a failure | Argo does not auto-retry the same revision | Sync manually |
 | `az` strips inner double quotes on Windows | PowerShell quoting | Single quotes inside a double-quoted KQL string |
 | Postgres SKU unavailable in `eastus` | Regional offer restriction | Provision in `eastus2` |
-| `AllocationFailed` on Redis apply | Region temporarily at capacity | Try a nearby region and re-apply; note the change |
+| `InsufficientCapacity` on Redis apply | Region temporarily at capacity | Capacity is often transient — delete the failed resource, confirm `terragrunt state list` is empty, and retry before changing region. A successful create takes ~7 minutes; a capacity rejection fails in under 30 seconds. |
+| Failed create left a resource holding the name | Azure records the shell even on failure | `az resource delete`, then verify `terragrunt state list` is empty before retrying |
 | `unknown flag: --terragrunt-include-dir` | Flag renamed in newer Terragrunt | Plan per unit instead of run-all |
 | `--name expected one argument` | Shell variables not set in this session | Re-run section 0.1 |
 | `-o was unexpected at this time` | Windows `az` wrapper strips quotes; `(` breaks cmd parsing | Avoid parentheses in `--query`; use `--query "[].name"` then `.Count` in PowerShell |
