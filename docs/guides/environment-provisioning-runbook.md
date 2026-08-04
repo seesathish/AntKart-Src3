@@ -909,7 +909,9 @@ az postgres flexible-server start -g $RG -n $PG
 
 Stop it again after Phase 4 (see Phase 7 → Daily stop), or it bills silently.
 
-**(3) Seed each secret**, grouped by where its value comes from. **Match the source environment's
+**(3) Seed the eight secrets** — six read from the new environment's Azure resources, two supplied by
+the operator. (The source vault appears to hold ten; two of those are dead and must **not** be
+recreated — see *Do NOT create* below.) Group by where the value comes from. **Match the source environment's
 connection-string FORMAT exactly** — the application binds by both name and format (.NET maps the `--`
 in a secret name to the `:` configuration separator, e.g. `ConnectionStrings--Postgres` →
 `ConnectionStrings:Postgres`), so a renamed *or reshaped* secret is a **startup failure**, not a config
@@ -927,8 +929,6 @@ Read from the new environment's Azure resources:
 | `ConnectionStrings--Notifications` | AK.Notification | `AK.Notification/AK.Notification.Core/Extensions/ServiceCollectionExtensions.cs` — `GetConnectionString("Notifications")` then falls back to `"Postgres"` |
 | `MongoDbSettings--ConnectionString` | AK.Products | `AK.Products/AK.Products.Infrastructure/Extensions/ServiceCollectionExtensions.cs` — binds the `MongoDbSettings` section |
 | `RedisSettings--ConnectionString` | AK.ShoppingCart | `AK.ShoppingCart/AK.ShoppingCart.Infrastructure/Extensions/ServiceCollectionExtensions.cs` — binds `RedisSettings`; `RedisContext` connects with `.ConnectionString` |
-| `cosmos-connection-string` | ⚠️ UNVERIFIED — confirm during build | No service reads this key in the repo — AK.Products reads `MongoDbSettings--ConnectionString` instead. Likely a duplicate (see Appendix C) |
-| `servicebus-connection-string` | ⚠️ UNVERIFIED — confirm during build | No service reads a Service Bus connection string — `AK.BuildingBlocks/AK.BuildingBlocks/Messaging/MassTransitExtensions.cs` connects via `ServiceBus:FullyQualifiedNamespace` + workload identity. Likely legacy |
 
 Supplied by the operator (not derivable from Azure) — the Razorpay sandbox credentials:
 
@@ -936,6 +936,27 @@ Supplied by the operator (not derivable from Azure) — the Razorpay sandbox cre
 |---|---|---|
 | `Razorpay--KeyId` | AK.Payments | `AK.Payments/AK.Payments.Infrastructure/Extensions/ServiceCollectionExtensions.cs` — binds the `Razorpay` section → `RazorpaySettings` |
 | `Razorpay--KeySecret` | AK.Payments | same |
+
+**Do NOT create — no consumer in the codebase.** Two secrets carried by the source vault are read by
+nothing in any service:
+
+| Secret | Reached instead by | Remove from source? |
+|---|---|---|
+| `cosmos-connection-string` | `MongoDbSettings:ConnectionString` (AK.Products) | ⚠️ UNVERIFIED — confirm no consumer outside the service projects (Function App settings, seed tools, CI) before deleting |
+| `servicebus-connection-string` | `ServiceBus:FullyQualifiedNamespace` + workload identity (`AK.BuildingBlocks/AK.BuildingBlocks/Messaging/MassTransitExtensions.cs`) | ⚠️ UNVERIFIED — same |
+
+> A repository-wide search finds no reference to either name in any service. Every service now reaches
+> Service Bus through `ServiceBus:FullyQualifiedNamespace` plus workload identity — a namespace, not a
+> connection string — and Cosmos through `MongoDbSettings:ConnectionString`. These two are residue from
+> before the secret-less migration.
+>
+> They are not spare values. A Service Bus connection string embeds a shared access key, so anyone able
+> to read it can connect as a fully authorised client, bypassing the identity controls the platform is
+> built on. Do not carry them into a new environment.
+>
+> Removing them from the source environment is a separate, deliberate task — verify no consumer outside
+> the service projects (Function App settings, seed tools, CI), delete, then confirm the environment
+> still starts. Do not do this while building another environment.
 
 ### Verify
 
@@ -1062,49 +1083,72 @@ assertion subject" error in the pod logs. The match is exact and case-sensitive 
 
 ### 5.3 ⚠️ UNVERIFIED — Helm values for the new environment
 
-**Understand.** `deploy/helm/values/` holds one file per service (products, cart, discount, order,
-payments, gateway); shared defaults live in `deploy/helm/antkart-service/values.yaml` and Helm
-deep-merges each per-service `env` map on top of them. The **environment-specific** keys — every one
-carrying a `dev` value today — read from the repo:
+**Understand — three configuration layers, last wins.** Each service resolves configuration from three
+sources, each overriding the one before:
 
-| Key | File(s) | dev value → change to |
+1. **`appsettings.json`** (committed) — defaults, and **every one points at the source environment**
+   (e.g. `KeyVault:Uri = https://kv-antkart-dev.vault.azure.net/`).
+2. **Helm `env:` values** — per-deployment overrides rendered into a ConfigMap and injected as
+   environment variables (.NET maps `__` → `:`), from `deploy/helm/antkart-service/values.yaml` (shared
+   defaults) plus `deploy/helm/values/<svc>.yaml` (per service).
+3. **Key Vault** — secrets loaded at startup, located by **`KeyVault:Uri`** as resolved from layers 1–2.
+
+**⚠️ THE CRITICAL GAP — `KeyVault:Uri`.** It is set to the **source** vault
+(`https://kv-antkart-dev.vault.azure.net/`) in every service's `appsettings.json`
+(`AK.Products/AK.Products.API/appsettings.json`, `AK.ShoppingCart/AK.ShoppingCart.API/appsettings.json`,
+`AK.Order/AK.Order.API/appsettings.json`, `AK.Payments/AK.Payments.API/appsettings.json`,
+`AK.Discount/AK.Discount.Grpc/appsettings.json`) **and** in the chart's shared default
+`deploy/helm/antkart-service/values.yaml` (`env.KeyVault__Uri`) — both `kv-antkart-dev`. **No file in
+`deploy/helm/values/` overrides it.** A new environment MUST set `KeyVault__Uri` to its own vault, or
+every pod starts, reads the **wrong (source) vault**, presents its **own** (new-environment) identity,
+receives **403** (that identity holds no data-plane role on the source vault), and **crash-loops with
+an error naming a vault the operator never built** (see Appendix B).
+
+**Per-service override checklist.** Each key below carries a `dev` value in the repo; change it for the
+new environment. Files cited are where the key lives.
+
+| Service | Values file | Keys to set for the new environment |
 |---|---|---|
-| `image.registry` | `antkart-service/values.yaml` | `acrantkartdev.azurecr.io` → `acrantkart<env>.azurecr.io` |
-| `env.KeyVault__Uri` | `antkart-service/values.yaml` (the one shared secret-store default) | `https://kv-antkart-dev.vault.azure.net/` → new vault URI |
-| `workloadIdentityClientId` | every `values/<svc>.yaml` | the per-service managed-identity client id (from `az identity list`, 5.2) |
-| `env.ServiceBus__FullyQualifiedNamespace` | products, cart, order, payments | `sb-antkart-dev.servicebus.windows.net` → `sb-antkart-<env>...` |
-| `env.EventGrid__TopicEndpoint` | order, payments | `https://evgt-antkart-dev.eastus-1.eventgrid.azure.net/api/events` → the new topic endpoint |
-| `env.Entra__Audience` | products, cart, order, payments, gateway | `api://antkart-api-dev` → `api://antkart-api-<env>` |
-| `env.Entra__ClientId` | products, cart, order, payments, gateway | the API app-registration client id (per env) |
-| `ingress.host` | Argo Helm parameter (5.5); default empty in `antkart-service/values.yaml`, `api.antkart.in` for the gateway | the new environment hostname |
+| _shared_ | `deploy/helm/antkart-service/values.yaml` | `image.registry` (`acrantkartdev.azurecr.io`) · `env.KeyVault__Uri` (`https://kv-antkart-dev.vault.azure.net/`) — the two shared defaults, both `dev` |
+| products | `deploy/helm/values/products.yaml` | `workloadIdentityClientId` · `env.ServiceBus__FullyQualifiedNamespace` · `env.Entra__Audience` · `env.Entra__ClientId` · `image.tag` |
+| cart | `deploy/helm/values/cart.yaml` | `workloadIdentityClientId` · `env.ServiceBus__FullyQualifiedNamespace` · `env.Entra__Audience` · `env.Entra__ClientId` · `image.tag` |
+| order | `deploy/helm/values/order.yaml` | `workloadIdentityClientId` · `env.ServiceBus__FullyQualifiedNamespace` · `env.EventGrid__TopicEndpoint` · `env.Entra__Audience` · `env.Entra__ClientId` · `image.tag` |
+| payments | `deploy/helm/values/payments.yaml` | `workloadIdentityClientId` · `env.ServiceBus__FullyQualifiedNamespace` · `env.EventGrid__TopicEndpoint` · `env.Entra__Audience` · `env.Entra__ClientId` · `image.tag` |
+| discount | `deploy/helm/values/discount.yaml` | `workloadIdentityClientId` · `image.tag` — injects **no** `Entra__*` and **no** `ServiceBus__*` |
+| gateway | `deploy/helm/values/gateway.yaml` | `workloadIdentityClientId` · `env.Entra__Audience` · `env.Entra__ClientId` · `image.tag` · `ingress.host` (via the Argo parameter — see 5.5) |
 
-Keys that are **NOT** environment-specific (leave them): `name`/`serviceName` (in-cluster identity),
-`env.Entra__TenantId` (same tenant `4cacc56a-…`) and `env.Entra__Instance`, the in-cluster DNS
-overrides (`DiscountGrpc__Address`, `ProductsApi__BaseUrl`), `RedisSettings__*`, `MongoDbSettings__*`,
-`image.name` (cart→`shoppingcart`), and `image.tag` (owned by CD).
+Notes on the table:
 
-> **The App Insights connection string is NOT a Helm value.** An earlier draft listed it as
-> environment-specific, but the repo sets it in no values file — it is vaulted as the
-> `ApplicationInsights--ConnectionString` secret and read from Key Vault at runtime. It is handled in
-> secret seeding (5.6). Likewise every connection string / API key (`ConnectionStrings:Postgres`,
-> `RedisSettings:ConnectionString`, the Razorpay keys) is a Key Vault secret, not a value.
+- **`KeyVault__Uri`** — override once in the shared `deploy/helm/antkart-service/values.yaml` (it reaches
+  every pod), or per service. It is the single most important override (the critical gap above).
+- **`image.tag`** — set an initial real tag; CD then owns it (it bumps the tag in Git per commit).
+- **`env.Entra__TenantId`** stays the **same** across environments in this single-tenant setup
+  (`4cacc56a-…`, in each service's values), while **`env.Entra__Audience`** and **`env.Entra__ClientId`**
+  are **per-environment** — each environment has its own app registration (`api://antkart-api-<env>` and
+  that app's client id).
+- Leave unchanged: `name`/`serviceName` (in-cluster identity), `env.Entra__Instance`, the in-cluster DNS
+  overrides (`DiscountGrpc__Address`, `ProductsApi__BaseUrl`), `RedisSettings__*`, `MongoDbSettings__*`,
+  `image.name` (cart→`shoppingcart`).
 
-**Per-service checklist.** For each values file change: `workloadIdentityClientId`; any
-`ServiceBus__FullyQualifiedNamespace`; `EventGrid__TopicEndpoint` (order/payments only);
-`Entra__Audience` + `Entra__ClientId` (all but `discount` — it injects no `Entra__*`). Change the two
-shared defaults (`image.registry`, `env.KeyVault__Uri`) once in `antkart-service/values.yaml`, or
-override per-env per the promotion model chosen in 5.0.
+> **Connection strings and API keys are NOT values.** `ConnectionStrings:*`, `RedisSettings:ConnectionString`,
+> the Razorpay keys and the App Insights connection string are Key Vault **secrets**, seeded in Phase 4 /
+> 5.6 — never Helm values.
 
-**Verify.** `helm template` the chart with the new values renders without error:
+**Verify — grep the new values for the source environment's name.** Any hit is a missed override:
 
 ```powershell
-helm template ak-products deploy/helm/antkart-service -f <new-env values path>/products.yaml
+Select-String -Path "<new-env values path>\*.yaml" -Pattern "antkart-dev|kv-antkart-dev|api://antkart-api-dev"
 ```
 
-(the path depends on the 5.0 promotion model.)
+Then `helm template` each service renders without error:
 
-**If it fails.** `Error: … values.workloadIdentityClientId is required` (from
-`serviceaccount.yaml`) means that key is missing from the values file.
+```powershell
+helm template ak-products deploy/helm/antkart-service -f <new-env values path>\products.yaml
+```
+
+**If it fails.** `Error: … values.workloadIdentityClientId is required` (from `serviceaccount.yaml`)
+means that key is missing. A pod crash-looping with a **403 on `kv-antkart-dev`** means `KeyVault__Uri`
+was not overridden — the critical gap above.
 
 ### 5.4 ⚠️ UNVERIFIED — Container registry access
 
@@ -1463,6 +1507,7 @@ az storage container delete --name $STATE_CONTAINER --account-name $STATE_SA --a
 | `ForbiddenByRbac` writing a Key Vault secret | No data-plane role on an RBAC-enabled vault | Grant Key Vault Secrets Officer at the vault scope; wait ~2 min |
 | `check-acr` permission denied on a Temp path | Local filesystem, not Azure | Use `-f <path>`, or list role assignments on the ACR scope instead |
 | `ForbiddenByRbac` listing secrets as yourself | The operator has no data-plane role on the new vault | Grant yourself Key Vault Secrets Officer; note this is separate from the service principal's grant |
+| Pods crash-loop with a Key Vault 403 naming the WRONG vault | `KeyVault:Uri` defaults to the source environment in appsettings.json and is not overridden in Helm values | Add `KeyVault__Uri` to the new environment's values for every service |
 
 ## Appendix C — What this runbook does not yet cover
 
