@@ -262,10 +262,55 @@ Get-ChildItem Env: | Where-Object { $_.Name -like "ARM_*" } | Select-Object Name
 > This is invisible in the first environment if its app registration was created
 > interactively by an administrator rather than by the service principal.
 
+> **(c3) Key Vault data plane.** With `enable_rbac_authorization = true`, Key Vault splits
+> into two planes. Contributor covers the control plane — creating the vault, setting its
+> properties. It grants nothing on the data plane, where secrets are read and written. A
+> service principal can therefore create a vault and immediately fail writing a secret into
+> it:
+>
+> ```
+> Status=403 Code="Forbidden" ... Action: 'Microsoft.KeyVault/vaults/secrets/getSecret/action'
+> Assignment: (not found)  InnerError={"code":"ForbiddenByRbac"}
+> ```
+>
+> `Assignment: (not found)` means no data-plane role exists at all.
+>
+> Fix — grant **Key Vault Secrets Officer** (not Secrets User; Terraform must write):
+>
+> ```powershell
+> az role assignment create `
+>   --assignee-object-id "<terraform-sp-objectId>" `
+>   --assignee-principal-type ServicePrincipal `
+>   --role "Key Vault Secrets Officer" `
+>   --scope $(az keyvault show -n $KV --query id -o tsv)
+> ```
+>
+> Allow ~2 minutes for propagation, then re-run the unit. The vault is already in state, so
+> only the secret is created.
+
 `(c)` must show **Contributor** and **Role Based Access Control Administrator** at subscription
 scope. `(d)` must list `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`,
 `ARM_TENANT_ID`. If they are missing, re-set them — see
 [Infrastructure Guide § Terraform Identity & Access](infrastructure-guide.md).
+
+### 1.1.1 Why these permission gaps are invisible in the first environment
+
+> Three separate permission planes are involved, and they are easy to mistake for one:
+>
+> | Plane | Governs | Role needed |
+> |---|---|---|
+> | Azure RBAC | Subscriptions, resource groups, resources | Contributor + RBAC Administrator |
+> | Entra ID directory | Users, groups, app registrations | Cloud Application Administrator |
+> | Key Vault data plane | Reading and writing secrets | Key Vault Secrets Officer |
+>
+> A first environment often works without the second and third because an administrator
+> performed those steps interactively — creating the app registration by hand, writing the
+> first secrets under their own credentials. The service principal never needed the
+> permission, so the gap was never visible.
+>
+> Building a second environment is what surfaces it. If the source environment's Key Vault
+> shows a human account holding Secrets Officer and no service principal, that is the
+> signature of exactly this.
 
 ### 1.2 Check globally unique names before you create anything
 
@@ -718,6 +763,22 @@ az functionapp show -g $RG -n $FUNC --query "{name:name, state:state, https:http
 **Correct result:** `powerState = Running`, OIDC issuer enabled with a URL, workload identity
 enabled, vault `enablePurgeProtection` **null or false**, and `az aks check-acr` reporting success.
 
+> When purge protection is off, `enablePurgeProtection` returns **null**, which prints as a
+> blank column rather than `false`. A blank value is the correct result — Azure only ever
+> stores `true` or null for this property.
+
+> `check-acr` writes a temporary file locally and can fail with
+> `Permission denied when trying to write to ...\Temp\...` — a local filesystem problem
+> (antivirus, sync client, folder permissions), not an Azure one. Pass `-f <writable-path>`,
+> or verify the underlying fact directly:
+>
+> ```powershell
+> az role assignment list --scope $(az acr show -n $ACR --query id -o tsv) `
+>   --query "[].{principal:principalName, role:roleDefinitionName}" -o table
+> ```
+>
+> Expect **AcrPull** (the AKS kubelet identity) and **AcrPush** (the CI/CD identity).
+
 ### Execute — Wave 3
 
 ```powershell
@@ -731,6 +792,10 @@ foreach ($u in @("workload-identity","role-assignments")) {
 }
 cd $ENVDIR
 ```
+
+> Role assignments can fail on first apply with a principal-not-found error when the managed
+> identity was created seconds earlier and is not yet visible to the RBAC service. This is
+> transient — wait a minute and re-run the unit.
 
 ### Verify — Wave 3
 
@@ -756,9 +821,22 @@ az role assignment list --scope $(az eventgrid topic show -g $RG -n $EVGT --quer
   --query "[].{principal:principalName, role:roleDefinitionName}" -o table
 ```
 
-**Correct result:** six identities (`gateway`, `products`, `cart`, `order`, `payments`, `discount`);
-every federated credential's `issuer` matches the cluster issuer URL exactly; subjects read
+**Correct result:** **seven** identities — the six services (`gateway`, `products`, `cart`, `order`,
+`payments`, `discount`) plus a CI/CD identity `id-ak-cicd-<env>` (which holds **AcrPush** on the
+registry); every federated credential's `issuer` matches the cluster issuer URL exactly; subjects read
 `system:serviceaccount:antkart:ak-<service>`.
+
+> **Record the subjects now — Phase 5 depends on them.** Each federated credential's subject reads
+> `system:serviceaccount:<namespace>:ak-<service>`. The Kubernetes ServiceAccount created in Phase 5.2
+> must match character for character. A mismatch produces a token-exchange failure that reads as an
+> authentication problem and is actually a naming problem.
+>
+> Also record the cluster's OIDC issuer URL and each identity's client ID — Phase 5.2 needs the
+> client IDs for ServiceAccount annotations.
+
+The Key Vault scope shows **eight** role assignments: the six service identities with Key Vault
+Secrets User, the Function App's identity with Secrets User, and the Terraform service principal with
+Secrets Officer.
 
 Expected role assignments:
 
@@ -1319,6 +1397,8 @@ az storage container delete --name $STATE_CONTAINER --account-name $STATE_SA --a
 | `unknown flag: --terragrunt-include-dir` | Flag renamed in newer Terragrunt | Plan per unit instead of run-all |
 | `--name expected one argument` | Shell variables not set in this session | Re-run section 0.1 |
 | `-o was unexpected at this time` | Windows `az` wrapper strips quotes; `(` breaks cmd parsing | Avoid parentheses in `--query`; use `--query "[].name"` then `.Count` in PowerShell |
+| `ForbiddenByRbac` writing a Key Vault secret | No data-plane role on an RBAC-enabled vault | Grant Key Vault Secrets Officer at the vault scope; wait ~2 min |
+| `check-acr` permission denied on a Temp path | Local filesystem, not Azure | Use `-f <path>`, or list role assignments on the ACR scope instead |
 
 ## Appendix C — What this runbook does not yet cover
 
