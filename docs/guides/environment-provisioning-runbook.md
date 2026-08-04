@@ -78,7 +78,7 @@ disappointment.
 - **Plan before apply.** `terragrunt plan` on every unit before the first `apply` of a wave.
 - **Stop what you start.** AKS and PostgreSQL are the expensive resources. Phase 7 is teardown.
 - **One wave at a time.** Do not run `run-all apply` across the whole tree on a first build.
-- **`⚠️ UNVERIFIED`** marks a step written from the repository but not yet executed against a live cluster. Treat it as a starting point, verify the result, and remove the marker once it is proven. Phases 0-3 carry no markers — they have been run end to end. Phase 4's secret seeding is marked pending its first full run; the rest of Phase 4 has been exercised.
+- **`⚠️ UNVERIFIED`** marks a step written from the repository but not yet executed against a live cluster. Treat it as a starting point, verify the result, and remove the marker once it is proven. Phases 0-4 carry no markers — they have been run end to end.
 
 ### 0.4 The five ideas behind every command in this runbook
 
@@ -884,23 +884,19 @@ Terraform provisions the vault but does not seed application secrets — connect
 from the resources *after* they exist. Nothing in the platform stores a secret in Git; each service
 reads from Key Vault at startup via `DefaultAzureCredential`.
 
+> **Do not print secret values to a terminal.** Commands such as `az cosmosdb keys list` return live
+> credentials to stdout, where they persist in scrollback and in any log or transcript. Capture into a
+> variable and print lengths. If a credential is exposed, rotate it — for Cosmos:
+> `az cosmosdb keys regenerate --name $COSMOS -g $RG --key-kind primary` (after seeding, or the seeded
+> value is invalidated).
+
 ### Execute
 
-> **⚠️ UNVERIFIED — the seeding procedure has not been run end to end.** The inventory below is the
-> set a real build's vault held, with each secret's consumer confirmed from the repository, but the
-> seeding itself is unproven. House rule throughout: **compare and verify by NAME only — never print a
-> value.**
+The sequence below is what seeded the QA vault end to end. **Never print a value** (see the note
+above) — gather into variables, check lengths, then seed. The authoritative connection-string formats
+are in [Operations Command Reference](operations-command-reference.md).
 
-**(1) Build the work list.** Diff the new vault against the source environment; everything reported as
-only in the source is still to seed:
-
-```powershell
-$srcSecrets = az keyvault secret list --vault-name "kv-antkart-dev" --query "[].name" -o tsv
-$newSecrets = az keyvault secret list --vault-name $KV --query "[].name" -o tsv
-Compare-Object $srcSecrets $newSecrets
-```
-
-**(2) Start PostgreSQL first.** Its connection strings cannot be built or tested while the server is
+**Step 1 — start PostgreSQL.** Its connection strings cannot be built or verified while the server is
 stopped:
 
 ```powershell
@@ -909,68 +905,157 @@ az postgres flexible-server start -g $RG -n $PG
 
 Stop it again after Phase 4 (see Phase 7 → Daily stop), or it bills silently.
 
-**(3) Seed the eight secrets** — six read from the new environment's Azure resources, two supplied by
-the operator. (The source vault appears to hold ten; two of those are dead and must **not** be
-recreated — see *Do NOT create* below.) Group by where the value comes from. **Match the source environment's
-connection-string FORMAT exactly** — the application binds by both name and format (.NET maps the `--`
-in a secret name to the `:` configuration separator, e.g. `ConnectionStrings--Postgres` →
-`ConnectionStrings:Postgres`), so a renamed *or reshaped* secret is a **startup failure**, not a config
-warning. Take the authoritative formats from
-[Operations Command Reference](operations-command-reference.md) rather than the tables below, which
-record only the name and consumer. Set each with `az keyvault secret set` without echoing the value.
+**Step 2 — gather values into variables (do not print them).**
 
-Read from the new environment's Azure resources:
+```powershell
+# PostgreSQL admin password — from the postgresql unit's Terraform output
+Push-Location "$ENVDIR/postgresql"; $pgPass = terragrunt output -raw administrator_password; Pop-Location
 
-| Secret | Consuming service | Confirmed in repo |
-|---|---|---|
-| `ConnectionStrings--DiscountDb` | AK.Discount | `AK.Discount/AK.Discount.Infrastructure/Extensions/ServiceCollectionExtensions.cs` — `GetConnectionString("DiscountDb")` |
-| `ConnectionStrings--PaymentsDb` | AK.Payments | `AK.Payments/AK.Payments.Infrastructure/Extensions/ServiceCollectionExtensions.cs` — `GetConnectionString("PaymentsDb")` |
-| `ConnectionStrings--Postgres` | AK.Order (AK.Notification falls back to it) | `AK.Order/AK.Order.Infrastructure/Extensions/ServiceCollectionExtensions.cs` — `GetConnectionString("Postgres")` |
-| `ConnectionStrings--Notifications` | AK.Notification | `AK.Notification/AK.Notification.Core/Extensions/ServiceCollectionExtensions.cs` — `GetConnectionString("Notifications")` then falls back to `"Postgres"` |
-| `MongoDbSettings--ConnectionString` | AK.Products | `AK.Products/AK.Products.Infrastructure/Extensions/ServiceCollectionExtensions.cs` — binds the `MongoDbSettings` section |
-| `RedisSettings--ConnectionString` | AK.ShoppingCart | `AK.ShoppingCart/AK.ShoppingCart.Infrastructure/Extensions/ServiceCollectionExtensions.cs` — binds `RedisSettings`; `RedisContext` connects with `.ConnectionString` |
+# PostgreSQL host
+$pgHost = az postgres flexible-server show -g $RG -n $PG --query fullyQualifiedDomainName -o tsv
 
-Supplied by the operator (not derivable from Azure) — the Razorpay sandbox credentials:
+# Cosmos (Mongo API) — the connection string contains '&' (see the --file warning below)
+$cosmos = az cosmosdb keys list --name $COSMOS -g $RG --type connection-strings `
+  --query "connectionStrings[0].connectionString" -o tsv
 
-| Secret | Consuming service | Confirmed in repo |
-|---|---|---|
-| `Razorpay--KeyId` | AK.Payments | `AK.Payments/AK.Payments.Infrastructure/Extensions/ServiceCollectionExtensions.cs` — binds the `Razorpay` section → `RazorpaySettings` |
-| `Razorpay--KeySecret` | AK.Payments | same |
+# Redis — preferred source is the redis unit's Terraform output
+Push-Location "$ENVDIR/redis"; $redis = terragrunt output -raw connection_string; Pop-Location
+```
 
-**Do NOT create — no consumer in the codebase.** Two secrets carried by the source vault are read by
-nothing in any service:
-
-| Secret | Reached instead by | Remove from source? |
-|---|---|---|
-| `cosmos-connection-string` | `MongoDbSettings:ConnectionString` (AK.Products) | ⚠️ UNVERIFIED — confirm no consumer outside the service projects (Function App settings, seed tools, CI) before deleting |
-| `servicebus-connection-string` | `ServiceBus:FullyQualifiedNamespace` + workload identity (`AK.BuildingBlocks/AK.BuildingBlocks/Messaging/MassTransitExtensions.cs`) | ⚠️ UNVERIFIED — same |
-
-> A repository-wide search finds no reference to either name in any service. Every service now reaches
-> Service Bus through `ServiceBus:FullyQualifiedNamespace` plus workload identity — a namespace, not a
-> connection string — and Cosmos through `MongoDbSettings:ConnectionString`. These two are residue from
-> before the secret-less migration.
+> **Redis keys are not on the cluster resource.** `az resource invoke-action ... --action listKeys`
+> returns `Not Found` for Azure Managed Redis — the keys live on the `databases/default` sub-resource,
+> not the cluster. Prefer the Terraform `connection_string` output above; the REST fallback (Terraform
+> output remains the preferred source) is:
 >
-> They are not spare values. A Service Bus connection string embeds a shared access key, so anyone able
-> to read it can connect as a fully authorised client, bypassing the identity controls the platform is
-> built on. Do not carry them into a new environment.
+> ```powershell
+> az rest --method POST `
+>   --url "https://management.azure.com/subscriptions/<sub>/resourceGroups/$RG/providers/Microsoft.Cache/redisEnterprise/$REDIS/databases/default/listKeys?api-version=2024-09-01-preview"
+> ```
+
+Build the four PostgreSQL connection strings — one per database, differing only by the database name:
+
+| Secret | Database (consumer) |
+|---|---|
+| `ConnectionStrings--Postgres` | `AKOrdersDb` (AK.Order; AK.Notification falls back to it) |
+| `ConnectionStrings--PaymentsDb` | `AKPaymentsDb` (AK.Payments) |
+| `ConnectionStrings--DiscountDb` | `AKDiscountDb` (AK.Discount) |
+| `ConnectionStrings--Notifications` | `AKNotificationsDb` (AK.Notification) |
+
+Each uses the format `Host=<fqdn>;Port=5432;Database=<db>;Username=antkartadmin;Password=<pw>;SslMode=Require`:
+
+```powershell
+$pgFmt = "Host=$pgHost;Port=5432;Database={0};Username=antkartadmin;Password=$pgPass;SslMode=Require"
+$orders        = $pgFmt -f "AKOrdersDb"
+$payments      = $pgFmt -f "AKPaymentsDb"
+$discount      = $pgFmt -f "AKDiscountDb"
+$notifications = $pgFmt -f "AKNotificationsDb"
+```
+
+The other two Azure-derived secrets are `MongoDbSettings--ConnectionString` (`$cosmos`, AK.Products) and
+`RedisSettings--ConnectionString` (`$redis`, AK.ShoppingCart).
+
+**Step 3 — confirm every variable is populated by printing LENGTHS only, never values:**
+
+```powershell
+foreach ($p in ([ordered]@{ pgPass=$pgPass; pgHost=$pgHost; cosmos=$cosmos; redis=$redis;
+                            orders=$orders; payments=$payments; discount=$discount; notifications=$notifications }).GetEnumerator()) {
+  Write-Host ("{0,-14} len={1}" -f $p.Key, $p.Value.Length)
+}
+```
+
+Any `len=0` means a value did not resolve — fix it before seeding.
+
+> **Use `--file`, not `--value`, for any secret containing `&`.** On Windows the `az` command is a
+> `.cmd` wrapper, and `cmd` treats `&` as a command separator. A Cosmos DB Mongo connection string
+> contains four of them. Passing it with `--value` stores a silently TRUNCATED secret and tries to
+> execute the remainder as commands:
 >
-> Removing them from the source environment is a separate, deliberate task — verify no consumer outside
-> the service projects (Function App settings, seed tools, CI), delete, then confirm the environment
-> still starts. Do not do this while building another environment.
+> ```
+> 'replicaSet' is not recognized as an internal or external command
+> 'retrywrites' is not recognized as an internal or external command
+> ```
+>
+> The stored value ends at the first `&`, losing `retrywrites=false` — which the Cosmos Mongo API
+> requires. The failure appears at runtime, not at seeding time.
+>
+> Write the value to a file and pass `--file`:
+>
+> ```powershell
+> $tmp = Join-Path $env:USERPROFILE "secret-tmp.txt"
+> [System.IO.File]::WriteAllText($tmp, $value, [System.Text.UTF8Encoding]::new($false))
+> az keyvault secret set --vault-name $KV --name "<name>" --file "$tmp" --output none
+> Remove-Item $tmp -Force
+> ```
+>
+> `WriteAllText` with a no-BOM encoder is required — `Out-File` prepends a byte-order mark that becomes
+> part of the secret value.
+>
+> This is the third form of the same Windows wrapper problem in this runbook, alongside KQL quoting and
+> JMESPath parentheses. When in doubt, prefer `--file` for every secret.
+
+**Step 4 — seed the eight secrets.** Six built above from Azure resources, plus the two Razorpay keys
+copied from the source environment (same sandbox account). Seed every secret through a no-BOM file so a
+value containing `&` is never mangled:
+
+```powershell
+$secrets = [ordered]@{
+  "ConnectionStrings--Postgres"       = $orders
+  "ConnectionStrings--PaymentsDb"     = $payments
+  "ConnectionStrings--DiscountDb"     = $discount
+  "ConnectionStrings--Notifications"  = $notifications
+  "MongoDbSettings--ConnectionString" = $cosmos
+  "RedisSettings--ConnectionString"   = $redis
+}
+# Razorpay — copied from the source vault (same sandbox account), captured but never printed
+foreach ($n in @("Razorpay--KeyId","Razorpay--KeySecret")) {
+  $secrets[$n] = az keyvault secret show --vault-name "kv-antkart-dev" --name $n --query "value" -o tsv
+}
+foreach ($s in $secrets.GetEnumerator()) {
+  $tmp = Join-Path $env:USERPROFILE "secret-tmp.txt"
+  [System.IO.File]::WriteAllText($tmp, $s.Value, [System.Text.UTF8Encoding]::new($false))
+  az keyvault secret set --vault-name $KV --name $s.Key --file "$tmp" --output none
+  Remove-Item $tmp -Force
+}
+```
+
+**Do NOT create** the two secrets the source vault still carries — `cosmos-connection-string` and
+`servicebus-connection-string`. Neither is read by any service (Cosmos is reached via
+`MongoDbSettings:ConnectionString`, Service Bus via `ServiceBus:FullyQualifiedNamespace` + workload
+identity); they are dormant credentials from before the secret-less migration, tracked as
+[KI-011](../KNOWN_ISSUES.md). QA seeds **eight** secrets, not ten.
+
+**Step 5 — verify** the seeded secrets by length and name (next section).
 
 ### Verify
 
-```powershell
-# Secrets present (names only — never print values)
-az keyvault secret list --vault-name $KV --query "[].name" -o table
-
-# Compare against dev to find anything missed
-$devSecrets = az keyvault secret list --vault-name "kv-antkart-dev" --query "[].name" -o tsv
-$newSecrets = az keyvault secret list --vault-name $KV --query "[].name" -o tsv
-Compare-Object $devSecrets $newSecrets
-```
-
-**Correct result:** `Compare-Object` returns nothing — the two vaults hold the same secret names.
+> **Verify by length and comparison, never by printing values.**
+>
+> ```powershell
+> foreach ($n in @("ConnectionStrings--Postgres","ConnectionStrings--PaymentsDb",
+>                  "ConnectionStrings--DiscountDb","ConnectionStrings--Notifications",
+>                  "RedisSettings--ConnectionString","MongoDbSettings--ConnectionString")) {
+>   $v = az keyvault secret show --vault-name $KV --name $n --query "value" -o tsv
+>   Write-Host ("{0,-34} len={1}" -f $n, $v.Length)
+> }
+> ```
+>
+> The four PostgreSQL strings should differ only by the length of their database names — a useful
+> independent check that nothing was truncated. For a secret copied from another environment, compare
+> with `($dev -eq $qa)` rather than printing either value.
+>
+> To inspect a format safely, mask the credential:
+> `$v -replace '(Password=)[^;]*','$1***' -replace '://[^@]*@','://***@'`
+>
+> Final check — compare secret NAMES between environments:
+>
+> ```powershell
+> $srcSecrets = az keyvault secret list --vault-name "kv-antkart-dev" --query "[].name" -o tsv
+> $newSecrets = az keyvault secret list --vault-name $KV --query "[].name" -o tsv
+> Compare-Object $srcSecrets $newSecrets
+> ```
+>
+> The only expected differences are `cosmos-connection-string` and `servicebus-connection-string` on
+> the source side — the two with no consumer. Any other difference means a seed failed.
 
 ### Verify — cluster connectivity
 
@@ -1508,6 +1593,8 @@ az storage container delete --name $STATE_CONTAINER --account-name $STATE_SA --a
 | `check-acr` permission denied on a Temp path | Local filesystem, not Azure | Use `-f <path>`, or list role assignments on the ACR scope instead |
 | `ForbiddenByRbac` listing secrets as yourself | The operator has no data-plane role on the new vault | Grant yourself Key Vault Secrets Officer; note this is separate from the service principal's grant |
 | Pods crash-loop with a Key Vault 403 naming the WRONG vault | `KeyVault:Uri` defaults to the source environment in appsettings.json and is not overridden in Helm values | Add `KeyVault__Uri` to the new environment's values for every service |
+| Secret stored truncated; shell reports `'x' is not recognized as an internal or external command` | Windows `az` wrapper splits the value at `&` | Use `--file` with a no-BOM UTF-8 file, not `--value` |
+| `az resource invoke-action --action listKeys` returns `Not Found` for Managed Redis | Keys live on the `databases/default` sub-resource, not the cluster | Use the Terraform `connection_string` output, or `az rest` against `.../databases/default/listKeys` |
 
 ## Appendix C — What this runbook does not yet cover
 
