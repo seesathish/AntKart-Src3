@@ -410,7 +410,7 @@ Write-Host "robocopy exit code: $LASTEXITCODE"
 > silently. Same failure mode as installing Argo CD from a floating `stable` tag.
 
 `backend.tf`, `provider.tf` and `versions.tf` are **generated** by Terragrunt from `root.hcl` at init
-time. Deleting the copies guarantees they are regenerated against the new backend rather than
+time. Excluding the copies guarantees they are regenerated against the new backend rather than
 silently inherited.
 
 ### Execute — (b) the first edit, before anything else
