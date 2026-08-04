@@ -57,11 +57,9 @@ inputs = {
   # the retention window — recover/purge it or choose a new name.
   key_vault_name = "kv-antkart-qa"
 
-  # Purge protection was ENABLED out of band on the live kv-antkart-dev vault, and
-  # Azure does NOT allow disabling it once on ("once Purge Protection has been Enabled
-  # it's not possible to disable it"). This records that reality — it is not a preference
-  # for dev. Leaving it false here would make every apply try to disable it and fail.
-  # See docs/KNOWN_ISSUES.md (KI-007) for the teardown/rebuild consequence.
+  # Purge protection: dev has this true because it was enabled out of band and Azure
+  # does not permit disabling it. qa is deliberately different — see KI-007 and
+  # Decision C in docs/guides/environment-provisioning-runbook.md.
   # qa is disposable — purge protection off so the vault can be recreated
   # after teardown. See KI-007 and Decision C in the provisioning runbook.
   purge_protection_enabled = false
