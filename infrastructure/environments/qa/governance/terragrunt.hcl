@@ -33,7 +33,7 @@ inputs = {
 
   budget_name = "budget-antkart-qa"
   amount      = 200
-  start_date  = "2026-06-01T00:00:00Z"
+  start_date  = "2026-08-01T00:00:00Z"
 
   # REPLACE with the real contact address before applying — this is who receives
   # the cost alerts.
