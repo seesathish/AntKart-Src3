@@ -287,6 +287,31 @@ Get-ChildItem Env: | Where-Object { $_.Name -like "ARM_*" } | Select-Object Name
 >
 > Allow ~2 minutes for propagation, then re-run the unit. The vault is already in state, so
 > only the secret is created.
+>
+> **The operator needs this as well.** The service principal grant covers Terraform. The
+> human running this runbook is a separate principal and gets its own 403 when listing or
+> writing secrets in Phase 4:
+>
+> ```
+> Caller: appid=04b07795-8ddb-461a-bbee-02f9e1bf7b46 ... Assignment: (not found)
+> ```
+>
+> That `appid` is the Azure CLI itself; the `oid` is the signed-in user. Grant yourself
+> Secrets Officer on the new vault:
+>
+> ```powershell
+> $myOid = az ad signed-in-user show --query id -o tsv
+> az role assignment create `
+>   --assignee-object-id $myOid `
+>   --assignee-principal-type User `
+>   --role "Key Vault Secrets Officer" `
+>   --scope $(az keyvault show -n $KV --query id -o tsv)
+> ```
+>
+> Three principals need data-plane access on a new vault, and each is a separate grant:
+> the Terraform service principal (writes secrets during apply), the operator (seeds and
+> verifies secrets in Phase 4), and the workload identities (read secrets at runtime —
+> these are the only ones already in code, via the role-assignments unit).
 
 `(c)` must show **Contributor** and **Role Based Access Control Administrator** at subscription
 scope. `(d)` must list `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`,
@@ -861,18 +886,56 @@ reads from Key Vault at startup via `DefaultAzureCredential`.
 
 ### Execute
 
-```powershell
-# --- PostgreSQL must be running to build/verify its connection string ---
-az postgres flexible-server start -g $RG -n $PG
+> **⚠️ UNVERIFIED — the seeding procedure has not been run end to end.** The inventory below is the
+> set a real build's vault held, with each secret's consumer confirmed from the repository, but the
+> seeding itself is unproven. House rule throughout: **compare and verify by NAME only — never print a
+> value.**
 
-# Seed the vault. Values come from the resources you just created.
-# See docs/guides/operations-command-reference.md for the full secret list and
-# the exact connection-string formats used by dev.
+**(1) Build the work list.** Diff the new vault against the source environment; everything reported as
+only in the source is still to seed:
+
+```powershell
+$srcSecrets = az keyvault secret list --vault-name "kv-antkart-dev" --query "[].name" -o tsv
+$newSecrets = az keyvault secret list --vault-name $KV --query "[].name" -o tsv
+Compare-Object $srcSecrets $newSecrets
 ```
 
-> The authoritative secret names and formats live in
-> [Operations Command Reference](operations-command-reference.md). Mirror the dev set exactly —
-> the application code reads by name, so a renamed secret is a startup failure.
+**(2) Start PostgreSQL first.** Its connection strings cannot be built or tested while the server is
+stopped:
+
+```powershell
+az postgres flexible-server start -g $RG -n $PG
+```
+
+Stop it again after Phase 4 (see Phase 7 → Daily stop), or it bills silently.
+
+**(3) Seed each secret**, grouped by where its value comes from. **Match the source environment's
+connection-string FORMAT exactly** — the application binds by both name and format (.NET maps the `--`
+in a secret name to the `:` configuration separator, e.g. `ConnectionStrings--Postgres` →
+`ConnectionStrings:Postgres`), so a renamed *or reshaped* secret is a **startup failure**, not a config
+warning. Take the authoritative formats from
+[Operations Command Reference](operations-command-reference.md) rather than the tables below, which
+record only the name and consumer. Set each with `az keyvault secret set` without echoing the value.
+
+Read from the new environment's Azure resources:
+
+| Secret | Consuming service | Confirmed in repo |
+|---|---|---|
+| `ConnectionStrings--DiscountDb` | AK.Discount | `AK.Discount/AK.Discount.Infrastructure/Extensions/ServiceCollectionExtensions.cs` — `GetConnectionString("DiscountDb")` |
+| `ConnectionStrings--PaymentsDb` | AK.Payments | `AK.Payments/AK.Payments.Infrastructure/Extensions/ServiceCollectionExtensions.cs` — `GetConnectionString("PaymentsDb")` |
+| `ConnectionStrings--Postgres` | AK.Order (AK.Notification falls back to it) | `AK.Order/AK.Order.Infrastructure/Extensions/ServiceCollectionExtensions.cs` — `GetConnectionString("Postgres")` |
+| `ConnectionStrings--Notifications` | AK.Notification | `AK.Notification/AK.Notification.Core/Extensions/ServiceCollectionExtensions.cs` — `GetConnectionString("Notifications")` then falls back to `"Postgres"` |
+| `MongoDbSettings--ConnectionString` | AK.Products | `AK.Products/AK.Products.Infrastructure/Extensions/ServiceCollectionExtensions.cs` — binds the `MongoDbSettings` section |
+| `RedisSettings--ConnectionString` | AK.ShoppingCart | `AK.ShoppingCart/AK.ShoppingCart.Infrastructure/Extensions/ServiceCollectionExtensions.cs` — binds `RedisSettings`; `RedisContext` connects with `.ConnectionString` |
+| `cosmos-connection-string` | ⚠️ UNVERIFIED — confirm during build | No service reads this key in the repo — AK.Products reads `MongoDbSettings--ConnectionString` instead. Likely a duplicate (see Appendix C) |
+| `servicebus-connection-string` | ⚠️ UNVERIFIED — confirm during build | No service reads a Service Bus connection string — `AK.BuildingBlocks/AK.BuildingBlocks/Messaging/MassTransitExtensions.cs` connects via `ServiceBus:FullyQualifiedNamespace` + workload identity. Likely legacy |
+
+Supplied by the operator (not derivable from Azure) — the Razorpay sandbox credentials:
+
+| Secret | Consuming service | Confirmed in repo |
+|---|---|---|
+| `Razorpay--KeyId` | AK.Payments | `AK.Payments/AK.Payments.Infrastructure/Extensions/ServiceCollectionExtensions.cs` — binds the `Razorpay` section → `RazorpaySettings` |
+| `Razorpay--KeySecret` | AK.Payments | same |
 
 ### Verify
 
@@ -1399,6 +1462,7 @@ az storage container delete --name $STATE_CONTAINER --account-name $STATE_SA --a
 | `-o was unexpected at this time` | Windows `az` wrapper strips quotes; `(` breaks cmd parsing | Avoid parentheses in `--query`; use `--query "[].name"` then `.Count` in PowerShell |
 | `ForbiddenByRbac` writing a Key Vault secret | No data-plane role on an RBAC-enabled vault | Grant Key Vault Secrets Officer at the vault scope; wait ~2 min |
 | `check-acr` permission denied on a Temp path | Local filesystem, not Azure | Use `-f <path>`, or list role assignments on the ACR scope instead |
+| `ForbiddenByRbac` listing secrets as yourself | The operator has no data-plane role on the new vault | Grant yourself Key Vault Secrets Officer; note this is separate from the service principal's grant |
 
 ## Appendix C — What this runbook does not yet cover
 
@@ -1409,6 +1473,13 @@ Honest gaps, to be closed as they are built:
 - The Notification Function's Event Grid subscription wiring.
 - An infrastructure CI/CD workflow. This runbook is its specification — automate it only after
   running it by hand at least once.
+
+> **Two secret naming conventions coexist.** The source environment carries both `Section--Key` names
+> (which .NET configuration binds automatically) and kebab-case names such as `cosmos-connection-string`
+> and `servicebus-connection-string`. Some appear to duplicate each other — `cosmos-connection-string`
+> and `MongoDbSettings--ConnectionString` may hold the same value. Before seeding a new environment,
+> confirm which names the application actually reads; recreating unused secrets copies the confusion
+> forward.
 
 ---
 
