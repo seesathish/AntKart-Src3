@@ -388,13 +388,26 @@ So this phase is a careful edit, not a rename. The list below is exhaustive as o
 ### Execute — (a) copy the tree
 
 ```powershell
-Copy-Item -Path "infrastructure/environments/dev" -Destination $ENVDIR -Recurse
+robocopy "infrastructure\environments\dev" "infrastructure\environments\$ENV" /E `
+  /XD ".terragrunt-cache" ".terraform" `
+  /XF "*.tfplan" "backend.tf" "provider.tf" "versions.tf" `
+  /NFL /NDL /NJH /NJS /NP
 
-# Remove any local Terraform working state that came along with the copy
-Get-ChildItem -Path $ENVDIR -Recurse -Directory -Filter ".terraform" | Remove-Item -Recurse -Force
-Get-ChildItem -Path $ENVDIR -Recurse -File -Include "backend.tf","provider.tf","versions.tf" | Remove-Item -Force
-Get-ChildItem -Path $ENVDIR -Recurse -File -Filter "*.tfplan" | Remove-Item -Force
+Write-Host "robocopy exit code: $LASTEXITCODE"
 ```
+
+> **Expect a non-zero exit code.** Robocopy uses exit codes as a bitmask: 1 means files
+> were copied successfully. Anything under 8 is success; 8 or above is a real failure.
+>
+> **Why robocopy and not `Copy-Item` + delete.** `.terragrunt-cache` holds downloaded
+> provider binaries, and Windows locks them while any process has them open. Copying
+> everything then deleting fails partway and leaves a half-cleaned tree. Excluding at
+> copy time avoids the problem instead of cleaning up after it.
+
+> **Keep `.terraform.lock.hcl`.** These pin exact provider versions and checksums, so
+> the new environment resolves the same providers as dev. Do not delete and regenerate
+> them — `init` would fetch whatever is current, and the two environments would diverge
+> silently. Same failure mode as installing Argo CD from a floating `stable` tag.
 
 `backend.tf`, `provider.tf` and `versions.tf` are **generated** by Terragrunt from `root.hcl` at init
 time. Deleting the copies guarantees they are regenerated against the new backend rather than
@@ -418,6 +431,16 @@ inputs = {
 
 Do this before any other edit. If you are interrupted, the environment is already safe.
 
+> **Verify before continuing — do not assume this edit was applied:**
+>
+> ```powershell
+> Select-String -Path "$ENVDIR/root.hcl" -Pattern "state_container|environment\s*="
+> ```
+>
+> Must show `tfstate-<env>` and `environment = "<env>"`. This was missed once during a
+> real build and only caught because a later step re-read the file. An unedited
+> `root.hcl` points the new environment at dev's state — see Phase 0.
+
 ### Execute — (c) the remaining edits
 
 Find every remaining `dev` value:
@@ -440,6 +463,10 @@ Work through them by category:
 | GitHub OIDC subject claim | `github-oidc` line 70 | `{ name = "env-qa", claim = "environment:qa" }` |
 | App registration display name | `app-registration` line 27 | `antkart-api-$ENV` |
 | Key Vault purge protection | `key-vault` line 65 | `false` (Decision C) |
+| Bare `"dev"` in tag arrays | `app-registration` | `["antkart", "dev"]` -> `["antkart", "<env>"]` |
+
+> A resource-name pattern search will not catch a standalone `"dev"` inside a tag,
+> list, or map value. Search for the bare quoted string separately.
 
 Resource names by unit:
 
@@ -944,6 +971,8 @@ az storage container delete --name $STATE_CONTAINER --account-name $STATE_SA --a
 | Postgres SKU unavailable in `eastus` | Regional offer restriction | Provision in `eastus2` |
 | `AllocationFailed` on Redis apply | Region temporarily at capacity | Try a nearby region and re-apply; note the change |
 | `unknown flag: --terragrunt-include-dir` | Flag renamed in newer Terragrunt | Plan per unit instead of run-all |
+| `--name expected one argument` | Shell variables not set in this session | Re-run section 0.1 |
+| `-o was unexpected at this time` | Windows `az` wrapper strips quotes; `(` breaks cmd parsing | Avoid parentheses in `--query`; use `--query "[].name"` then `.Count` in PowerShell |
 
 ## Appendix C — What this runbook does not yet cover
 
