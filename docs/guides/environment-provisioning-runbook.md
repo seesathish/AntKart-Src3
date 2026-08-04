@@ -78,6 +78,7 @@ disappointment.
 - **Plan before apply.** `terragrunt plan` on every unit before the first `apply` of a wave.
 - **Stop what you start.** AKS and PostgreSQL are the expensive resources. Phase 7 is teardown.
 - **One wave at a time.** Do not run `run-all apply` across the whole tree on a first build.
+- **`⚠️ UNVERIFIED`** marks a step written from the repository but not yet executed against a live cluster. Treat it as a starting point, verify the result, and remove the marker once it is proven. Phases 0-4 carry no markers — they have been run end to end.
 
 ### 0.4 The five ideas behind every command in this runbook
 
@@ -823,16 +824,37 @@ kubectl get namespaces
 
 ## Phase 5 — GitOps and CD (session two)
 
-> This phase is design work, not configuration. It is deliberately a separate session.
+> Takes a provisioned-but-empty cluster (end of Phase 4) to all six services running and reconciled
+> by Argo CD. **The whole of Phases 5 and 6 is written from the repository, not yet executed against
+> a freshly-built environment** — every section that runs commands is marked `⚠️ UNVERIFIED`. Each
+> follows the house pattern: **Understand → Execute → Verify → If it fails.**
 
-### 5.1 Cluster prerequisites
+### 5.0 Decisions to make before starting
 
-> **Why a pinned version and not `stable`.** The repo's other install docs use
-> `argo-cd/stable`, which resolves to whatever is current at install time. The dev
-> cluster runs v3.4.5 because that is what `stable` meant on the day it was installed.
-> Using `stable` here would give this environment a different Argo CD than dev, so the
-> version is pinned to match. Confirm with:
-> `kubectl -n argocd get deploy argocd-server -o jsonpath='{.spec.template.spec.containers[0].image}'`
+No commands — decide these first. **5.3 onward cannot proceed until the promotion model is chosen**:
+it determines where the new environment's Helm values live and what path every Argo CD Application
+points at. Today there is exactly ONE values set under `deploy/helm/values/` (dev-targeted), so any
+choice below is a new convention worth an ADR.
+
+| Decision | Options | Consequence |
+|---|---|---|
+| **Promotion model** | (a) values per environment (`deploy/helm/values/<env>/<svc>.yaml`); (b) base + overlay (`values/base/` + `values/<env>/`); (c) separate GitOps repo per environment | (a) simplest, explicit, duplicates common keys; (b) DRY, more indirection; (c) cleanest isolation — **ADR-024 already names a separate repo as the long-term answer** |
+| **App delivery object** | `applicationset-antkart.yaml` (**RECOMMENDED** in `deploy/argocd/README.md`) vs the six `applications/ak-*.yaml` | Apply **ONE, never both** — they create the same Application names |
+| **Ingress controller** | reuse dev's ingress-nginx approach vs install fresh per environment | A shared controller = one public IP + one DNS story; a fresh per-env controller isolates blast radius but needs its own IP + DNS record |
+| **CD trigger** | CD workflows target this environment vs deploy manually first | The `github-oidc` unit issues an `environment:<env>` claim (5.8); a workflow must declare that GitHub Environment for its OIDC token to match. Manual-first (`kubectl apply` the Applications) de-risks the first build |
+
+### 5.1 ⚠️ UNVERIFIED — Cluster prerequisites
+
+**Understand.** Argo CD runs inside the cluster and reconciles Git (pull-based). Pin its version to
+match dev — `stable` resolves to whatever is current at install time, which would give this
+environment a different Argo CD than dev.
+
+> **Why a pinned version and not `stable`.** The repo's other install docs use `argo-cd/stable`,
+> which resolves to whatever is current at install time. The dev cluster runs v3.4.5 because that is
+> what `stable` meant on the day it was installed. Using `stable` here would give this environment a
+> different Argo CD than dev, so the version is pinned to match.
+
+**Execute.**
 
 ```powershell
 kubectl create namespace antkart
@@ -843,66 +865,346 @@ kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v3
 kubectl -n argocd rollout status deploy/argocd-server --timeout=300s
 ```
 
-### 5.2 Service accounts for workload identity
-
-Each service needs a Kubernetes ServiceAccount annotated with its managed identity's client ID.
-The federated credential subject created in Phase 3 is
-`system:serviceaccount:antkart:ak-<service>` — the ServiceAccount name must match exactly, or token
-exchange fails with a subject-mismatch error.
+**Verify.** Namespaces exist, argocd pods `Running`, and the server image matches the pinned version:
 
 ```powershell
-# Retrieve the client IDs to annotate with
+kubectl get namespace antkart argocd
+kubectl -n argocd get pods
+kubectl -n argocd get deploy argocd-server -o jsonpath='{.spec.template.spec.containers[0].image}'
+```
+
+The image tag must read `v3.4.5`.
+
+**If it fails.** A pod stuck `Pending` usually means the two-node cluster is out of schedulable
+capacity — `kubectl -n argocd describe pod <name>` shows the scheduling reason.
+
+### 5.2 ⚠️ UNVERIFIED — Service accounts for workload identity
+
+**Understand.** The chart templates one ServiceAccount per service in
+`deploy/helm/antkart-service/templates/serviceaccount.yaml`. It is named
+`{{ include "antkart-service.name" . }}` (i.e. `ak-<service>`, from each values file's `name`) in
+`{{ .Values.namespace }}` (default `antkart`), and carries:
+
+- the label `azure.workload.identity/use: "true"` — enables the workload-identity mutating webhook,
+- the annotation `azure.workload.identity/client-id: {{ .Values.workloadIdentityClientId }}` — the
+  managed identity's client id, `required` and supplied **from values, never hardcoded**.
+
+So the ServiceAccount is created by Helm/Argo, not by hand. What you must get right is the
+`workloadIdentityClientId` in each values file (5.3) and the SA-name ↔ federated-subject match.
+
+**Execute.** List the environment's managed-identity client IDs to fill into values:
+
+```powershell
 az identity list -g $RG --query "[].{name:name, clientId:clientId}" -o table
 ```
 
-### 5.3 Helm values for the new environment
+**Verify.** The rendered SA name must equal the federated credential subject
+`system:serviceaccount:<namespace>:<sa-name>` created in Phase 3 (`workload-identity` unit). Compare
+both sides:
 
-`deploy/helm/values/` holds one file per service, currently dev-targeted. The new environment needs
-its own values — resource names, Key Vault URI, App Insights connection string, and the managed
-identity client IDs.
+```powershell
+# The SAs the chart will create (namespace/name):
+kubectl get serviceaccount -n antkart -o "custom-columns=NS:.metadata.namespace,NAME:.metadata.name"
 
-**Open design decision — the promotion model.** There is no QA values set and no promotion
-convention yet. Choose deliberately and record it as an ADR:
+# The federated subjects the identities actually trust:
+foreach ($id in (az identity list -g $RG --query "[].name" -o tsv)) {
+  az identity federated-credential list --identity-name $id -g $RG --query "[].{cred:name, subject:subject}" -o table
+}
+```
 
-| Option | Shape | Trade-off |
+Each SA `antkart/ak-<service>` must have a matching subject `system:serviceaccount:antkart:ak-<service>`.
+
+**If it fails.** A mismatch surfaces at runtime, not deploy time: the pod's token exchange is
+rejected with an `AADSTS70021`-style "no matching federated identity record for the presented
+assertion subject" error in the pod logs. The match is exact and case-sensitive — align the values
+`name`/namespace with the federated-credential subject.
+
+### 5.3 ⚠️ UNVERIFIED — Helm values for the new environment
+
+**Understand.** `deploy/helm/values/` holds one file per service (products, cart, discount, order,
+payments, gateway); shared defaults live in `deploy/helm/antkart-service/values.yaml` and Helm
+deep-merges each per-service `env` map on top of them. The **environment-specific** keys — every one
+carrying a `dev` value today — read from the repo:
+
+| Key | File(s) | dev value → change to |
 |---|---|---|
-| Values per environment | `values/qa/products.yaml` | Simple, explicit; duplicates common keys |
-| Base + overlay | `values/base/` + `values/qa/` | DRY; more indirection |
-| Separate GitOps repo | Per-environment repo | Cleanest separation; ADR-024 already names this as the long-term answer |
+| `image.registry` | `antkart-service/values.yaml` | `acrantkartdev.azurecr.io` → `acrantkart<env>.azurecr.io` |
+| `env.KeyVault__Uri` | `antkart-service/values.yaml` (the one shared secret-store default) | `https://kv-antkart-dev.vault.azure.net/` → new vault URI |
+| `workloadIdentityClientId` | every `values/<svc>.yaml` | the per-service managed-identity client id (from `az identity list`, 5.2) |
+| `env.ServiceBus__FullyQualifiedNamespace` | products, cart, order, payments | `sb-antkart-dev.servicebus.windows.net` → `sb-antkart-<env>...` |
+| `env.EventGrid__TopicEndpoint` | order, payments | `https://evgt-antkart-dev.eastus-1.eventgrid.azure.net/api/events` → the new topic endpoint |
+| `env.Entra__Audience` | products, cart, order, payments, gateway | `api://antkart-api-dev` → `api://antkart-api-<env>` |
+| `env.Entra__ClientId` | products, cart, order, payments, gateway | the API app-registration client id (per env) |
+| `ingress.host` | Argo Helm parameter (5.5); default empty in `antkart-service/values.yaml`, `api.antkart.in` for the gateway | the new environment hostname |
 
-### 5.4 Argo CD project and applications
+Keys that are **NOT** environment-specific (leave them): `name`/`serviceName` (in-cluster identity),
+`env.Entra__TenantId` (same tenant `4cacc56a-…`) and `env.Entra__Instance`, the in-cluster DNS
+overrides (`DiscountGrpc__Address`, `ProductsApi__BaseUrl`), `RedisSettings__*`, `MongoDbSettings__*`,
+`image.name` (cart→`shoppingcart`), and `image.tag` (owned by CD).
 
-`deploy/argocd/appproject-antkart.yaml` and either `applications/` **or**
-`applicationset-antkart.yaml` — never both, they create the same Application names.
+> **The App Insights connection string is NOT a Helm value.** An earlier draft listed it as
+> environment-specific, but the repo sets it in no values file — it is vaulted as the
+> `ApplicationInsights--ConnectionString` secret and read from Key Vault at runtime. It is handled in
+> secret seeding (5.6). Likewise every connection string / API key (`ConnectionStrings:Postgres`,
+> `RedisSettings:ConnectionString`, the Razorpay keys) is a Key Vault secret, not a value.
+
+**Per-service checklist.** For each values file change: `workloadIdentityClientId`; any
+`ServiceBus__FullyQualifiedNamespace`; `EventGrid__TopicEndpoint` (order/payments only);
+`Entra__Audience` + `Entra__ClientId` (all but `discount` — it injects no `Entra__*`). Change the two
+shared defaults (`image.registry`, `env.KeyVault__Uri`) once in `antkart-service/values.yaml`, or
+override per-env per the promotion model chosen in 5.0.
+
+**Verify.** `helm template` the chart with the new values renders without error:
+
+```powershell
+helm template ak-products deploy/helm/antkart-service -f <new-env values path>/products.yaml
+```
+
+(the path depends on the 5.0 promotion model.)
+
+**If it fails.** `Error: … values.workloadIdentityClientId is required` (from
+`serviceaccount.yaml`) means that key is missing from the values file.
+
+### 5.4 ⚠️ UNVERIFIED — Container registry access
+
+**Understand.** The kubelet pulls images from the environment's ACR (`image.registry` =
+`acrantkart<env>.azurecr.io`). AKS authenticates by its kubelet identity holding **AcrPull** on the
+registry. If the cluster and ACR were provisioned by the same environment's Terraform this is already
+wired, but a new environment must confirm it.
+
+**Execute / Verify.**
+
+```powershell
+az aks check-acr --name $AKS --resource-group $RG --acr "acrantkart$ENV.azurecr.io"
+```
+
+**If it fails.** Grant AcrPull to the cluster's kubelet identity:
+
+```powershell
+$ACR_ID  = az acr show -n "acrantkart$ENV" --query id -o tsv
+$KUBELET = az aks show -g $RG -n $AKS --query "identityProfile.kubeletidentity.objectId" -o tsv
+az role assignment create --assignee-object-id $KUBELET --assignee-principal-type ServicePrincipal --role AcrPull --scope $ACR_ID
+```
+
+Symptom if skipped: pods stay `ImagePullBackOff` with a 401/403 from the registry.
+
+### 5.5 ⚠️ UNVERIFIED — Argo CD project and applications
+
+**Understand.** Three manifests in `deploy/argocd/`: `appproject-antkart.yaml` (the least-privilege
+AppProject — **apply FIRST**), then EITHER `applicationset-antkart.yaml` (**RECOMMENDED** — templates
+all six from one `elements` list) OR the six `applications/ak-*.yaml` (the alternative). **Apply one,
+never both** — they create the same Application names. Each Application (or ApplicationSet element)
+points at the chart (`path: deploy/helm/antkart-service`) with `valueFiles: [ ../values/<svc>.yaml ]`;
+the gateway additionally sets `ingress.enabled=true`, `ingress.host=api.antkart.in`,
+`ingress.clusterIssuer=letsencrypt-prod` as Helm parameters.
 
 > **The recurring trap.** Argo CD watches the chart and values an Application *points at*. It does
 > **not** watch the Application manifest or the AppProject. Editing those in Git changes nothing
 > until you `kubectl apply` them. This has caused real incidents on this platform. It is also why
 > ADR-024 recommends a separate GitOps repository.
 
+**Point it at the new environment.** Change the `valueFiles` path in each `applications/ak-*.yaml`
+(or the ApplicationSet's `valueFile` per element) to the new environment's values path chosen in 5.0,
+and the gateway's `ingress.host` parameter to the new hostname. If you keep both files, keep the
+ApplicationSet element list and `applications/ak-gateway.yaml` in sync — but still apply only one.
+
+**Execute.**
+
 ```powershell
 kubectl apply -f deploy/argocd/appproject-antkart.yaml
-kubectl apply -f deploy/argocd/applications/
+# choose ONE of the next two — never both:
+kubectl apply -f deploy/argocd/applicationset-antkart.yaml
+# kubectl apply -f deploy/argocd/applications/
+```
+
+**Verify.**
+
+```powershell
 kubectl get applications -n argocd
 ```
 
-### 5.5 CD workflows
+All six show `Synced` / `Healthy`.
 
-The `github-oidc` unit now issues an `environment:qa` claim. The CD workflows must declare
-`environment: qa` for the token to match, and push image tags to the new environment's values path.
+**If it fails.** Argo CD does **not** auto-retry a failed sync for the same Git revision — sync it
+manually (`argocd app sync <name>` or the UI) after fixing the cause. An `OutOfSync`/`Degraded` app
+on a first build is almost always missing secrets (5.6) → `CrashLoopBackOff`.
 
-**Verify:**
+### 5.6 ⚠️ UNVERIFIED — Secret seeding
+
+**Understand.** Pods cannot start without their Key Vault secrets — every service reads connection
+strings / API keys from Key Vault at startup via `DefaultAzureCredential`. This is Phase 4's secret
+step, called out here because ordering is load-bearing: **it must happen before Argo syncs**, or the
+first sync produces `CrashLoopBackOff` as each pod fails to read its secrets. Seed the vault as in
+[Phase 4 → Execute](#phase-4--post-provision-secrets-and-connectivity); the authoritative secret
+names and formats live in [Operations Command Reference](operations-command-reference.md).
+
+**Verify.** Compare secret **names** (never values) against the source environment:
+
+```powershell
+$devSecrets = az keyvault secret list --vault-name "kv-antkart-dev" --query "[].name" -o tsv
+$newSecrets = az keyvault secret list --vault-name $KV --query "[].name" -o tsv
+Compare-Object $devSecrets $newSecrets
+```
+
+`Compare-Object` returns nothing — the two vaults hold the same secret names.
+
+**If it fails.** A pod in `CrashLoopBackOff` right after the first sync: `kubectl logs -n antkart
+<pod>` shows a Key Vault / config-binding error naming the missing secret. Seed it, then let Argo
+re-sync (or restart the deployment).
+
+### 5.7 ⚠️ UNVERIFIED — Ingress and cert-manager
+
+**Understand.** The gateway is the only externally-exposed service, over HTTPS with a Let's Encrypt
+certificate. `deploy/cert-manager/` already contains the two `ClusterIssuer` manifests —
+`cluster-issuer-staging.yaml` (`letsencrypt-staging`) and `cluster-issuer-prod.yaml`
+(`letsencrypt-prod`), both HTTP-01 over the `nginx` ingress class. It does **not** contain
+cert-manager itself or the ingress: cert-manager is installed separately and the ingress is rendered
+by the chart when the gateway Application sets `ingress.enabled=true` (see
+`deploy/cert-manager/README.md`, which points to `docs/guides/aks-guide.md#ingress-and-tls`).
+
+**Ordering matters.** HTTP-01 validation needs the DNS hostname resolving to the ingress controller's
+public IP **before** the certificate can issue. So DNS comes *after* the IP is known and *before* the
+certificate is expected.
+
+**Execute.** ⚠️ UNVERIFIED — determine the exact controller/cert-manager install (and pinned
+versions) from `docs/guides/aks-guide.md#ingress-and-tls` during the build.
+
+```powershell
+# 1. Install cert-manager and the ingress-nginx controller (versions per aks-guide).
+
+# 2. Apply the ClusterIssuers (edit the placeholder email in each file first).
+kubectl apply -f deploy/cert-manager/cluster-issuer-staging.yaml
+kubectl apply -f deploy/cert-manager/cluster-issuer-prod.yaml
+
+# 3. The gateway Application already sets ingress.enabled=true + host — get the controller's IP.
+kubectl get ingress -n antkart
+kubectl get svc -A -o wide | Select-String "LoadBalancer"   # EXTERNAL-IP of the ingress controller
+
+# 4. Create the DNS A record: <env hostname> -> that public IP (registrar / Azure DNS).
+
+# 5. Watch the certificate issue.
+kubectl get certificate -n antkart -w
+```
+
+> **Start on staging.** Point the gateway's `ingress.clusterIssuer` at `letsencrypt-staging` first
+> (generous rate limits; untrusted root — verify with `curl -k`). Only switch to `letsencrypt-prod`
+> once staging issues `Ready`. **Let's Encrypt production rate limit: 5 duplicate certificates per
+> identical set of names per 168 hours (1 week)** (plus 50 certs/week per registered domain) — a
+> retry loop on prod can lock the hostname out for a week.
+
+**Verify.**
+
+```powershell
+kubectl get certificate -n antkart                 # READY = True
+curl https://<env hostname>/health/live            # 200 over trusted TLS (use -k on staging)
+```
+
+**If it fails.** Describe the objects in dependency order — `Certificate`, then `CertificateRequest`,
+then `Order`:
+
+```powershell
+kubectl describe certificate -n antkart <name>
+kubectl describe certificaterequest -n antkart
+kubectl describe order -n antkart
+```
+
+A stuck `Order` almost always means DNS is not yet resolving to the ingress IP (step 4) or the
+HTTP-01 challenge path is not reachable.
+
+### 5.8 ⚠️ UNVERIFIED — CD workflows targeting this environment
+
+**Understand.** The `github-oidc` unit issues a federated credential whose subject is
+`repo:seesathish/AntKart-Src3:environment:<env>` (its `subjects` list carries
+`{ name = "env-<env>", claim = "environment:<env>" }`). For a CD workflow's OIDC token to match, the
+workflow job must declare that GitHub Environment. So the workflows need, for this environment:
+
+- a job-level `environment: <env>` declaration, so the token carries `environment:<env>`;
+- the new environment's values path for the image-tag bump step (the CD commit that updates
+  `image.tag`), matching the promotion model from 5.0.
+
+**Verify.** Confirm the federated credential subject exists on the app registration:
 
 ```powershell
 az ad app federated-credential list --id $(az ad app list --display-name $APPREG --query "[0].id" -o tsv) `
   --query "[].{name:name, subject:subject}" -o table
 ```
 
+Expect a row whose subject ends `environment:<env>`.
+
+**If it fails.** A CD run failing at the Azure login step with a no-matching-federated-credential
+error (`AADSTS700213`-style) means the workflow's `environment:` (or branch/subject) does not match
+any credential subject — align the workflow declaration with the `github-oidc` subject.
+
 ---
 
 ## Phase 6 — End-to-end verification
 
-Run the Postman collection against the new environment's endpoint, then confirm telemetry.
+> An ordered sequence from cluster-green to Postman-green over HTTPS. **All ⚠️ UNVERIFIED** — written
+> from the repo, to be proven on the first real build. Each step has its own Verify.
+
+### 6.1 ⚠️ UNVERIFIED — Pods healthy
+
+```powershell
+kubectl get pods -n antkart -o wide
+```
+
+**Verify.** All six `ak-*` pods `Running` with `RESTARTS 0` (products runs `replicaCount: 2`, so
+expect two of its pods). A restart count climbing is a boot problem — usually missing secrets (5.6).
+
+### 6.2 ⚠️ UNVERIFIED — Workload identity working
+
+A pod must read a Key Vault secret with no stored credential — the whole point of workload identity.
+
+```powershell
+kubectl logs -n antkart deploy/ak-products | Select-String -Pattern "KeyVault|DefaultAzureCredential|AADSTS|Started"
+```
+
+**Verify.** Startup logs show Key Vault loaded and Kestrel started, with no `DefaultAzureCredential`
+/ `AADSTS` errors. (A service cannot pass its readiness probe without its secrets, so a `Running`,
+`Ready` pod is already strong evidence.)
+
+**If it fails.** An `AADSTS70021` subject mismatch (5.2) or a missing AcrPull/secret appears in the
+logs. `kubectl describe pod -n antkart <pod>` shows `ImagePullBackOff` (5.4) vs `CrashLoopBackOff`
+(5.6).
+
+### 6.3 ⚠️ UNVERIFIED — Gateway reachable over HTTPS
+
+```powershell
+curl https://<env hostname>/health/live
+curl https://<env hostname>/gateway/health/products
+```
+
+**Verify.** Both return `200` over trusted TLS. `/gateway/health/{products|cart|orders|payments}` are
+the gateway's health passthrough routes (defined in `deploy/helm/values/gateway.yaml`); a 200 through
+one proves the ingress → gateway → downstream path end to end.
+
+### 6.4 ⚠️ UNVERIFIED — Postman environment for this environment
+
+The collection `AntKart-Cloud-E2E-Saga-Positive.postman_collection.json` uses collection variables
+`baseUrl` and `entraTenantId`, and expects two environment values `entraClientId` and
+`razorpayKeySecret`. Its collection-level OAuth 2.0 (Authorization Code + PKCE) authorizes against
+`https://login.microsoftonline.com/{{entraTenantId}}/oauth2/v2.0/authorize` with
+`clientId = {{entraClientId}}` and `scope = api://antkart-api-dev/access_as_user openid profile offline_access`.
+
+Change for the new environment:
+
+| Variable | Where | Change |
+|---|---|---|
+| `baseUrl` | collection variable | → `https://<env hostname>` (the new gateway HTTPS URL) |
+| `entraTenantId` | collection variable | same tenant `4cacc56a-…` (change only for a different tenant) |
+| `entraClientId` | environment value | the **public-client** app-registration id for this environment |
+| **scope** | collection Authorization tab | `api://antkart-api-dev/access_as_user` → `api://antkart-api-<env>/access_as_user` (the API's App ID URI — from the `app-registration` unit output) |
+| `razorpayKeySecret` | environment value | from the new environment's Key Vault |
+
+### 6.5 ⚠️ UNVERIFIED — Run the collection
+
+Run with the **Collection Runner**, *Delay between requests* = 8000 ms (the saga is asynchronous and
+steps 07/12 self-retry).
+
+**Verify.** All 12 ordered requests pass and the order reaches `Paid` — the payment-success journey
+end to end against the new environment through HTTPS.
+
+### 6.6 ⚠️ UNVERIFIED — Telemetry
 
 ```powershell
 $WS = az monitor log-analytics workspace show -g $RG -n $LOG --query "customerId" -o tsv
@@ -913,6 +1215,11 @@ az monitor log-analytics query --workspace $WS --analytics-query "union AppReque
 # Structured logs carrying TraceId
 az monitor log-analytics query --workspace $WS --analytics-query "ContainerLog | where TimeGenerated > ago(60m) | where LogEntry has 'TraceId' | project TimeGenerated, LogEntry | take 3" -o table
 ```
+
+**Verify.** A healthy result: the first query returns at least one `OperationId` whose `roles` set
+spans multiple services (e.g. `ak-gateway` + `ak-products` + `ak-order`) — proof a request was traced
+across roles; the second returns structured log lines carrying a `TraceId`, correlatable back to that
+`OperationId`.
 
 > **Schema note.** `AppRequests`, `AppDependencies` and `TimeGenerated` are the **workspace** schema
 > and require `az monitor log-analytics query`. The classic `az monitor app-insights query` uses
@@ -1019,7 +1326,6 @@ Honest gaps, to be closed as they are built:
 
 - Seeding Cosmos with product data for the new environment.
 - Razorpay test credentials and the payment verification path.
-- cert-manager, ingress and DNS for a per-environment hostname.
 - The Notification Function's Event Grid subscription wiring.
 - An infrastructure CI/CD workflow. This runbook is its specification — automate it only after
   running it by hand at least once.
