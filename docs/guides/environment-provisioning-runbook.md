@@ -78,7 +78,7 @@ disappointment.
 - **Plan before apply.** `terragrunt plan` on every unit before the first `apply` of a wave.
 - **Stop what you start.** AKS and PostgreSQL are the expensive resources. Phase 7 is teardown.
 - **One wave at a time.** Do not run `run-all apply` across the whole tree on a first build.
-- **`⚠️ UNVERIFIED`** marks a step written from the repository but not yet executed against a live cluster. Treat it as a starting point, verify the result, and remove the marker once it is proven. Phases 0-4 carry no markers — they have been run end to end.
+- **`⚠️ UNVERIFIED`** marks a step written from the repository but not yet executed against a live cluster. Treat it as a starting point, verify the result, and remove the marker once it is proven. Phases 0-4 and sections 5.1-5.7 carry no markers — they have been run end to end. Section 5.8 and all of Phase 6 remain marked, pending their first run.
 
 ### 0.4 The five ideas behind every command in this runbook
 
@@ -1072,9 +1072,10 @@ kubectl get namespaces
 ## Phase 5 — GitOps and CD (session two)
 
 > Takes a provisioned-but-empty cluster (end of Phase 4) to all six services running and reconciled
-> by Argo CD. **The whole of Phases 5 and 6 is written from the repository, not yet executed against
-> a freshly-built environment** — every section that runs commands is marked `⚠️ UNVERIFIED`. Each
-> follows the house pattern: **Understand → Execute → Verify → If it fails.**
+> by Argo CD. **Sections 5.1–5.7 have now been run end to end against a real QA build** (which ended
+> with a trusted Let's Encrypt production certificate serving `https://qa.antkart.in`); **section 5.8
+> and all of Phase 6 remain `⚠️ UNVERIFIED`.** Each section follows the house pattern:
+> **Understand → Execute → Verify → If it fails.**
 
 ### 5.0 Decisions to make before starting
 
@@ -1090,7 +1091,7 @@ choice below is a new convention worth an ADR.
 | **Ingress controller** | reuse dev's ingress-nginx approach vs install fresh per environment | A shared controller = one public IP + one DNS story; a fresh per-env controller isolates blast radius but needs its own IP + DNS record |
 | **CD trigger** | CD workflows target this environment vs deploy manually first | The `github-oidc` unit issues an `environment:<env>` claim (5.8); a workflow must declare that GitHub Environment for its OIDC token to match. Manual-first (`kubectl apply` the Applications) de-risks the first build |
 
-### 5.1 ⚠️ UNVERIFIED — Cluster prerequisites
+### 5.1 Cluster prerequisites
 
 **Understand.** Argo CD runs inside the cluster and reconciles Git (pull-based). Pin its version to
 match dev — `stable` resolves to whatever is current at install time, which would give this
@@ -1108,9 +1109,20 @@ kubectl create namespace antkart
 kubectl create namespace argocd
 
 # Argo CD — match the dev version
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.4.5/manifests/install.yaml
+kubectl apply --server-side -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.4.5/manifests/install.yaml
 kubectl -n argocd rollout status deploy/argocd-server --timeout=300s
 ```
+
+> **Use `--server-side` from the start.** A plain `kubectl apply` stores the whole manifest in a
+> `last-applied-configuration` annotation, and the ApplicationSet CRD exceeds the 262144-byte
+> annotation limit:
+> `The CustomResourceDefinition "applicationsets.argoproj.io" is invalid: metadata.annotations: Too long`
+> Every other resource applies; only that CRD fails.
+>
+> Re-running with `--server-side` after a client-side apply produces ownership conflicts
+> (`conflict with "kubectl-client-side-apply"`) because the two modes use different field managers.
+> Adding `--force-conflicts` resolves it safely when the values are identical. Starting with
+> `--server-side` avoids both.
 
 **Verify.** Namespaces exist, argocd pods `Running`, and the server image matches the pinned version:
 
@@ -1125,21 +1137,19 @@ The image tag must read `v3.4.5`.
 **If it fails.** A pod stuck `Pending` usually means the two-node cluster is out of schedulable
 capacity — `kubectl -n argocd describe pod <name>` shows the scheduling reason.
 
-### 5.2 ⚠️ UNVERIFIED — Service accounts for workload identity
+### 5.2 Service accounts for workload identity
 
-**Understand.** The chart templates one ServiceAccount per service in
-`deploy/helm/antkart-service/templates/serviceaccount.yaml`. It is named
-`{{ include "antkart-service.name" . }}` (i.e. `ak-<service>`, from each values file's `name`) in
-`{{ .Values.namespace }}` (default `antkart`), and carries:
+**Nothing to create — the chart templates it.** There is no manual `kubectl create serviceaccount`
+step: `deploy/helm/antkart-service/templates/serviceaccount.yaml` renders one ServiceAccount per
+service. It carries the label `azure.workload.identity/use: "true"` (which enables the
+workload-identity mutating webhook) and the annotation `azure.workload.identity/client-id`, sourced
+from `.Values.workloadIdentityClientId` — declared `required`, so a missing value **fails the render**
+rather than producing a silently broken account. The account name comes from the values `name:` key,
+which **must match** the federated credential subject `system:serviceaccount:<namespace>:ak-<service>`
+created in Phase 3.
 
-- the label `azure.workload.identity/use: "true"` — enables the workload-identity mutating webhook,
-- the annotation `azure.workload.identity/client-id: {{ .Values.workloadIdentityClientId }}` — the
-  managed identity's client id, `required` and supplied **from values, never hardcoded**.
-
-So the ServiceAccount is created by Helm/Argo, not by hand. What you must get right is the
-`workloadIdentityClientId` in each values file (5.3) and the SA-name ↔ federated-subject match.
-
-**Execute.** List the environment's managed-identity client IDs to fill into values:
+The only input to get right is therefore each service's `workloadIdentityClientId` (set in 5.3); list
+the environment's identities to read the client IDs off:
 
 ```powershell
 az identity list -g $RG --query "[].{name:name, clientId:clientId}" -o table
@@ -1166,7 +1176,7 @@ rejected with an `AADSTS70021`-style "no matching federated identity record for 
 assertion subject" error in the pod logs. The match is exact and case-sensitive — align the values
 `name`/namespace with the federated-credential subject.
 
-### 5.3 ⚠️ UNVERIFIED — Helm values for the new environment
+### 5.3 Helm values for the new environment
 
 **Understand — three configuration layers, last wins.** Each service resolves configuration from three
 sources, each overriding the one before:
@@ -1219,6 +1229,19 @@ Notes on the table:
 > the Razorpay keys and the App Insights connection string are Key Vault **secrets**, seeded in Phase 4 /
 > 5.6 — never Helm values.
 
+> **`image.registry`** is set only in `deploy/helm/antkart-service/values.yaml` and is overridden by no
+> per-service values file. A new environment must add it to each of its six files, or pods pull from
+> the source registry — for which the new cluster's kubelet has no AcrPull, producing
+> `ImagePullBackOff`. Do not change the chart default; that would repoint the source environment on its
+> next sync.
+
+> **`ingress.host` and `ingress.clusterIssuer`** live as Helm `parameters` on the gateway's Argo
+> Application, not in the values file. Copying that Application unchanged points the new environment at
+> the source environment's public hostname and requests a production certificate for it — two clusters
+> serving one host, and a risk of exhausting the Let's Encrypt limit of 5 duplicate certificates per
+> hostname per 168 hours on the domain that matters. Set the new environment's own subdomain and
+> `letsencrypt-staging`.
+
 **Verify — grep the new values for the source environment's name.** Any hit is a missed override:
 
 ```powershell
@@ -1235,7 +1258,24 @@ helm template ak-products deploy/helm/antkart-service -f <new-env values path>\p
 means that key is missing. A pod crash-looping with a **403 on `kv-antkart-dev`** means `KeyVault__Uri`
 was not overridden — the critical gap above.
 
-### 5.4 ⚠️ UNVERIFIED — Container registry access
+### 5.4 Container registry — seed images and confirm access
+
+> A new environment's registry is empty, and CD does not target it yet (5.8). Import the images the
+> source environment is running, so the new environment runs identical artefacts — same digests, not a
+> rebuild:
+>
+> ```powershell
+> foreach ($repo in @("gateway","products","shoppingcart","order","payments","discount")) {
+>   az acr import --name $ACR `
+>     --source "acrantkartdev.azurecr.io/antkart/${repo}:<tag>" `
+>     --image "antkart/${repo}:<tag>" --force
+> }
+> az acr repository list --name $ACR -o table
+> ```
+>
+> `az acr import` copies registry-to-registry server-side; nothing is pulled locally. Find the running
+> tag with:
+> `kubectl get pods -n antkart -o jsonpath="{.items[*].spec.containers[*].image}"`
 
 **Understand.** The kubelet pulls images from the environment's ACR (`image.registry` =
 `acrantkart<env>.azurecr.io`). AKS authenticates by its kubelet identity holding **AcrPull** on the
@@ -1258,7 +1298,7 @@ az role assignment create --assignee-object-id $KUBELET --assignee-principal-typ
 
 Symptom if skipped: pods stay `ImagePullBackOff` with a 401/403 from the registry.
 
-### 5.5 ⚠️ UNVERIFIED — Argo CD project and applications
+### 5.5 Argo CD project and applications
 
 **Understand.** Three manifests in `deploy/argocd/`: `appproject-antkart.yaml` (the least-privilege
 AppProject — **apply FIRST**), then EITHER `applicationset-antkart.yaml` (**RECOMMENDED** — templates
@@ -1299,7 +1339,7 @@ All six show `Synced` / `Healthy`.
 manually (`argocd app sync <name>` or the UI) after fixing the cause. An `OutOfSync`/`Degraded` app
 on a first build is almost always missing secrets (5.6) → `CrashLoopBackOff`.
 
-### 5.6 ⚠️ UNVERIFIED — Secret seeding
+### 5.6 Secret seeding
 
 **Understand.** Pods cannot start without their Key Vault secrets — every service reads connection
 strings / API keys from Key Vault at startup via `DefaultAzureCredential`. This is Phase 4's secret
@@ -1322,64 +1362,74 @@ Compare-Object $devSecrets $newSecrets
 <pod>` shows a Key Vault / config-binding error naming the missing secret. Seed it, then let Argo
 re-sync (or restart the deployment).
 
-### 5.7 ⚠️ UNVERIFIED — Ingress and cert-manager
+### 5.7 Ingress and cert-manager
 
 **Understand.** The gateway is the only externally-exposed service, over HTTPS with a Let's Encrypt
-certificate. `deploy/cert-manager/` already contains the two `ClusterIssuer` manifests —
-`cluster-issuer-staging.yaml` (`letsencrypt-staging`) and `cluster-issuer-prod.yaml`
-(`letsencrypt-prod`), both HTTP-01 over the `nginx` ingress class. It does **not** contain
-cert-manager itself or the ingress: cert-manager is installed separately and the ingress is rendered
-by the chart when the gateway Application sets `ingress.enabled=true` (see
-`deploy/cert-manager/README.md`, which points to `docs/guides/aks-guide.md#ingress-and-tls`).
+certificate. Only the two `ClusterIssuer` manifests live in the repo —
+`deploy/cert-manager/cluster-issuer-staging.yaml` (`letsencrypt-staging`) and
+`deploy/cert-manager/cluster-issuer-prod.yaml` (`letsencrypt-prod`), both HTTP-01 over the `nginx`
+ingress class. **Neither ingress-nginx nor cert-manager is captured in the repository** — both were
+installed by hand in the source environment, so this runbook is now their only record. Version used:
+cert-manager **v1.21.1**.
 
-**Ordering matters.** HTTP-01 validation needs the DNS hostname resolving to the ingress controller's
-public IP **before** the certificate can issue. So DNS comes *after* the IP is known and *before* the
-certificate is expected.
+**Execute — each step gates the next.**
 
-**Execute.** ⚠️ UNVERIFIED — determine the exact controller/cert-manager install (and pinned
-versions) from `docs/guides/aks-guide.md#ingress-and-tls` during the build.
+1. **Install ingress-nginx** via Helm into its own namespace, with
+   `controller.service.externalTrafficPolicy=Local` (preserves the client source IP).
+2. **Wait for the LoadBalancer `EXTERNAL-IP`** — Azure takes 1–3 minutes. Capture it and record it
+   outside the terminal:
 
-```powershell
-# 1. Install cert-manager and the ingress-nginx controller (versions per aks-guide).
+   ```powershell
+   kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath="{.status.loadBalancer.ingress[0].ip}"
+   ```
 
-# 2. Apply the ClusterIssuers (edit the placeholder email in each file first).
-kubectl apply -f deploy/cert-manager/cluster-issuer-staging.yaml
-kubectl apply -f deploy/cert-manager/cluster-issuer-prod.yaml
+3. **Create the DNS A record** for the environment's subdomain pointing at that IP.
+4. **Poll until DNS resolves** — this GATES certificate issuance, because HTTP-01 validation requires
+   Let's Encrypt to fetch a file over `http://` at that hostname:
 
-# 3. The gateway Application already sets ingress.enabled=true + host — get the controller's IP.
-kubectl get ingress -n antkart
-kubectl get svc -A -o wide | Select-String "LoadBalancer"   # EXTERNAL-IP of the ingress controller
+   ```powershell
+   Resolve-DnsName <host>
+   ```
 
-# 4. Create the DNS A record: <env hostname> -> that public IP (registrar / Azure DNS).
+5. **Install cert-manager** via Helm with `--set crds.enabled=true`, then wait for all three
+   deployments — `cert-manager`, `cert-manager-webhook`, `cert-manager-cainjector`. The **webhook**
+   matters most: applying a ClusterIssuer before it is ready gives a connection-refused error rather
+   than a clear message.
+6. **Apply both ClusterIssuers** from `deploy/cert-manager/`. `READY True` means cert-manager
+   registered an ACME account:
 
-# 5. Watch the certificate issue.
-kubectl get certificate -n antkart -w
-```
+   ```powershell
+   kubectl apply -f deploy/cert-manager/cluster-issuer-staging.yaml
+   kubectl apply -f deploy/cert-manager/cluster-issuer-prod.yaml
+   kubectl get clusterissuer
+   ```
 
-> **Start on staging.** Point the gateway's `ingress.clusterIssuer` at `letsencrypt-staging` first
-> (generous rate limits; untrusted root — verify with `curl -k`). Only switch to `letsencrypt-prod`
-> once staging issues `Ready`. **Let's Encrypt production rate limit: 5 duplicate certificates per
-> identical set of names per 168 hours (1 week)** (plus 50 certs/week per registered domain) — a
-> retry loop on prod can lock the hostname out for a week.
+7. **cert-manager issues automatically** from the Ingress annotation. Watch the chain top-down — the
+   lowest object present shows where it stalled:
 
-**Verify.**
+   ```powershell
+   kubectl get certificate -n antkart
+   kubectl get certificaterequest,order,challenge -n antkart
+   ```
 
-```powershell
-kubectl get certificate -n antkart                 # READY = True
-curl https://<env hostname>/health/live            # 200 over trusted TLS (use -k on staging)
-```
+8. **Verify on staging** (untrusted root, so `-k`):
 
-**If it fails.** Describe the objects in dependency order — `Certificate`, then `CertificateRequest`,
-then `Order`:
+   ```powershell
+   curl.exe -k -s -o NUL -w "%{http_code}" https://<host>/health/live
+   ```
 
-```powershell
-kubectl describe certificate -n antkart <name>
-kubectl describe certificaterequest -n antkart
-kubectl describe order -n antkart
-```
+9. **Switch to production.** Edit the Argo Application's `clusterIssuer` parameter to `letsencrypt-prod`,
+   commit, then `kubectl apply` it — **Argo does NOT watch its own Application manifest**. Delete the
+   old TLS secret so cert-manager issues fresh. Verify **without** `-k` — a 200 can only come from a
+   publicly trusted certificate:
 
-A stuck `Order` almost always means DNS is not yet resolving to the ingress IP (step 4) or the
-HTTP-01 challenge path is not reachable.
+   ```powershell
+   curl.exe -s -o NUL -w "%{http_code}" https://<host>/health/live
+   ```
+
+> **Start on staging** to debug the chain without spending the production rate limit — Let's Encrypt
+> allows only **5 duplicate certificates per hostname per 168 hours**. Switch to `letsencrypt-prod`
+> (step 9) only once staging returns `200`.
 
 ### 5.8 ⚠️ UNVERIFIED — CD workflows targeting this environment
 
@@ -1411,6 +1461,18 @@ any credential subject — align the workflow declaration with the `github-oidc`
 
 > An ordered sequence from cluster-green to Postman-green over HTTPS. **All ⚠️ UNVERIFIED** — written
 > from the repo, to be proven on the first real build. Each step has its own Verify.
+
+> **Smoke test first.** Three curls prove routing, dependencies and the auth boundary before spending
+> time on OAuth:
+>
+> ```powershell
+> curl.exe -s -o NUL -w "live:  %{http_code}`n" https://<host>/health/live
+> curl.exe -s -o NUL -w "ready: %{http_code}`n" https://<host>/health/ready
+> curl.exe -s -o NUL -w "no-token: %{http_code}`n" https://<host>/gateway/products
+> ```
+>
+> Expect 200, 200, and **401**. The 401 is a PASS — it proves Entra validation is active. A 200 there
+> would mean the gateway is not enforcing authentication.
 
 ### 6.1 ⚠️ UNVERIFIED — Pods healthy
 
@@ -1465,6 +1527,20 @@ Change for the new environment:
 | `entraClientId` | environment value | the **public-client** app-registration id for this environment |
 | **scope** | collection Authorization tab | `api://antkart-api-dev/access_as_user` → `api://antkart-api-<env>/access_as_user` (the API's App ID URI — from the `app-registration` unit output) |
 | `razorpayKeySecret` | environment value | from the new environment's Key Vault |
+
+> Pointing the collection at a new environment is not just the base URL:
+>
+> | Setting | Location | Change |
+> |---|---|---|
+> | `baseUrl` | collection variable | the new environment's hostname |
+> | `entraClientId` | environment variable | the new environment's **Postman client** app id, not the API app id |
+> | `scope` | collection Authorization tab | `api://antkart-api-<env>/access_as_user openid profile offline_access` |
+> | `entraTenantId` | collection variable | unchanged — same tenant |
+>
+> The scope is hardcoded in the auth configuration rather than templated, so it is the easiest to miss.
+> Leave it and Entra issues a token audienced for the source environment's API; the new gateway rejects
+> it with a 401 that looks like a broken login. Clear cookies and request a new token after changing it
+> — Postman caches tokens.
 
 ### 6.5 ⚠️ UNVERIFIED — Run the collection
 
@@ -1595,6 +1671,10 @@ az storage container delete --name $STATE_CONTAINER --account-name $STATE_SA --a
 | Pods crash-loop with a Key Vault 403 naming the WRONG vault | `KeyVault:Uri` defaults to the source environment in appsettings.json and is not overridden in Helm values | Add `KeyVault__Uri` to the new environment's values for every service |
 | Secret stored truncated; shell reports `'x' is not recognized as an internal or external command` | Windows `az` wrapper splits the value at `&` | Use `--file` with a no-BOM UTF-8 file, not `--value` |
 | `az resource invoke-action --action listKeys` returns `Not Found` for Managed Redis | Keys live on the `databases/default` sub-resource, not the cluster | Use the Terraform `connection_string` output, or `az rest` against `.../databases/default/listKeys` |
+| ApplicationSet CRD fails with `metadata.annotations: Too long` | Client-side apply stores the manifest in an annotation exceeding 262144 bytes | Install Argo CD with `kubectl apply --server-side` |
+| `conflict with "kubectl-client-side-apply"` on server-side apply | The two apply modes use different field managers | Add `--force-conflicts` when the values are identical |
+| Pods `ImagePullBackOff` in a new environment | The new registry is empty, or `image.registry` still points at the source registry | Import the images (5.4) and set `image.registry` per environment (5.3) |
+| Argo Application stuck `Progressing` with all pods Running | The gateway's Ingress has no address because no ingress controller is installed | Install ingress-nginx (5.7) |
 
 ## Appendix C — What this runbook does not yet cover
 
