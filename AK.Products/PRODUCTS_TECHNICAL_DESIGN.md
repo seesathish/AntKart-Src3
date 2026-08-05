@@ -138,7 +138,7 @@ graph TB
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#888888', 'edgeLabelBackground': '#00000000'}}}%%
-graph LR
+graph TD
     classDef api fill:#4A90D9,stroke:#2471A3,color:#fff
     classDef app fill:#27AE60,stroke:#1E8449,color:#fff
     classDef domain fill:#E67E22,stroke:#D35400,color:#fff
