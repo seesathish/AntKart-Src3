@@ -78,7 +78,7 @@ disappointment.
 - **Plan before apply.** `terragrunt plan` on every unit before the first `apply` of a wave.
 - **Stop what you start.** AKS and PostgreSQL are the expensive resources. Phase 7 is teardown.
 - **One wave at a time.** Do not run `run-all apply` across the whole tree on a first build.
-- **`⚠️ UNVERIFIED`** marks a step written from the repository but not yet executed against a live cluster. Treat it as a starting point, verify the result, and remove the marker once it is proven. Phases 0-4 and sections 5.1-5.7 carry no markers — they have been run end to end. Section 5.8 and all of Phase 6 remain marked, pending their first run.
+- **`⚠️ UNVERIFIED`** marks a step written from the repository but not yet executed against a live cluster. Treat it as a starting point, verify the result, and remove the marker once it is proven. Phases 0-4 and 6, and sections 5.1-5.7, carry no markers — they have been run end to end. Only section 5.8 (CD promotion) remains marked — it is still unbuilt.
 
 ### 0.4 The five ideas behind every command in this runbook
 
@@ -993,6 +993,12 @@ Any `len=0` means a value did not resolve — fix it before seeding.
 > This is the third form of the same Windows wrapper problem in this runbook, alongside KQL quoting and
 > JMESPath parentheses. When in doubt, prefer `--file` for every secret.
 
+> **`$pid` and other automatic variables fail silently.** PowerShell reserves `$pid`, `$host`, `$args`,
+> `$input`, `$error` and `$matches`. Assigning to one raises `Cannot overwrite variable PID because it
+> is read-only or constant` — but in a loop the error scrolls past and the ORIGINAL value is used
+> downstream. In this build that produced `The Principal ID '22548' is not valid` — 22548 being the
+> shell's process id. Use descriptive names such as `$principalId`.
+
 **Step 4 — seed the eight secrets.** Six built above from Azure resources, plus the two Razorpay keys
 copied from the source environment (same sandbox account). Seed every secret through a no-BOM file so a
 value containing `&` is never mangled:
@@ -1072,10 +1078,10 @@ kubectl get namespaces
 ## Phase 5 — GitOps and CD (session two)
 
 > Takes a provisioned-but-empty cluster (end of Phase 4) to all six services running and reconciled
-> by Argo CD. **Sections 5.1–5.7 have now been run end to end against a real QA build** (which ended
-> with a trusted Let's Encrypt production certificate serving `https://qa.antkart.in`); **section 5.8
-> and all of Phase 6 remain `⚠️ UNVERIFIED`.** Each section follows the house pattern:
-> **Understand → Execute → Verify → If it fails.**
+> by Argo CD. **Sections 5.1–5.7 and all of Phase 6 have now been run end to end against a real QA
+> build** (which ended with the full Postman saga passing over HTTPS at `https://qa.antkart.in`); only
+> **section 5.8 remains `⚠️ UNVERIFIED`** — CD promotion is still unbuilt. Each section follows the
+> house pattern: **Understand → Execute → Verify → If it fails.**
 
 ### 5.0 Decisions to make before starting
 
@@ -1258,6 +1264,37 @@ helm template ak-products deploy/helm/antkart-service -f <new-env values path>\p
 means that key is missing. A pod crash-looping with a **403 on `kv-antkart-dev`** means `KeyVault__Uri`
 was not overridden — the critical gap above.
 
+> **Argo can report `Synced` while pods run stale configuration.**
+>
+> The chart renders `.Values.env` into a ConfigMap (`templates/configmap-env.yaml`) and the Deployment
+> consumes it with `envFrom.configMapRef`. Changing a value in Git therefore changes the ConfigMap —
+> but leaves the Deployment's pod template byte-identical. Kubernetes has no reason to roll the pods,
+> so they keep the values they read at startup.
+>
+> The symptom is confusing because everything reports healthy:
+> - `kubectl get application` shows `Synced` / `Healthy`
+> - `.status.sync.revision` matches the Git HEAD exactly
+> - the ConfigMap holds the NEW value
+> - `kubectl exec ... printenv` inside the pod shows the OLD value
+>
+> Diagnose by comparing the two directly:
+> ```powershell
+> kubectl get configmap <svc>-env -n antkart -o jsonpath="{.data.<KEY>}"
+> kubectl exec -n antkart deploy/<svc> -- printenv | Select-String "<KEY>"
+> ```
+> A mismatch confirms it. Force the roll:
+> ```powershell
+> kubectl rollout restart deploy/<svc> -n antkart
+> ```
+>
+> **The chart-level fix** is a checksum annotation on the pod template, which makes the template change
+> whenever the ConfigMap does:
+> ```yaml
+> annotations:
+>   checksum/config: {{ include (print $.Template.BasePath "/configmap-env.yaml") . | sha256sum }}
+> ```
+> Until that is added, every environment has silent config drift that reports healthy.
+
 ### 5.4 Container registry — seed images and confirm access
 
 > A new environment's registry is empty, and CD does not target it yet (5.8). Import the images the
@@ -1338,6 +1375,48 @@ All six show `Synced` / `Healthy`.
 **If it fails.** Argo CD does **not** auto-retry a failed sync for the same Git revision — sync it
 manually (`argocd app sync <name>` or the UI) after fixing the cause. An `OutOfSync`/`Degraded` app
 on a first build is almost always missing secrets (5.6) → `CrashLoopBackOff`.
+
+> **`Bus start faulted` with a 401 on `CreateOrUpdateSubscription`.**
+>
+> MassTransit reconciles its Service Bus topology at startup — creating or updating subscriptions and
+> rules — which is a MANAGEMENT-plane operation. `Azure Service Bus Data Sender` and `Data Receiver`
+> are data-plane roles and do not permit it, so the bus faults even when Terraform has already created
+> the subscriptions:
+>
+> ```
+> Status: 401 (SubCode=40100: Unauthorized : Unauthorized access for
+> 'CreateOrUpdateSubscription' operation on endpoint
+> sb://<ns>.servicebus.windows.net/integration-events/Subscriptions/<svc>)
+> ```
+>
+> The failure is a WARNING, not a crash — pods stay `Running` and `Healthy` while messaging is broken.
+> It will not show up in `kubectl get pods`.
+>
+> Grant `Azure Service Bus Data Owner` at the namespace scope to the identities that use the bus
+> (products, cart, order, payments — gateway and discount have no ServiceBus configuration):
+>
+> ```powershell
+> $sbScope = az servicebus namespace show -g $RG -n $SB --query id -o tsv
+> foreach ($svc in @("products","cart","order","payments")) {
+>   $principalId = az identity show -g $RG -n "id-ak-$svc-$ENV" --query principalId -o tsv
+>   az role assignment create --assignee-object-id $principalId `
+>     --assignee-principal-type ServicePrincipal `
+>     --role "Azure Service Bus Data Owner" --scope $sbScope --output none
+> }
+> ```
+>
+> Note this uses **principalId**, not clientId — role assignments take the principal.
+>
+> Wait ~2 minutes, restart the four deployments, then confirm:
+> ```powershell
+> kubectl logs -n antkart deploy/ak-products --tail=50 | Select-String "Bus start|faulted|Unauthorized"
+> ```
+> No output is the pass.
+>
+> **ADR-worthy trade-off.** Data Owner supersedes Sender and Receiver and lets a compromised service
+> reshape the messaging topology. The stricter alternative is to keep the least-privilege pair and
+> pre-create every subscription and rule in Terraform, at the cost of MassTransit no longer managing
+> its own topology. Record whichever is chosen and why.
 
 ### 5.6 Secret seeding
 
@@ -1459,90 +1538,75 @@ any credential subject — align the workflow declaration with the `github-oidc`
 
 ## Phase 6 — End-to-end verification
 
-> An ordered sequence from cluster-green to Postman-green over HTTPS. **All ⚠️ UNVERIFIED** — written
-> from the repo, to be proven on the first real build. Each step has its own Verify.
+> The ordered sequence that took the QA environment to a green Postman run over HTTPS at
+> `https://qa.antkart.in`. Each step has its own verification.
 
-> **Smoke test first.** Three curls prove routing, dependencies and the auth boundary before spending
-> time on OAuth:
->
-> ```powershell
-> curl.exe -s -o NUL -w "live:  %{http_code}`n" https://<host>/health/live
-> curl.exe -s -o NUL -w "ready: %{http_code}`n" https://<host>/health/ready
-> curl.exe -s -o NUL -w "no-token: %{http_code}`n" https://<host>/gateway/products
-> ```
->
-> Expect 200, 200, and **401**. The 401 is a PASS — it proves Entra validation is active. A 200 there
-> would mean the gateway is not enforcing authentication.
+### 6.1 Smoke test with curl
 
-### 6.1 ⚠️ UNVERIFIED — Pods healthy
+Three curls prove routing, dependencies and the auth boundary before spending time on OAuth:
 
 ```powershell
-kubectl get pods -n antkart -o wide
+curl.exe -s -o NUL -w "live:  %{http_code}`n" https://<host>/health/live
+curl.exe -s -o NUL -w "ready: %{http_code}`n" https://<host>/health/ready
+curl.exe -s -o NUL -w "no-token: %{http_code}`n" https://<host>/gateway/products
 ```
 
-**Verify.** All six `ak-*` pods `Running` with `RESTARTS 0` (products runs `replicaCount: 2`, so
-expect two of its pods). A restart count climbing is a boot problem — usually missing secrets (5.6).
+**Verify.** Expect 200, 200, and **401**. The 401 is a PASS — it proves Entra validation is active. A
+200 on the last one would mean the gateway is not enforcing authentication.
 
-### 6.2 ⚠️ UNVERIFIED — Workload identity working
+### 6.2 Confirm the environment's own configuration reached the pods
 
-A pod must read a Key Vault secret with no stored credential — the whole point of workload identity.
+A `Synced` Application does not guarantee the running pods hold *this* environment's values — a
+ConfigMap change alone does not roll the pods (see the callout after 5.3). Read the values from inside
+a pod:
 
 ```powershell
-kubectl logs -n antkart deploy/ak-products | Select-String -Pattern "KeyVault|DefaultAzureCredential|AADSTS|Started"
+kubectl exec -n antkart deploy/ak-gateway -- printenv | Select-String "Entra"
 ```
 
-**Verify.** Startup logs show Key Vault loaded and Kestrel started, with no `DefaultAzureCredential`
-/ `AADSTS` errors. (A service cannot pass its readiness probe without its secrets, so a `Running`,
-`Ready` pod is already strong evidence.)
+**Verify.** Expect the **new** environment's `Entra__Audience` and `Entra__ClientId`, not the source
+environment's. A mismatch means the ConfigMap changed but the pods were not rolled —
+`kubectl rollout restart deploy/ak-gateway -n antkart`.
 
-**If it fails.** An `AADSTS70021` subject mismatch (5.2) or a missing AcrPull/secret appears in the
-logs. `kubectl describe pod -n antkart <pod>` shows `ImagePullBackOff` (5.4) vs `CrashLoopBackOff`
-(5.6).
-
-### 6.3 ⚠️ UNVERIFIED — Gateway reachable over HTTPS
-
-```powershell
-curl https://<env hostname>/health/live
-curl https://<env hostname>/gateway/health/products
-```
-
-**Verify.** Both return `200` over trusted TLS. `/gateway/health/{products|cart|orders|payments}` are
-the gateway's health passthrough routes (defined in `deploy/helm/values/gateway.yaml`); a 200 through
-one proves the ingress → gateway → downstream path end to end.
-
-### 6.4 ⚠️ UNVERIFIED — Postman environment for this environment
+### 6.3 Point Postman at the new environment
 
 The collection `AntKart-Cloud-E2E-Saga-Positive.postman_collection.json` uses collection variables
 `baseUrl` and `entraTenantId`, and expects two environment values `entraClientId` and
-`razorpayKeySecret`. Its collection-level OAuth 2.0 (Authorization Code + PKCE) authorizes against
-`https://login.microsoftonline.com/{{entraTenantId}}/oauth2/v2.0/authorize` with
-`clientId = {{entraClientId}}` and `scope = api://antkart-api-dev/access_as_user openid profile offline_access`.
+`razorpayKeySecret`. Three things must change for a new environment:
 
-Change for the new environment:
-
-| Variable | Where | Change |
+| Setting | Location | Change |
 |---|---|---|
-| `baseUrl` | collection variable | → `https://<env hostname>` (the new gateway HTTPS URL) |
-| `entraTenantId` | collection variable | same tenant `4cacc56a-…` (change only for a different tenant) |
-| `entraClientId` | environment value | the **public-client** app-registration id for this environment |
-| **scope** | collection Authorization tab | `api://antkart-api-dev/access_as_user` → `api://antkart-api-<env>/access_as_user` (the API's App ID URI — from the `app-registration` unit output) |
-| `razorpayKeySecret` | environment value | from the new environment's Key Vault |
+| `baseUrl` | collection variable | → `https://<host>` (the new gateway HTTPS URL) |
+| `entraClientId` | environment value | the new environment's **public-client** app-registration id, not the API app id |
+| **scope** | collection Authorization tab | `api://antkart-api-<env>/access_as_user openid profile offline_access` |
+| `entraTenantId` | collection variable | unchanged — same tenant |
 
-> Pointing the collection at a new environment is not just the base URL:
->
-> | Setting | Location | Change |
-> |---|---|---|
-> | `baseUrl` | collection variable | the new environment's hostname |
-> | `entraClientId` | environment variable | the new environment's **Postman client** app id, not the API app id |
-> | `scope` | collection Authorization tab | `api://antkart-api-<env>/access_as_user openid profile offline_access` |
-> | `entraTenantId` | collection variable | unchanged — same tenant |
->
-> The scope is hardcoded in the auth configuration rather than templated, so it is the easiest to miss.
-> Leave it and Entra issues a token audienced for the source environment's API; the new gateway rejects
-> it with a 401 that looks like a broken login. Clear cookies and request a new token after changing it
-> — Postman caches tokens.
+The **scope** is hardcoded in the auth configuration rather than templated, so it is the easiest to
+miss. Leave it and Entra issues a token audienced for the source environment's API; the new gateway
+rejects it with a 401 that looks like a broken login. Clear cookies and request a new token after
+changing it — Postman caches tokens.
 
-### 6.5 ⚠️ UNVERIFIED — Run the collection
+> Postman variables have separate **Initial** and **Current** values. Editing Initial alone changes
+> nothing at runtime — Current is what requests use. Set both and save the collection. A request timing
+> out rather than returning 401 usually means the old base URL is still in Current and points at a
+> stopped environment.
+
+### 6.4 Seed the catalogue
+
+The products service seeds only when `Seeding__RunOnStartup` is `"true"`; a new environment's data
+store is empty. Set it in the environment's values file, push, let Argo sync, then **restart the
+deployment** — the ConfigMap change alone will not roll the pods (5.3):
+
+```powershell
+# after setting Seeding__RunOnStartup: "true" in the values file and letting Argo sync
+kubectl rollout restart deploy/ak-products -n antkart
+kubectl logs -n antkart deploy/ak-products --tail=100 | Select-String "seeded"
+```
+
+**Verify.** Expect `Database seeded with 300 sample products.` **Set `Seeding__RunOnStartup` back to
+`"false"` and push once seeding has completed**, or every pod restart re-seeds.
+
+### 6.5 Run the collection
 
 Run with the **Collection Runner**, *Delay between requests* = 8000 ms (the saga is asynchronous and
 steps 07/12 self-retry).
@@ -1550,7 +1614,7 @@ steps 07/12 self-retry).
 **Verify.** All 12 ordered requests pass and the order reaches `Paid` — the payment-success journey
 end to end against the new environment through HTTPS.
 
-### 6.6 ⚠️ UNVERIFIED — Telemetry
+### 6.6 Telemetry
 
 ```powershell
 $WS = az monitor log-analytics workspace show -g $RG -n $LOG --query "customerId" -o tsv
@@ -1675,6 +1739,9 @@ az storage container delete --name $STATE_CONTAINER --account-name $STATE_SA --a
 | `conflict with "kubectl-client-side-apply"` on server-side apply | The two apply modes use different field managers | Add `--force-conflicts` when the values are identical |
 | Pods `ImagePullBackOff` in a new environment | The new registry is empty, or `image.registry` still points at the source registry | Import the images (5.4) and set `image.registry` per environment (5.3) |
 | Argo Application stuck `Progressing` with all pods Running | The gateway's Ingress has no address because no ingress controller is installed | Install ingress-nginx (5.7) |
+| Argo `Synced`, revision matches HEAD, pods still on old config | ConfigMap changed; pod template did not, so no rollout | `kubectl rollout restart deploy/<svc>`; add a `checksum/config` annotation to the chart |
+| `Bus start faulted` 401 `CreateOrUpdateSubscription`, pods still Healthy | MassTransit needs management-plane rights; Sender/Receiver are data-plane only | Grant `Azure Service Bus Data Owner` at namespace scope |
+| `The Principal ID '<n>' is not valid`, `<n>` being a small number | Assigned to a reserved PowerShell variable (`$pid`); the read-only error scrolled past and the shell's value was used | Use a descriptive variable name such as `$principalId` |
 
 ## Appendix C — What this runbook does not yet cover
 
