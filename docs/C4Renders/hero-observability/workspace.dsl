@@ -2,11 +2,21 @@
  * AntKart — Observability (hero diagram)
  *
  * Question: how do you know it is working?
- * Sourced from docs/development/5-observability.md, ADR-013 and docs/design/OBSERVABILITY.md.
- * MOST OF THIS IS NOT BUILT YET. Only the Serilog → Console → Application Insights →
- * Log Analytics path is delivered. OpenTelemetry tracing, Prometheus metrics and
- * Grafana dashboards are PLANNED — tagged "Planned" and styled distinctly. Do not
- * read the planned elements as if they exist.
+ *
+ * Each service emits two kinds of telemetry, which travel by different routes and land
+ * in the same Log Analytics workspace:
+ *
+ *   LOGS    Serilog writes one JSON line per event to stdout. The Azure Monitor agent
+ *           runs on every node, reads container stdout, and ships it to the workspace,
+ *           where it lands in the ContainerLog table.
+ *
+ *   TRACES  The OpenTelemetry SDK records a span for every request, database call and
+ *           message. Spans are exported to Application Insights, which is workspace-based,
+ *           so they land in the AppRequests and AppDependencies tables of the same workspace.
+ *
+ * Because both arrive in one workspace, a single KQL query can join a log line to the
+ * span it belongs to: Serilog writes TraceId onto every line, and Application Insights
+ * records the same value as OperationId.
  *
  * RENDER
  *   docker run -it --rm -p 8080:8080 \
@@ -15,9 +25,9 @@
  *   Open http://localhost:8080. Edit, save, press F5. Never restart the container.
  *
  * TWO-PHASE WORKFLOW
- *   Phase one: autoLayout is ON to get the left-to-right flow.
- *   Phase two: COMMENT OUT the autoLayout line, refresh, then hand-arrange the
- *              delivered path along the top and the planned path below it.
+ *   Phase one: autoLayout is ON to get the two-lane left-to-right flow.
+ *   Phase two: COMMENT OUT the autoLayout line, refresh, then hand-arrange — logs lane
+ *              along the top, traces lane below it, both meeting at the workspace.
  *
  * IMPORTANT — autoLayout WARNING
  *   autoLayout recalculates on every load and DISCARDS hand placement. Once you start
@@ -25,68 +35,58 @@
  *   workspace.json (generated — do not hand-edit; .structurizr/ is gitignored cache).
  */
 
-workspace "AntKart — observability" "How you know it is working: structured logging delivered, tracing and metrics planned" {
+workspace "AntKart — observability" "Two telemetry routes from the same services, landing in one queryable workspace" {
 
     !identifiers hierarchical
 
     model {
 
-        group "Delivered" {
-            services = softwareSystem "AntKart services + Functions" "Every service and Function emits Serilog structured logs, each request carrying an X-Correlation-Id." {
-                tags "Service"
-            }
-            console = softwareSystem "Console sink" "The transport — the console stream, with no code-side sink credentials." {
+        services = softwareSystem "AntKart services" "Six .NET 9 services on AKS." {
+            tags "Service"
+        }
+
+        group "Logs" {
+            serilog = softwareSystem "Serilog" "Writes each log event as a single JSON line to stdout, carrying TraceId, SpanId, CorrelationId, ServiceName and Environment." {
                 tags "Infra"
             }
-            appInsights = softwareSystem "Application Insights" "Collects the console stream in the cloud." {
+            amaAgent = softwareSystem "Azure Monitor agent" "Runs on every node. Reads container stdout and ships it to the workspace." {
+                tags "Infra"
+            }
+        }
+
+        group "Traces" {
+            otel = softwareSystem "OpenTelemetry SDK" "Records a span for every incoming request, outgoing HTTP and gRPC call, message publish and consume, and database query." {
                 tags "Managed"
             }
-            logAnalytics = softwareSystem "Log Analytics" "Central log store, queried with KQL. No Elasticsearch/Kibana." {
+            appInsights = softwareSystem "Application Insights" "Receives the spans and writes them to its workspace." {
                 tags "Managed"
             }
         }
 
-        group "Planned" {
-            otel = softwareSystem "OpenTelemetry tracing" "Planned — distributed traces. Not yet wired." {
-                tags "Planned"
-            }
-            prometheus = softwareSystem "Prometheus metrics" "Planned — metric scraping. Not yet wired." {
-                tags "Planned"
-            }
-            grafana = softwareSystem "Grafana dashboards" "Planned — metric dashboards. Not yet wired." {
-                tags "Planned"
-            }
+        logAnalytics = softwareSystem "Log Analytics workspace" "Stores both. ContainerLog holds the log lines; AppRequests and AppDependencies hold the spans. Queried with KQL. A log line's TraceId equals a span's OperationId, so the two can be joined." {
+            tags "Datastore"
         }
 
-        // Delivered path (solid).
-        services -> console "Serilog structured logs"
-        console -> appInsights "Collected by"
-        appInsights -> logAnalytics "Backed by (KQL)"
+        // Logs route.
+        services -> serilog "Log events"
+        serilog -> amaAgent "JSON lines on stdout"
+        amaAgent -> logAnalytics "Writes ContainerLog"
 
-        // Planned paths (dashed).
-        services -> otel "Traces (planned)" {
-            tags "Planned"
-        }
-        otel -> appInsights "Exported to (planned)" {
-            tags "Planned"
-        }
-        services -> prometheus "Metrics scraped (planned)" {
-            tags "Planned"
-        }
-        prometheus -> grafana "Visualised in (planned)" {
-            tags "Planned"
-        }
+        // Traces route.
+        services -> otel "Requests, calls, queries"
+        otel -> appInsights "Exports spans"
+        appInsights -> logAnalytics "Writes AppRequests and AppDependencies"
     }
 
     views {
 
         themes https://static.structurizr.com/themes/microsoft-azure-2021.01.26/theme.json
 
-        systemLandscape "Observability" "How do you know it is working? Serilog to Azure Monitor is delivered; tracing and metrics are planned." {
+        systemLandscape "Observability" "Logs and traces leave the same services by different routes and meet in one workspace, where a shared trace identifier joins them." {
             include *
             // PHASE ONE: autoLayout is ON. Before hand-arranging, COMMENT OUT the next
             // line, refresh, then drag. Leave it commented once you start dragging.
-            autoLayout lr 300 150
+            autoLayout lr 120 110
         }
 
         styles {

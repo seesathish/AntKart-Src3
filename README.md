@@ -96,10 +96,12 @@ The developer opens a pull request; from there delivery is automatic and pull-ba
 
 ## Observability
 
-> **Diagram: Observability** — _not yet drawn_
-> **Must show:** Serilog structured logging and OpenTelemetry traces feeding Log Analytics and Application Insights. Mark clearly what is delivered and what is planned. Answers "how do you know it is working".
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/C4Renders/renders/Observability-dark.svg">
+  <img alt="AntKart observability: six services emit Serilog JSON log lines to stdout, collected from every node by the Azure Monitor agent into the ContainerLog table, and OpenTelemetry spans exported through Application Insights into the AppRequests and AppDependencies tables — both landing in one Log Analytics workspace where a shared trace identifier joins a log line to the span it belongs to" src="docs/C4Renders/renders/Observability.svg">
+</picture>
 
-Structured logging and distributed tracing are delivered: every service and Function emits Serilog JSON logs to the console (collected by the AKS OMS agent into Log Analytics) and exports OpenTelemetry traces to Application Insights. **Metrics are not currently collected** — a self-hosted Prometheus/Grafana stack was built and then deliberately removed in favour of a managed platform (Datadog, under evaluation); see [ADR-025](docs/adr/ADR-025-observability-architecture.md).
+Every service emits two kinds of telemetry by two routes. Serilog writes one JSON line per event to stdout, carrying the trace and correlation identifiers; the Azure Monitor agent collects it from each node into `ContainerLog`. The OpenTelemetry SDK records a span for every request, HTTP and gRPC call, message, and database query, exporting through Application Insights into `AppRequests` and `AppDependencies`. Both land in the same Log Analytics workspace, so one KQL query joins a log line to its span — a log's `TraceId` is a span's `OperationId`.
 
 → [Observability](docs/development/5-observability.md)
 

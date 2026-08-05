@@ -1,0 +1,263 @@
+{
+  "configuration" : { },
+  "description" : "Two telemetry routes from the same services, landing in one queryable workspace",
+  "documentation" : { },
+  "id" : 1,
+  "lastModifiedDate" : "2026-08-05T18:26:37Z",
+  "model" : {
+    "softwareSystems" : [ {
+      "description" : "Six .NET 9 services on AKS.",
+      "documentation" : { },
+      "id" : "1",
+      "name" : "AntKart services",
+      "properties" : {
+        "structurizr.dsl.identifier" : "services"
+      },
+      "relationships" : [ {
+        "description" : "Log events",
+        "destinationId" : "2",
+        "id" : "7",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Requests, calls, queries",
+        "destinationId" : "4",
+        "id" : "10",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,Service"
+    }, {
+      "description" : "Writes each log event as a single JSON line to stdout, carrying TraceId, SpanId, CorrelationId, ServiceName and Environment.",
+      "documentation" : { },
+      "group" : "Logs",
+      "id" : "2",
+      "name" : "Serilog",
+      "properties" : {
+        "structurizr.dsl.identifier" : "serilog"
+      },
+      "relationships" : [ {
+        "description" : "JSON lines on stdout",
+        "destinationId" : "3",
+        "id" : "8",
+        "sourceId" : "2",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,Infra"
+    }, {
+      "description" : "Runs on every node. Reads container stdout and ships it to the workspace.",
+      "documentation" : { },
+      "group" : "Logs",
+      "id" : "3",
+      "name" : "Azure Monitor agent",
+      "properties" : {
+        "structurizr.dsl.identifier" : "amaAgent"
+      },
+      "relationships" : [ {
+        "description" : "Writes ContainerLog",
+        "destinationId" : "6",
+        "id" : "9",
+        "sourceId" : "3",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,Infra"
+    }, {
+      "description" : "Records a span for every incoming request, outgoing HTTP and gRPC call, message publish and consume, and database query.",
+      "documentation" : { },
+      "group" : "Traces",
+      "id" : "4",
+      "name" : "OpenTelemetry SDK",
+      "properties" : {
+        "structurizr.dsl.identifier" : "otel"
+      },
+      "relationships" : [ {
+        "description" : "Exports spans",
+        "destinationId" : "5",
+        "id" : "11",
+        "sourceId" : "4",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,Managed"
+    }, {
+      "description" : "Receives the spans and writes them to its workspace.",
+      "documentation" : { },
+      "group" : "Traces",
+      "id" : "5",
+      "name" : "Application Insights",
+      "properties" : {
+        "structurizr.dsl.identifier" : "appInsights"
+      },
+      "relationships" : [ {
+        "description" : "Writes AppRequests and AppDependencies",
+        "destinationId" : "6",
+        "id" : "12",
+        "sourceId" : "5",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,Managed"
+    }, {
+      "description" : "Stores both. ContainerLog holds the log lines; AppRequests and AppDependencies hold the spans. Queried with KQL. A log line's TraceId equals a span's OperationId, so the two can be joined.",
+      "documentation" : { },
+      "id" : "6",
+      "name" : "Log Analytics workspace",
+      "properties" : {
+        "structurizr.dsl.identifier" : "logAnalytics"
+      },
+      "tags" : "Element,Software System,Datastore"
+    } ]
+  },
+  "name" : "AntKart — observability",
+  "properties" : {
+    "structurizr.inspection.error" : "7",
+    "structurizr.dsl" : "LyoKICogQW50S2FydCDigJQgT2JzZXJ2YWJpbGl0eSAoaGVybyBkaWFncmFtKQogKgogKiBRdWVzdGlvbjogaG93IGRvIHlvdSBrbm93IGl0IGlzIHdvcmtpbmc/CiAqCiAqIEVhY2ggc2VydmljZSBlbWl0cyB0d28ga2luZHMgb2YgdGVsZW1ldHJ5LCB3aGljaCB0cmF2ZWwgYnkgZGlmZmVyZW50IHJvdXRlcyBhbmQgbGFuZAogKiBpbiB0aGUgc2FtZSBMb2cgQW5hbHl0aWNzIHdvcmtzcGFjZToKICoKICogICBMT0dTICAgIFNlcmlsb2cgd3JpdGVzIG9uZSBKU09OIGxpbmUgcGVyIGV2ZW50IHRvIHN0ZG91dC4gVGhlIEF6dXJlIE1vbml0b3IgYWdlbnQKICogICAgICAgICAgIHJ1bnMgb24gZXZlcnkgbm9kZSwgcmVhZHMgY29udGFpbmVyIHN0ZG91dCwgYW5kIHNoaXBzIGl0IHRvIHRoZSB3b3Jrc3BhY2UsCiAqICAgICAgICAgICB3aGVyZSBpdCBsYW5kcyBpbiB0aGUgQ29udGFpbmVyTG9nIHRhYmxlLgogKgogKiAgIFRSQUNFUyAgVGhlIE9wZW5UZWxlbWV0cnkgU0RLIHJlY29yZHMgYSBzcGFuIGZvciBldmVyeSByZXF1ZXN0LCBkYXRhYmFzZSBjYWxsIGFuZAogKiAgICAgICAgICAgbWVzc2FnZS4gU3BhbnMgYXJlIGV4cG9ydGVkIHRvIEFwcGxpY2F0aW9uIEluc2lnaHRzLCB3aGljaCBpcyB3b3Jrc3BhY2UtYmFzZWQsCiAqICAgICAgICAgICBzbyB0aGV5IGxhbmQgaW4gdGhlIEFwcFJlcXVlc3RzIGFuZCBBcHBEZXBlbmRlbmNpZXMgdGFibGVzIG9mIHRoZSBzYW1lIHdvcmtzcGFjZS4KICoKICogQmVjYXVzZSBib3RoIGFycml2ZSBpbiBvbmUgd29ya3NwYWNlLCBhIHNpbmdsZSBLUUwgcXVlcnkgY2FuIGpvaW4gYSBsb2cgbGluZSB0byB0aGUKICogc3BhbiBpdCBiZWxvbmdzIHRvOiBTZXJpbG9nIHdyaXRlcyBUcmFjZUlkIG9udG8gZXZlcnkgbGluZSwgYW5kIEFwcGxpY2F0aW9uIEluc2lnaHRzCiAqIHJlY29yZHMgdGhlIHNhbWUgdmFsdWUgYXMgT3BlcmF0aW9uSWQuCiAqCiAqIFJFTkRFUgogKiAgIGRvY2tlciBydW4gLWl0IC0tcm0gLXAgODA4MDo4MDgwIFwKICogICAgIC12ICJDOlxVc2Vyc1xzZWVzYVxPbmVEcml2ZVxEZXNrdG9wXEFudENhcnRcQW50S2FydC1TcmMzXGRvY3NcQzRSZW5kZXJzXGhlcm8tb2JzZXJ2YWJpbGl0eTovdXNyL2xvY2FsL3N0cnVjdHVyaXpyIiBcCiAqICAgICBzdHJ1Y3R1cml6ci9zdHJ1Y3R1cml6ciBsb2NhbAogKiAgIE9wZW4gaHR0cDovL2xvY2FsaG9zdDo4MDgwLiBFZGl0LCBzYXZlLCBwcmVzcyBGNS4gTmV2ZXIgcmVzdGFydCB0aGUgY29udGFpbmVyLgogKgogKiBUV08tUEhBU0UgV09SS0ZMT1cKICogICBQaGFzZSBvbmU6IGF1dG9MYXlvdXQgaXMgT04gdG8gZ2V0IHRoZSB0d28tbGFuZSBsZWZ0LXRvLXJpZ2h0IGZsb3cuCiAqICAgUGhhc2UgdHdvOiBDT01NRU5UIE9VVCB0aGUgYXV0b0xheW91dCBsaW5lLCByZWZyZXNoLCB0aGVuIGhhbmQtYXJyYW5nZSDigJQgbG9ncyBsYW5lCiAqICAgICAgICAgICAgICBhbG9uZyB0aGUgdG9wLCB0cmFjZXMgbGFuZSBiZWxvdyBpdCwgYm90aCBtZWV0aW5nIGF0IHRoZSB3b3Jrc3BhY2UuCiAqCiAqIElNUE9SVEFOVCDigJQgYXV0b0xheW91dCBXQVJOSU5HCiAqICAgYXV0b0xheW91dCByZWNhbGN1bGF0ZXMgb24gZXZlcnkgbG9hZCBhbmQgRElTQ0FSRFMgaGFuZCBwbGFjZW1lbnQuIE9uY2UgeW91IHN0YXJ0CiAqICAgZHJhZ2dpbmcsIGxlYXZlIGF1dG9MYXlvdXQgY29tbWVudGVkIG91dCBwZXJtYW5lbnRseS4gUGxhY2VtZW50IGF1dG9zYXZlcyBpbnRvCiAqICAgd29ya3NwYWNlLmpzb24gKGdlbmVyYXRlZCDigJQgZG8gbm90IGhhbmQtZWRpdDsgLnN0cnVjdHVyaXpyLyBpcyBnaXRpZ25vcmVkIGNhY2hlKS4KICovCgp3b3Jrc3BhY2UgIkFudEthcnQg4oCUIG9ic2VydmFiaWxpdHkiICJUd28gdGVsZW1ldHJ5IHJvdXRlcyBmcm9tIHRoZSBzYW1lIHNlcnZpY2VzLCBsYW5kaW5nIGluIG9uZSBxdWVyeWFibGUgd29ya3NwYWNlIiB7CgogICAgIWlkZW50aWZpZXJzIGhpZXJhcmNoaWNhbAoKICAgIG1vZGVsIHsKCiAgICAgICAgc2VydmljZXMgPSBzb2Z0d2FyZVN5c3RlbSAiQW50S2FydCBzZXJ2aWNlcyIgIlNpeCAuTkVUIDkgc2VydmljZXMgb24gQUtTLiIgewogICAgICAgICAgICB0YWdzICJTZXJ2aWNlIgogICAgICAgIH0KCiAgICAgICAgZ3JvdXAgIkxvZ3MiIHsKICAgICAgICAgICAgc2VyaWxvZyA9IHNvZnR3YXJlU3lzdGVtICJTZXJpbG9nIiAiV3JpdGVzIGVhY2ggbG9nIGV2ZW50IGFzIGEgc2luZ2xlIEpTT04gbGluZSB0byBzdGRvdXQsIGNhcnJ5aW5nIFRyYWNlSWQsIFNwYW5JZCwgQ29ycmVsYXRpb25JZCwgU2VydmljZU5hbWUgYW5kIEVudmlyb25tZW50LiIgewogICAgICAgICAgICAgICAgdGFncyAiSW5mcmEiCiAgICAgICAgICAgIH0KICAgICAgICAgICAgYW1hQWdlbnQgPSBzb2Z0d2FyZVN5c3RlbSAiQXp1cmUgTW9uaXRvciBhZ2VudCIgIlJ1bnMgb24gZXZlcnkgbm9kZS4gUmVhZHMgY29udGFpbmVyIHN0ZG91dCBhbmQgc2hpcHMgaXQgdG8gdGhlIHdvcmtzcGFjZS4iIHsKICAgICAgICAgICAgICAgIHRhZ3MgIkluZnJhIgogICAgICAgICAgICB9CiAgICAgICAgfQoKICAgICAgICBncm91cCAiVHJhY2VzIiB7CiAgICAgICAgICAgIG90ZWwgPSBzb2Z0d2FyZVN5c3RlbSAiT3BlblRlbGVtZXRyeSBTREsiICJSZWNvcmRzIGEgc3BhbiBmb3IgZXZlcnkgaW5jb21pbmcgcmVxdWVzdCwgb3V0Z29pbmcgSFRUUCBhbmQgZ1JQQyBjYWxsLCBtZXNzYWdlIHB1Ymxpc2ggYW5kIGNvbnN1bWUsIGFuZCBkYXRhYmFzZSBxdWVyeS4iIHsKICAgICAgICAgICAgICAgIHRhZ3MgIk1hbmFnZWQiCiAgICAgICAgICAgIH0KICAgICAgICAgICAgYXBwSW5zaWdodHMgPSBzb2Z0d2FyZVN5c3RlbSAiQXBwbGljYXRpb24gSW5zaWdodHMiICJSZWNlaXZlcyB0aGUgc3BhbnMgYW5kIHdyaXRlcyB0aGVtIHRvIGl0cyB3b3Jrc3BhY2UuIiB7CiAgICAgICAgICAgICAgICB0YWdzICJNYW5hZ2VkIgogICAgICAgICAgICB9CiAgICAgICAgfQoKICAgICAgICBsb2dBbmFseXRpY3MgPSBzb2Z0d2FyZVN5c3RlbSAiTG9nIEFuYWx5dGljcyB3b3Jrc3BhY2UiICJTdG9yZXMgYm90aC4gQ29udGFpbmVyTG9nIGhvbGRzIHRoZSBsb2cgbGluZXM7IEFwcFJlcXVlc3RzIGFuZCBBcHBEZXBlbmRlbmNpZXMgaG9sZCB0aGUgc3BhbnMuIFF1ZXJpZWQgd2l0aCBLUUwuIEEgbG9nIGxpbmUncyBUcmFjZUlkIGVxdWFscyBhIHNwYW4ncyBPcGVyYXRpb25JZCwgc28gdGhlIHR3byBjYW4gYmUgam9pbmVkLiIgewogICAgICAgICAgICB0YWdzICJEYXRhc3RvcmUiCiAgICAgICAgfQoKICAgICAgICAvLyBMb2dzIHJvdXRlLgogICAgICAgIHNlcnZpY2VzIC0+IHNlcmlsb2cgIkxvZyBldmVudHMiCiAgICAgICAgc2VyaWxvZyAtPiBhbWFBZ2VudCAiSlNPTiBsaW5lcyBvbiBzdGRvdXQiCiAgICAgICAgYW1hQWdlbnQgLT4gbG9nQW5hbHl0aWNzICJXcml0ZXMgQ29udGFpbmVyTG9nIgoKICAgICAgICAvLyBUcmFjZXMgcm91dGUuCiAgICAgICAgc2VydmljZXMgLT4gb3RlbCAiUmVxdWVzdHMsIGNhbGxzLCBxdWVyaWVzIgogICAgICAgIG90ZWwgLT4gYXBwSW5zaWdodHMgIkV4cG9ydHMgc3BhbnMiCiAgICAgICAgYXBwSW5zaWdodHMgLT4gbG9nQW5hbHl0aWNzICJXcml0ZXMgQXBwUmVxdWVzdHMgYW5kIEFwcERlcGVuZGVuY2llcyIKICAgIH0KCiAgICB2aWV3cyB7CgogICAgICAgIHRoZW1lcyBodHRwczovL3N0YXRpYy5zdHJ1Y3R1cml6ci5jb20vdGhlbWVzL21pY3Jvc29mdC1henVyZS0yMDIxLjAxLjI2L3RoZW1lLmpzb24KCiAgICAgICAgc3lzdGVtTGFuZHNjYXBlICJPYnNlcnZhYmlsaXR5IiAiTG9ncyBhbmQgdHJhY2VzIGxlYXZlIHRoZSBzYW1lIHNlcnZpY2VzIGJ5IGRpZmZlcmVudCByb3V0ZXMgYW5kIG1lZXQgaW4gb25lIHdvcmtzcGFjZSwgd2hlcmUgYSBzaGFyZWQgdHJhY2UgaWRlbnRpZmllciBqb2lucyB0aGVtLiIgewogICAgICAgICAgICBpbmNsdWRlICoKICAgICAgICAgICAgLy8gUEhBU0UgT05FOiBhdXRvTGF5b3V0IGlzIE9OLiBCZWZvcmUgaGFuZC1hcnJhbmdpbmcsIENPTU1FTlQgT1VUIHRoZSBuZXh0CiAgICAgICAgICAgIC8vIGxpbmUsIHJlZnJlc2gsIHRoZW4gZHJhZy4gTGVhdmUgaXQgY29tbWVudGVkIG9uY2UgeW91IHN0YXJ0IGRyYWdnaW5nLgogICAgICAgICAgICBhdXRvTGF5b3V0IGxyIDEyMCAxMTAKICAgICAgICB9CgogICAgICAgIHN0eWxlcyB7CiAgICAgICAgICAgIC8vIEhpZGUgZGVzY3JpcHRpb25zLiBLZWVwIG1ldGFkYXRhIOKAlCB0aGF0IGlzIHRoZSB0ZWNobm9sb2d5IGxpbmUuCiAgICAgICAgICAgIGVsZW1lbnQgIkVsZW1lbnQiIHsKICAgICAgICAgICAgICAgIGRlc2NyaXB0aW9uIHRydWUKICAgICAgICAgICAgICAgIG1ldGFkYXRhIHRydWUKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJHcm91cCIgewogICAgICAgICAgICAgICAgc3Ryb2tlV2lkdGggNAogICAgICAgICAgICAgICAgY29sb3IgIzVGNUU1QQogICAgICAgICAgICAgICAgZm9udFNpemUgMjQKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJQZXJzb24iIHsKICAgICAgICAgICAgICAgIHNoYXBlIFBlcnNvbgogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjNUY1RTVBCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgICAgICBmb250U2l6ZSAyNgogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIlNvZnR3YXJlIFN5c3RlbSIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjODg4NzgwCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiRXh0ZXJuYWwiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzg4ODc4MAogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIklkZW50aXR5IiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICNCQTc1MTcKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJNYW5hZ2VkIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICMzNzhBREQKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJTZXJ2aWNlIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICMxRDlFNzUKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgICAgIHNoYXBlIFJvdW5kZWRCb3gKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJTZXJ2ZXJsZXNzIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICMwRjZFNTYKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgICAgIHNoYXBlIFJvdW5kZWRCb3gKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJEYXRhc3RvcmUiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzE4NUZBNQogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgc2hhcGUgQ3lsaW5kZXIKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJFZGdlIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM3Rjc3REQKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgICAgIHNoYXBlIFJvdW5kZWRCb3gKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJDSUNEIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM2Mzk5MjIKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgICAgIHNoYXBlIFJvdW5kZWRCb3gKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJJbmZyYSIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjODg4NzgwCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiUGxhbm5lZCIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjNUY1RTVBCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgICAgICBib3JkZXIgZGFzaGVkCiAgICAgICAgICAgICAgICBzdHJva2VXaWR0aCAzCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiSXNzdWUiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgI0UyNEI0QQogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgYm9yZGVyIGRhc2hlZAogICAgICAgICAgICAgICAgc3Ryb2tlV2lkdGggMwogICAgICAgICAgICB9CiAgICAgICAgICAgIHJlbGF0aW9uc2hpcCAiUmVsYXRpb25zaGlwIiB7CiAgICAgICAgICAgICAgICBkYXNoZWQgZmFsc2UKICAgICAgICAgICAgICAgIHRoaWNrbmVzcyAyCiAgICAgICAgICAgICAgICBmb250U2l6ZSAyMgogICAgICAgICAgICAgICAgcm91dGluZyBPcnRob2dvbmFsCiAgICAgICAgICAgIH0KICAgICAgICAgICAgcmVsYXRpb25zaGlwICJQbGFubmVkIiB7CiAgICAgICAgICAgICAgICBkYXNoZWQgdHJ1ZQogICAgICAgICAgICAgICAgdGhpY2tuZXNzIDIKICAgICAgICAgICAgICAgIGZvbnRTaXplIDIyCiAgICAgICAgICAgICAgICByb3V0aW5nIE9ydGhvZ29uYWwKICAgICAgICAgICAgfQogICAgICAgIH0KICAgIH0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : {
+        "elements" : [ {
+          "background" : "#639922",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "CICD"
+        }, {
+          "background" : "#185fa5",
+          "color" : "#ffffff",
+          "shape" : "Cylinder",
+          "tag" : "Datastore"
+        }, {
+          "background" : "#7f77dd",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Edge"
+        }, {
+          "description" : true,
+          "metadata" : true,
+          "tag" : "Element"
+        }, {
+          "background" : "#888780",
+          "color" : "#ffffff",
+          "tag" : "External"
+        }, {
+          "color" : "#5f5e5a",
+          "fontSize" : 24,
+          "strokeWidth" : 4,
+          "tag" : "Group"
+        }, {
+          "background" : "#ba7517",
+          "color" : "#ffffff",
+          "tag" : "Identity"
+        }, {
+          "background" : "#888780",
+          "color" : "#ffffff",
+          "tag" : "Infra"
+        }, {
+          "background" : "#e24b4a",
+          "border" : "Dashed",
+          "color" : "#ffffff",
+          "strokeWidth" : 3,
+          "tag" : "Issue"
+        }, {
+          "background" : "#378add",
+          "color" : "#ffffff",
+          "tag" : "Managed"
+        }, {
+          "background" : "#5f5e5a",
+          "color" : "#ffffff",
+          "fontSize" : 26,
+          "shape" : "Person",
+          "tag" : "Person"
+        }, {
+          "background" : "#5f5e5a",
+          "border" : "Dashed",
+          "color" : "#ffffff",
+          "strokeWidth" : 3,
+          "tag" : "Planned"
+        }, {
+          "background" : "#0f6e56",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Serverless"
+        }, {
+          "background" : "#1d9e75",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Service"
+        }, {
+          "background" : "#888780",
+          "color" : "#ffffff",
+          "tag" : "Software System"
+        } ],
+        "relationships" : [ {
+          "dashed" : true,
+          "fontSize" : 22,
+          "routing" : "Orthogonal",
+          "tag" : "Planned",
+          "thickness" : 2
+        }, {
+          "dashed" : false,
+          "fontSize" : 22,
+          "routing" : "Orthogonal",
+          "tag" : "Relationship",
+          "thickness" : 2
+        } ]
+      },
+      "terminology" : { },
+      "themes" : [ "https://static.structurizr.com/themes/microsoft-azure-2021.01.26/theme.json" ]
+    },
+    "systemLandscapeViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 110,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 120,
+        "vertices" : true
+      },
+      "description" : "Logs and traces leave the same services by different routes and meet in one workspace, where a shared trace identifier joins them.",
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "3",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "key" : "Observability",
+      "name" : "System Landscape View",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "10"
+      }, {
+        "id" : "11"
+      }, {
+        "id" : "12"
+      }, {
+        "id" : "7"
+      }, {
+        "id" : "8"
+      }, {
+        "id" : "9"
+      } ]
+    } ]
+  }
+}
