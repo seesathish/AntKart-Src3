@@ -38,7 +38,7 @@ spec:
         - name: ingress.host
           value: "qa.antkart.in"
         - name: ingress.clusterIssuer
-          value: "letsencrypt-staging"
+          value: "letsencrypt-prod"
   destination:
     server: https://kubernetes.default.svc
     namespace: antkart
