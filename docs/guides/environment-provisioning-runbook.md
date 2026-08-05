@@ -1554,6 +1554,32 @@ curl.exe -s -o NUL -w "no-token: %{http_code}`n" https://<host>/gateway/products
 **Verify.** Expect 200, 200, and **401**. The 401 is a PASS — it proves Entra validation is active. A
 200 on the last one would mean the gateway is not enforcing authentication.
 
+**All pods healthy.**
+
+```powershell
+kubectl get pods -n antkart
+```
+
+Every pod `Running` with `READY 1/1` and no restarts. The curl smoke test only exercises the gateway;
+a downstream service can be crash-looping while `/health/live` still answers. Check this before
+spending time on OAuth.
+
+**Workload identity is working.**
+
+```powershell
+kubectl logs -n antkart deploy/ak-products --tail=100 | Select-String "Key Vault configuration loaded"
+```
+
+Expect a line naming THIS environment's vault:
+`Key Vault configuration loaded from "https://kv-antkart-<env>.vault.azure.net/"`
+
+This single line proves the whole secret-less chain: the pod presented a token signed by the cluster's
+OIDC issuer, Entra matched it to the federated credential created in Phase 3, and the resulting Azure
+token was accepted by the vault's data plane. No secret is stored anywhere in the cluster.
+
+If it names the SOURCE environment's vault instead, `KeyVault__Uri` was not overridden — see 5.3. If
+the pod crash-loops with a 403, the identity is right but the role assignment is missing.
+
 ### 6.2 Confirm the environment's own configuration reached the pods
 
 A `Synced` Application does not guarantee the running pods hold *this* environment's values — a
