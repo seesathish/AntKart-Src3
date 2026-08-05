@@ -78,7 +78,7 @@ disappointment.
 - **Plan before apply.** `terragrunt plan` on every unit before the first `apply` of a wave.
 - **Stop what you start.** AKS and PostgreSQL are the expensive resources. Phase 7 is teardown.
 - **One wave at a time.** Do not run `run-all apply` across the whole tree on a first build.
-- **`⚠️ UNVERIFIED`** marks a step written from the repository but not yet executed against a live cluster. Treat it as a starting point, verify the result, and remove the marker once it is proven. Phases 0-4 and 6, and sections 5.1-5.7, carry no markers — they have been run end to end. Only section 5.8 (CD promotion) remains marked — it is still unbuilt.
+- **`⚠️ UNVERIFIED`** marks a step written from the repository but not yet executed against a live cluster. Treat it as a starting point, verify the result, and remove the marker once it is proven. Phases 0-4 and 6, and sections 5.1-5.7, carry no markers — they have been run end to end. Sections 5.8 (CD promotion) and 5.9 (Notification path) remain marked — they are still outstanding.
 
 ### 0.4 The five ideas behind every command in this runbook
 
@@ -1079,8 +1079,8 @@ kubectl get namespaces
 
 > Takes a provisioned-but-empty cluster (end of Phase 4) to all six services running and reconciled
 > by Argo CD. **Sections 5.1–5.7 and all of Phase 6 have now been run end to end against a real QA
-> build** (which ended with the full Postman saga passing over HTTPS at `https://qa.antkart.in`); only
-> **section 5.8 remains `⚠️ UNVERIFIED`** — CD promotion is still unbuilt. Each section follows the
+> build** (which ended with the full Postman saga passing over HTTPS at `https://qa.antkart.in`);
+> **sections 5.8 (CD promotion) and 5.9 (Notification path) remain `⚠️ UNVERIFIED`.** Each section follows the
 > house pattern: **Understand → Execute → Verify → If it fails.**
 
 ### 5.0 Decisions to make before starting
@@ -1534,6 +1534,36 @@ Expect a row whose subject ends `environment:<env>`.
 error (`AADSTS700213`-style) means the workflow's `environment:` (or branch/subject) does not match
 any credential subject — align the workflow declaration with the `github-oidc` subject.
 
+### 5.9 ⚠️ UNVERIFIED — Notification path
+
+> Terraform creates the Function App resource, but no code is published to it and its Event Grid
+> subscription is not wired. A new environment therefore has a provisioned but non-functional
+> notification path, and the end-to-end run in Phase 6 does not exercise it — the core saga completes
+> without it.
+>
+> Three things are outstanding, none of them verified against a live environment:
+>
+> **Publish the Function code.** No deployment mechanism for the Notification Function is covered by
+> this runbook. Determine during the build whether it is published by a CI/CD workflow, by
+> `func azure functionapp publish`, or by another route, and record it here.
+>
+> **Wire the Event Grid subscription.** The Function subscribes to the environment's Event Grid topic.
+> Confirm whether the subscription is created by Terraform, by the Function's own registration at
+> startup, or manually.
+>
+> **Confirm the database schema.** Order, Payments and Discount apply EF Core migrations at startup via
+> `MigrateAsync` in `Program.cs`. The Notification Function ships an `InitialCreate` migration but no
+> startup migrate call was found in the repository, so `AKNotificationsDb` may have no schema. Verify
+> before assuming the path works:
+>
+> ```powershell
+> az functionapp show -g $RG -n $FUNC --query "{name:name, state:state}" -o table
+> az eventgrid event-subscription list --source-resource-id $(az eventgrid topic show -g $RG -n $EVGT --query id -o tsv) --query "[].{name:name, endpoint:destination.endpointType}" -o table
+> ```
+>
+> Until this section is verified, treat a new environment as core-saga-complete and
+> notification-incomplete.
+
 ---
 
 ## Phase 6 — End-to-end verification
@@ -1775,7 +1805,7 @@ Honest gaps, to be closed as they are built:
 
 - Seeding Cosmos with product data for the new environment.
 - Razorpay test credentials and the payment verification path.
-- The Notification Function's Event Grid subscription wiring.
+- The Notification Function's Event Grid subscription wiring — see section 5.9.
 - An infrastructure CI/CD workflow. This runbook is its specification — automate it only after
   running it by hand at least once.
 
@@ -1828,7 +1858,7 @@ Terraform creates empty resources; several need content before the platform runs
 |---|---|---|---|
 | Key Vault | **9 secrets** — 1 written by Terraform (`ApplicationInsights--ConnectionString`) + 8 seeded manually: `ConnectionStrings--Postgres`, `ConnectionStrings--PaymentsDb`, `ConnectionStrings--DiscountDb`, `ConnectionStrings--Notifications`, `MongoDbSettings--ConnectionString`, `RedisSettings--ConnectionString`, `Razorpay--KeyId`, `Razorpay--KeySecret`. Do **NOT** create `cosmos-connection-string` or `servicebus-connection-string` — no consumer ([KI-011](../KNOWN_ISSUES.md)) | Terraform (App Insights) + operator (the 8) | Phase 4 |
 | Cosmos DB | The product catalogue — empty on creation; **300 documents** seeded by the products service at startup, only when `Seeding__RunOnStartup` is `"true"` | AK.Products startup seeder | 6.4 |
-| PostgreSQL | Schema for the four databases. Order, Payments and Discount apply EF Core migrations at startup (`MigrateAsync` in `Program.cs`); the Notification Function ships an `InitialCreate` migration but **no startup migrate call was found** — ⚠️ confirm during build | EF Core migrations at service startup | 6.4 |
+| PostgreSQL | Schema for the four databases. Order, Payments and Discount apply EF Core migrations at startup (`MigrateAsync` in `Program.cs`); the Notification Function ships an `InitialCreate` migration but **no startup migrate call was found** — see section 5.9 | EF Core migrations at service startup | 6.4 |
 | Service Bus | The topic and subscriptions exist from Terraform, but MassTransit reconciles subscription properties and rules at startup and needs **`Azure Service Bus Data Owner`** to do it | MassTransit at startup + the Data Owner grant | Phase 5 callout (after 5.5) |
 | Container registry | Images — empty on creation | `az acr import` from the source registry | 5.4 |
 | DNS | The A record for the environment's hostname → the ingress public IP | Registrar / Azure DNS | 5.7 |
