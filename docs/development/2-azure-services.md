@@ -6,10 +6,10 @@ The platform runs entirely on managed Azure services, provisioned by the [infras
 
 ## Azure topology
 
-> **Diagram: Azure topology** — _not yet drawn (C4 deployment view)_
-> **Must show:** the resource estate — resource group, region, virtual network, AKS, and the managed services (Cosmos DB, PostgreSQL Flexible Server, Managed Redis, Service Bus, Event Grid, Functions, Key Vault, Communication Services, Container Registry, Application Insights, Log Analytics), with API Management marked planned.
-
-_C4 deployment view — will render from [`docs/C4Renders/`](../C4Renders/) (`workspace.dsl`)._
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../C4Renders/renders/AzureServices-dark.svg">
+  <img alt="AntKart on Azure: a customer request passes through the planned API Management edge into the Kubernetes cluster, where the gateway routes to Products, Cart, Order, Payments and Discount, which use Cosmos DB, Redis and PostgreSQL, publish to Service Bus and Event Grid, and trigger a serverless function that sends email through Communication Services" src="../C4Renders/renders/AzureServices.svg">
+</picture>
 
 ## Network and traffic path
 
