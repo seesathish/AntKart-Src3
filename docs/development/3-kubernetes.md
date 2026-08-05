@@ -6,10 +6,10 @@ The six services run on a managed **AKS** cluster (`aks-antkart-dev`) with Azure
 
 ## Cluster topology
 
-> **Diagram: Cluster topology** — _not yet drawn (C4 deployment view)_
-> **Must show:** the cluster and node pool, the namespaces `antkart`, `ingress-nginx`, `cert-manager`, and `argocd`, the deployments and their replica counts, which services are ClusterIP-only vs reachable through ingress, TLS termination, and the public path to `api.antkart.in`.
-
-_C4 deployment view — will render from [`docs/C4Renders/`](../C4Renders/) (`workspace.dsl`)._
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../C4Renders/renders/Kubernetes-dark.svg">
+  <img alt="AntKart on Azure Kubernetes Service: one cluster with four namespaces, where ingress-nginx terminates TLS and routes only to the API gateway, the five remaining services are ClusterIP-only, cert-manager supplies the certificate, and Argo CD applies desired state from Git" src="../C4Renders/renders/Kubernetes.svg">
+</picture>
 
 ## Workload identity token flow
 
