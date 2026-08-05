@@ -12,7 +12,7 @@ env:
   ServiceBus__FullyQualifiedNamespace: "sb-antkart-qa.servicebus.windows.net"
   MongoDbSettings__DatabaseName: "antkart-products"
   MongoDbSettings__ProductsCollection: "products"
-  Seeding__RunOnStartup: "false"
+  Seeding__RunOnStartup: "true"
   # Microsoft Entra ID JWT validation (AddEntraAuthentication binds the Entra section).
   Entra__Instance: "https://login.microsoftonline.com"
   Entra__TenantId: "4cacc56a-0d38-46c4-ba20-429d51d7b449"
