@@ -9,11 +9,13 @@
 # The gateway is the only service with an ingress. Its ingress overrides are
 # carried below as Helm parameters — the GitOps equivalent of `--set` flags — so
 # that with Argo CD auto-sync + self-heal enabled, the host/issuer are driven
-# from Git (a `helm upgrade` would be reverted by self-heal). `ingress.host` is
-# the external host — the real domain api.antkart.in (GoDaddy A record ->
-# ingress LoadBalancer IP 20.246.197.150). `ingress.clusterIssuer` is set to
-# letsencrypt-prod here so cert-manager issues a trusted PRODUCTION certificate
-# (overriding the letsencrypt-staging default in values/gateway.yaml).
+# from Git (a `helm upgrade` would be reverted by self-heal).
+#   - ingress.host is qa.antkart.in, a subdomain reserved for this environment; the
+#     DNS A record is created in Phase 5.7 once the ingress LoadBalancer IP is known.
+#   - ingress.clusterIssuer is letsencrypt-staging so certificate issuance can be
+#     debugged without consuming the production rate limit (5 duplicate certificates
+#     per hostname per 168 hours). Switch to letsencrypt-prod only once the chain is
+#     proven end to end.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -34,9 +36,9 @@ spec:
         - name: ingress.enabled
           value: "true"
         - name: ingress.host
-          value: "api.antkart.in"
+          value: "qa.antkart.in"
         - name: ingress.clusterIssuer
-          value: "letsencrypt-prod"
+          value: "letsencrypt-staging"
   destination:
     server: https://kubernetes.default.svc
     namespace: antkart

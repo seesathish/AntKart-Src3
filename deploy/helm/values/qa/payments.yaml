@@ -15,4 +15,6 @@ env:
   Entra__Audience: "api://antkart-api-qa"
   Entra__ClientId: "9e83f736-9f1e-4fe2-aecd-3aaad18cc50b"
 image:
+  # Per-environment override — the chart default points at the dev registry.
+  registry: acrantkartqa.azurecr.io
   tag: "84b0ff9"
