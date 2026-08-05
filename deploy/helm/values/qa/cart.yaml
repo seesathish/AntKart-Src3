@@ -6,6 +6,8 @@ serviceName: cart
 # the image path is overridden here. See antkart-service/values.yaml for the rationale.
 image:
   name: shoppingcart
+  # Per-environment override — the chart default points at the dev registry.
+  registry: acrantkartqa.azurecr.io
   tag: "84b0ff9"
 workloadIdentityClientId: "a45e5032-c403-49d0-a939-861837b782f6"
 env:
