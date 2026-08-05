@@ -1786,6 +1786,55 @@ Honest gaps, to be closed as they are built:
 > confirm which names the application actually reads; recreating unused secrets copies the confusion
 > forward.
 
+## Appendix D — Resource inventory and permissions
+
+A complete environment is **18 Terragrunt units producing 86 Azure resources**. The per-unit counts
+below were observed on a real build; use them to sanity-check a `plan` before approving it. A count
+that differs means the configuration has drifted. Resource types are read from
+`infrastructure/modules/<unit>/*.tf`; where a count comes from a `count`/`for_each` that is noted.
+
+| Unit | Wave | Resources created | Permission plane required |
+|---|---|---|---|
+| `resource-group` | 0 | **1** — `azurerm_resource_group` | Azure RBAC |
+| `app-registration` | 0 | **5** — `azuread_application` ×2 (the API + a test client), `azuread_service_principal` ×2, `azuread_application_pre_authorized` | Entra ID directory (Cloud Application Administrator) — only azuread resources, no Azure resource |
+| `networking` | 1 | **10** — `azurerm_virtual_network` (1); `azurerm_subnet`, `azurerm_network_security_group`, `azurerm_subnet_network_security_group_association` (3 each, `for_each` over the 3 subnets) | Azure RBAC |
+| `observability` | 1 | **2** — `azurerm_log_analytics_workspace`, `azurerm_application_insights` | Azure RBAC |
+| `container-registry` | 1 | **1** — `azurerm_container_registry` | Azure RBAC |
+| `cosmosdb` | 1 | **2** — `azurerm_cosmosdb_account`, `azurerm_cosmosdb_mongo_database` | Azure RBAC |
+| `postgresql` | 1 | **8** — `random_password` (1), `azurerm_postgresql_flexible_server` (1), `azurerm_postgresql_flexible_server_database` (4, `for_each` over the 4 database names), `azurerm_postgresql_flexible_server_firewall_rule` (2) | Azure RBAC |
+| `redis` | 1 | **1** — `azurerm_managed_redis` | Azure RBAC |
+| `servicebus` | 1 | **7** — `azurerm_servicebus_namespace` (1), `azurerm_servicebus_queue` (1, `for_each` — `order-commands`), `azurerm_servicebus_topic` (1), `azurerm_servicebus_subscription` (4, `for_each` over the consuming services) | Azure RBAC |
+| `eventgrid` | 1 | **1** — `azurerm_eventgrid_topic` | Azure RBAC |
+| `communication-services` | 1 | **4** — `azurerm_email_communication_service`, `azurerm_email_communication_service_domain`, `azurerm_communication_service`, `azurerm_communication_service_email_domain_association` | Azure RBAC |
+| `governance` | 1 | **1** — `azurerm_consumption_budget_resource_group` | Azure RBAC |
+| `aks` | 2 | **2** — `azurerm_kubernetes_cluster`, `azurerm_role_assignment` (kubelet AcrPull) | Azure RBAC (incl. RBAC Administrator for the role assignment) |
+| `key-vault` | 2 | **2** — `azurerm_key_vault`, `azurerm_key_vault_secret` (`ApplicationInsights--ConnectionString`, `count = 1` when supplied) | Azure RBAC **+ Key Vault data plane** (Secrets Officer — writes a secret) |
+| `github-oidc` | 2 | **4** — `azurerm_user_assigned_identity` (1), `azurerm_federated_identity_credential` (2, `for_each` over the master + environment subjects), `azurerm_role_assignment` (AcrPush) | Azure RBAC (incl. RBAC Administrator) — creates a managed identity + federated cred, not an app registration |
+| `function-app` | 2 | **3** — `azurerm_service_plan`, `azurerm_storage_account`, `azurerm_linux_function_app` | Azure RBAC |
+| `workload-identity` | 3 | **28** — `azurerm_user_assigned_identity` (6, `for_each` over the services), `azurerm_federated_identity_credential` (6), `azurerm_role_assignment` (16, `for_each` over the per-service role map) | Azure RBAC (incl. RBAC Administrator) |
+| `role-assignments` | 3 | **4** — `azurerm_role_assignment` ×4 (the Function App identity's KV Secrets User, SB Data Receiver, SB Data Sender, EventGrid Data Sender) | Azure RBAC (RBAC Administrator — only role assignments) |
+
+Total: **86** resources across the 18 units.
+
+Three of these planes are separate systems and a role in one grants nothing in the others — see
+section 1.1.1. In this inventory only `app-registration` touches the Entra directory, and only
+`key-vault` writes to the Key Vault data plane; every other unit needs Azure RBAC alone.
+
+### Data that must be populated after provisioning
+
+Terraform creates empty resources; several need content before the platform runs.
+
+| Resource | What must be populated | Source | Covered in |
+|---|---|---|---|
+| Key Vault | **9 secrets** — 1 written by Terraform (`ApplicationInsights--ConnectionString`) + 8 seeded manually: `ConnectionStrings--Postgres`, `ConnectionStrings--PaymentsDb`, `ConnectionStrings--DiscountDb`, `ConnectionStrings--Notifications`, `MongoDbSettings--ConnectionString`, `RedisSettings--ConnectionString`, `Razorpay--KeyId`, `Razorpay--KeySecret`. Do **NOT** create `cosmos-connection-string` or `servicebus-connection-string` — no consumer ([KI-011](../KNOWN_ISSUES.md)) | Terraform (App Insights) + operator (the 8) | Phase 4 |
+| Cosmos DB | The product catalogue — empty on creation; **300 documents** seeded by the products service at startup, only when `Seeding__RunOnStartup` is `"true"` | AK.Products startup seeder | 6.4 |
+| PostgreSQL | Schema for the four databases. Order, Payments and Discount apply EF Core migrations at startup (`MigrateAsync` in `Program.cs`); the Notification Function ships an `InitialCreate` migration but **no startup migrate call was found** — ⚠️ confirm during build | EF Core migrations at service startup | 6.4 |
+| Service Bus | The topic and subscriptions exist from Terraform, but MassTransit reconciles subscription properties and rules at startup and needs **`Azure Service Bus Data Owner`** to do it | MassTransit at startup + the Data Owner grant | Phase 5 callout (after 5.5) |
+| Container registry | Images — empty on creation | `az acr import` from the source registry | 5.4 |
+| DNS | The A record for the environment's hostname → the ingress public IP | Registrar / Azure DNS | 5.7 |
+
+An environment whose 86 resources all exist is still not a working platform until this table is complete.
+
 ---
 
 **Related:** [Infrastructure Guide](infrastructure-guide.md) · [GitOps Guide](gitops-guide.md) ·
