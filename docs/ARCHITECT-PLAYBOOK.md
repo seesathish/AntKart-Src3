@@ -2648,7 +2648,7 @@ flowchart TD
     REST["other 5 services — ClusterIP-only, NO Ingress"]:::service
     RULE -.->|implemented by| CTRL
     CLIENT --> CTRL --> GW
-    NOTE["controller installed OUT OF BAND (runbook 5.7); host is an Argo param"]:::issue
+    NOTE["controller installed OUT OF BAND (runbook 5.7) · host is an Argo param"]:::issue
     NOTE -.-> CTRL
 
     classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
@@ -3268,6 +3268,22 @@ makes authorization tamper-proof.
 
 The API reads roles from the **signed token** — set in Entra, not the request body — so authorization can't be spoofed. A `[RequireAuthorization("admin")]` endpoint checks the `roles` claim; the token had to pass audience/issuer validation first.
 
+```mermaid
+flowchart TD
+    TOKEN["signed Entra JWT (set in Entra, NOT the request body)"]:::identity
+    AUD["validate audience + issuer FIRST"]:::identity
+    ROLES["flat roles claim (RoleClaimType=roles, MapInboundClaims=false)"]:::identity
+    POL["policy admin → RequireRole(admin)"]:::service
+    EP["Order PUT /id/status → RequireAuthorization(admin)"]:::service
+    TOKEN --> AUD --> ROLES --> POL --> EP
+    NOTE["read roles, NOT groups → no Graph overage lookup"]:::issue
+    NOTE -.-> ROLES
+
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — `AddEntraAuthentication` reads the **flat top-level `roles` claim** (`RoleClaimType = "roles"`, `MapInboundClaims = false`) and registers named policies: `"admin"` → `RequireRole("admin")` and `"authenticated"` → `RequireAuthenticatedUser`. App roles and the `access_as_user` scope are declared in `infrastructure/modules/app-registration/main.tf` (roles are data-driven via `var.app_roles`; v2 tokens via `requested_access_token_version = 2`). Usage: Order's `PUT /{id}/status` is `.RequireAuthorization("admin")`; user-scoped data comes from `sub`, never a body field.
 
 **Alternatives and the trade-off** — Alternatives: authorize on the **groups** claim (but group membership can overflow into a Graph lookup — the "groups overage" problem — and couples app authz to directory groups), scopes-only (fine for delegated API access but no coarse role gate), or custom claims. App roles in the flat `roles` claim give tamper-proof, self-contained authorization with no Graph call, at the cost of managing roles in the app registration. That's why the platform reads `roles`, not `groups`.
@@ -3314,6 +3330,23 @@ where nothing else works.
 | Flavours | app registration + SP | *user-assigned* (standalone, reusable, **federatable**) or *system-assigned* (tied to one resource, not federatable) |
 
 The rule of thumb: on Azure (or federating into it) → managed identity, no secret; only where nothing else works → a service principal with a guarded secret.
+
+```mermaid
+flowchart TD
+    Q["identity for what?"]:::edge
+    RUN["runtime pods → user-assigned MANAGED identity id-ak-service<br/>(no secret, federated)"]:::identity
+    CI["CI/CD → user-assigned MANAGED identity id-ak-cicd<br/>(no secret, federated to GitHub OIDC)"]:::identity
+    TF["Terraform (runs OFF Azure) → SERVICE PRINCIPAL sp-antkart-terraform-dev<br/>(the ONLY stored secret)"]:::issue
+    Q --> RUN
+    Q --> CI
+    Q --> TF
+    NOTE["user-assigned because system-assigned CANNOT be federated"]:::issue
+    NOTE -.-> RUN
+
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — Runtime services use **user-assigned managed identities** `id-ak-<service>-<env>` (`infrastructure/modules/workload-identity/main.tf`), federated to Kubernetes ServiceAccounts. CI/CD uses a **user-assigned managed identity** `id-ak-cicd-<env>` (`infrastructure/modules/github-oidc/main.tf`), federated to GitHub's OIDC — **not** an app/SP. The **only** secret-bearing principal is the Terraform provisioning SP, `sp-antkart-terraform-dev` (its creds are the `ARM_*` env vars) — because Terraform runs from a pipeline/laptop, off Azure, where a managed identity can't reach. User-assigned is chosen everywhere because **system-assigned can't be federated**.
 
@@ -3653,6 +3686,21 @@ challenge proves control of the public hostname through the same ingress.
 
 **How it works** — cert-manager is an in-cluster operator. When an Ingress is annotated with a ClusterIssuer, cert-manager requests a certificate from that issuer (Let's Encrypt over **ACME**) and proves domain ownership with an **HTTP-01 challenge**: Let's Encrypt gives a token, cert-manager serves it at `http://<host>/.well-known/acme-challenge/<token>` *through the same ingress*, Let's Encrypt fetches it, and — if it matches — issues the cert into a Secret the ingress then serves. cert-manager renews automatically before expiry.
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CM as cert-manager (in-cluster)
+    participant LE as Let's Encrypt (ACME)
+    participant ING as ingress-nginx (api.antkart.in)
+    Note over CM: Ingress annotated with a ClusterIssuer
+    CM->>LE: request certificate
+    LE-->>CM: HTTP-01 challenge token
+    CM->>ING: serve token at /.well-known/acme-challenge/...
+    LE->>ING: fetch the token (proves domain control)
+    LE-->>CM: issue certificate → Secret
+    Note over CM,ING: cert-manager auto-renews before expiry<br/>USE letsencrypt-staging FIRST (prod: 5 dup certs/week)
+```
+
 **How AntKart uses it** — Two ClusterIssuers, `letsencrypt-staging` and `letsencrypt-prod` (`deploy/cert-manager/cluster-issuer-*.yaml`), each with an HTTP-01 solver over `ingressClassName: nginx`. The gateway's Ingress requests a cert via the `cert-manager.io/cluster-issuer` annotation. cert-manager and the issuers are installed **out of band** (runbook 5.7); the prod issuer's file carries the Let's Encrypt rate-limit warning (5 duplicate certs/week per hostname). Decision: [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md).
 
 **Alternatives and the trade-off** — Alternatives: manually buying and rotating a certificate (no automation, human error, expiry outages), a self-signed cert (untrusted by browsers), an ACME **DNS-01** challenge (works for wildcards and private hosts but needs DNS-provider API credentials), or a cloud-managed cert at APIM/App Gateway. HTTP-01 + cert-manager buys free, auto-renewing, browser-trusted certs with no stored DNS credential, at the cost of the hostname needing to be **publicly reachable over HTTP** during the challenge.
@@ -3691,6 +3739,24 @@ misconfiguration, an internal caller, a future APIM edge) would be unauthenticat
 service means no single layer's failure exposes the backends.
 
 **How it works** — Every layer authenticates independently; none trusts an outer one. The JWT is validated at the gateway *and* re-validated inside each service — issuer, audience, lifetime, signature — and then the service enforces its own authorization (roles, and **ownership/IDOR** checks like "is this your order?"). The guiding assumption is "never trust the network": a service must stay secure even if a request reaches it without passing the edge (a misconfiguration, an internal caller, a future edge).
+
+```mermaid
+flowchart TD
+    REQ["request + Bearer JWT"]:::external
+    GW["gateway validates JWT (layer 1)"]:::edge
+    SVC["service RE-validates JWT (layer 2)<br/>issuer · audience · lifetime · signature"]:::service
+    OWN["+ ownership / IDOR check from sub claim<br/>(never a body field)"]:::service
+    REQ --> GW --> SVC --> OWN
+    KI["KI-002: Discount decodes but does NOT verify<br/>(safe only because ClusterIP-only)"]:::issue
+    KI -.-> SVC
+    NOTE["never trust the network — gateway is NOT the trust boundary"]:::issue
+    NOTE -.-> SVC
+
+    classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — Each service calls `AddEntraAuthentication` in its `Program.cs` and re-validates the token; the gateway passes the JWT through but is **not** a trust boundary the services rely on ([docs/development/6-security.md](development/6-security.md)). Ownership is derived from `sub` via `GetUserId()`, never a request field — so a user can't fetch another's order by changing an id. Only the gateway is public; the five backends are ClusterIP-only. The planned APIM edge ([ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md)) adds an *outer* validation layer **without** removing the in-service checks.
 
@@ -3733,6 +3799,22 @@ AntKart relies on *instead* is coarser: only the gateway is exposed (everything 
 subnet-level NSGs — infrastructure isolation, not pod-level.
 
 **How it works** — A `NetworkPolicy` is an allow-list for pod traffic: it selects pods and declares which ingress/egress is permitted (by pod label, namespace, or CIDR), enforced by the CNI. The standard pattern is **default-deny** for a namespace, then explicit allows for intended flows — pod-level micro-segmentation, so a compromised pod can't freely reach every other pod (east-west lateral movement).
+
+```mermaid
+flowchart TD
+    ENGINE["CNI policy ENGINE enabled (network_policy = azure)"]:::edge
+    ZERO["...but ZERO NetworkPolicy objects authored"]:::issue
+    RESULT["→ pod-to-pod traffic UNRESTRICTED (east-west)"]:::issue
+    REAL["actual isolation = only gateway exposed (ClusterIP) + subnet NSGs<br/>(perimeter / north-south only)"]:::service
+    FIX["to stop lateral movement: author default-deny + allow policies (future work)"]:::edge
+    ENGINE --> ZERO --> RESULT
+    RESULT --> REAL
+    RESULT -.-> FIX
+
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+```
 
 **How AntKart uses it** — **It doesn't — a named-but-absent syllabus item.** The CNI policy *engine* is enabled (`network_policy = "azure"` in the AKS module), but **zero NetworkPolicy objects are authored**, so pod-to-pod traffic is unrestricted by default. The isolation AntKart actually relies on is coarser and at the infrastructure layer: only the gateway is exposed (the five backends are ClusterIP-only) plus subnet-level NSGs. `deploy/helm/README.md` notes NetworkPolicy as future work.
 
