@@ -42,10 +42,11 @@ Every concept heading carries exactly one tag. Everything starts 🟡 — a tag 
 | 8 | DevOps | 5 | 0 | 0 | 5 |
 | | **Total** | **70** | **0** | **0** | **70** |
 
-**Depth today.** Twenty concepts are written to the full template (highest interview weight,
-most original material here); the rest carry the heading, status, *What it is*, *The problem it
-solves*, and *Read the code*, with the remaining subsections stubbed `_To be written._`. The
-skeleton is complete so nothing is missing from the syllabus; the depth arrives as it is studied.
+**Depth today.** All **70 concepts** are now written to the full template — *What it is*, *The problem
+it solves*, *How it works* (with a table or diagram where it helps), *How AntKart uses it* (real type,
+file, and resource names), *Alternatives and the trade-off*, *Gotchas* (sourced to KNOWN_ISSUES / the
+runbook / ADRs), *Interview traps*, *The 60-second answer*, *Read the code*, and *To reach 🟢*. Nothing
+in the syllabus is a stub. Every concept still starts 🟡 — the writing is done; the *proving* is yours.
 
 **A note on honesty.** Where an ADR's prose has drifted from the code as built, this document
 follows the **code** and says so. Where a concept in the syllabus is named but **not implemented**
@@ -2344,7 +2345,7 @@ separate "alive" from "ready" from "still starting."
 
 **How it works** — Each probe is an `httpGet` or `tcpSocket` check on an interval. The **startup** probe runs first and *gates* liveness/readiness until it passes — so a slow boot doesn't trip liveness. A failing **liveness** probe restarts the container; a failing **readiness** probe removes the pod from its Service's endpoints (no traffic) without restarting it. The endpoints they hit are the app's own — `/health/live` and `/health/ready` (Kubernetes §... "Health probes as an application concern").
 
-**How AntKart uses it** — In `deployment.yaml`, the **startup + liveness** probes hit `/health/live` (shallow) and **readiness** hits `/health/ready` (tolerant). The startup probe covers the Key-Vault-at-boot delay (period 5s × 30 ≈ 150s) so a slow start never restart-loops. Discount switches to `tcpSocket` probes (`probes.type: tcp` in `deploy/helm/values/discount.yaml`) because its h2c/HTTP-2-only listener would reject an HTTP/1.1 `httpGet`. Endpoints come from `AK.BuildingBlocks/HealthChecks/HealthCheckExtensions.cs`.
+**How AntKart uses it** — In `deployment.yaml`, the **startup + liveness** probes hit `/health/live` (shallow) and **readiness** hits `/health/ready` (tolerant). The startup probe covers the Key-Vault-at-boot delay (period 5s × 30 ≈ 150s) so a slow start never restart-loops. Discount switches to `tcpSocket` probes (`probes.type: tcp` in `deploy/helm/values/discount.yaml`) because its h2c/HTTP-2-only listener would reject an HTTP/1.1 `httpGet`. Endpoints come from `AK.BuildingBlocks/AK.BuildingBlocks/HealthChecks/HealthCheckExtensions.cs`.
 
 **Alternatives and the trade-off** — Alternatives: no probes (Kubernetes can't tell alive from ready — it routes traffic to a booting pod and never restarts a wedged one), `exec` probes (run a command in the container — heavier, and fine only for non-HTTP checks), or a single probe for both roles (causes the restart-storm/bad-traffic failures). Three purpose-built probes cost a little config for correct restart and traffic behaviour.
 
@@ -3615,24 +3616,40 @@ opposite of classic CI **push**, where an external pipeline holds cluster creden
 manual `kubectl edit` silently drifts from what's in Git. Pull-based GitOps keeps credentials inside the
 cluster (nothing external can push), makes Git the audit log of every change, and continuously corrects drift.
 
-**How it works** — _To be written._
+**How it works** — Two delivery directions:
 
-**How AntKart uses it** — _To be written._
+| | Push (classic CI) | Pull (GitOps) |
+|---|---|---|
+| Who deploys | an external pipeline runs `kubectl`/`helm` *into* the cluster | an in-cluster agent (Argo CD) reads Git and applies it |
+| Credentials | the pipeline holds cluster admin | stay inside the cluster; nothing external can push |
+| Drift | a manual `kubectl edit` silently diverges | Argo detects drift (and can self-heal) |
+| Source of truth | wherever the pipeline ran | Git — also the audit log |
 
-**Alternatives and the trade-off** — _To be written._
+Argo reports two statuses: **Sync** (`Synced`/`OutOfSync` — does live match Git?) and **Health** (`Healthy`/`Progressing`/`Degraded` — are the resources actually working?).
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — Argo CD runs *inside* the cluster and reconciles it to `master`. CD (GitHub Actions) never touches the cluster — it builds an image and **bumps a tag in Git**; Argo picks that up and deploys. Because the repo is public, Argo clones it **anonymously** — there's no external credential custody at all. Decisions: [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md), [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md); guide: [docs/guides/gitops-guide.md](guides/gitops-guide.md).
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — Alternatives: **push-based CI** (`kubectl apply` from the pipeline — simple, but the pipeline holds cluster admin credentials and manual edits drift undetected) or **Flux** (the same GitOps model, a different tool). Pull-based Argo buys no external cluster credentials, Git as the audit log, and continuous drift correction, at the cost of running an in-cluster agent and reasoning about *its* configuration (which, notably, Argo does not itself watch — GitOps §3).
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **CD writes Git, not the cluster.** The pipeline's job ends at a commit that bumps the image tag; Argo does the deploy. If you expect CD to `kubectl apply`, you've got the wrong mental model.
+- **A manual `kubectl edit` is drift.** Self-heal reverts it to Git — expected, but surprising if you didn't know.
+- **Argo doesn't watch its own objects.** Editing an Application/AppProject in Git does nothing until `kubectl apply` (GitOps §3) — the one place "everything is in Git" breaks.
+
+**Interview traps** —
+- *"Pull vs push delivery — what's the security difference?"* — Pull keeps cluster credentials in the cluster; push puts cluster admin in the CI system. The core distinction.
+- *"Does your CD pipeline deploy to the cluster?"* — No — it bumps a tag in Git; Argo deploys. Testing whether you understand the pull model.
+- *"How does Argo authenticate to the repo here?"* — It doesn't need to — the repo is public, so it clones anonymously; zero credential custody. The ran-it detail.
+- *"You `kubectl edit`ed a resource and it reverted — why?"* — Self-heal reconciling live state back to Git. Drift correction.
+
+**The 60-second answer** — "GitOps makes Git the single source of truth and flips the delivery direction. In classic push CI, an external pipeline holds cluster admin credentials and runs kubectl into the cluster, and any manual edit silently drifts. In pull-based GitOps, Argo CD runs *inside* the cluster, reads Git, and reconciles — so no external system holds cluster credentials, Git is the audit log, and drift is detected and can be self-healed. Our CD never touches the cluster: it builds an image and bumps a tag in Git, and Argo picks that up. And because our repo is public, Argo clones it anonymously, so there's literally no credential custody. Argo shows two statuses — Sync, does live match Git, and Health, are the resources actually working."
 
 **Read the code** — [docs/guides/gitops-guide.md](guides/gitops-guide.md) (pull vs push; sync/health states);
 `deploy/argocd/README.md`. Because the repo is public, Argo clones it anonymously — no external credential
 custody. Decisions: [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md),
 [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, contrast pull vs push on credentials and drift, and explain what CD actually writes. Then explain why Argo needs no repo credential here.
 
 ---
 
@@ -3923,24 +3940,39 @@ GitOps repository per environment. AntKart currently leans toward (a) with paral
 where each environment's values live and what every Argo Application points at. Choosing badly means either
 duplicated config or fragile shared config.
 
-**How it works** — _To be written._
+**How it works** — Promotion is a *structure* decision — where each environment's config lives and what every Argo Application points at:
 
-**How AntKart uses it** — _To be written._
+| Model | Layout | Character |
+|---|---|---|
+| **(a) values per env** | `values/<env>/<svc>.yaml` | simplest, explicit; duplicates common keys |
+| **(b) base + overlay** | `values/base/` + `values/<env>/` | DRY; more indirection |
+| **(c) separate repo per env** | one GitOps repo per environment | cleanest isolation; more moving parts |
 
-**Alternatives and the trade-off** — _To be written._
+The model determines where a new environment's values go and whether Argo watches them where they change (ties to "what Argo does NOT watch").
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — Today it leans toward **(a)**: dev values under `deploy/helm/values/` plus parallel `deploy/helm/values/qa/` and `deploy/argocd/qa/`. The runbook §5.0 decision table lays out all three options for a new build. [ADR-024](adr/ADR-024-cd-gitops-write-contention.md) names a **separate GitOps repository (c)** as the long-term answer — driven by the CD write-contention problem where a shared repo makes six CD jobs race to push. Decision: [ADR-024](adr/ADR-024-cd-gitops-write-contention.md).
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — The three models *are* the alternatives. (a) is the least ceremony and easiest to read, at the cost of duplicating shared keys across environments. (b) removes duplication but adds overlay indirection. (c) isolates each environment completely — and crucially moves the Argo objects and app config into a repo Argo actually watches, sidestepping the "Argo doesn't watch its own manifests" footgun and the multi-job write contention — at the cost of another repo and promotion path. AntKart runs (a) now and points at (c) as the destination.
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **A shared repo invites write contention.** Because `AK.BuildingBlocks/**` is in every CD path filter, one shared-library change trips all six CD jobs, which race to push to the same repo — the problem [ADR-024](adr/ADR-024-cd-gitops-write-contention.md) documents and a separate repo would solve.
+- **Model (a) duplicates common keys.** Fine at two environments; the duplication cost grows with each new one.
+- **The model interacts with what Argo watches.** A separate repo (c) is partly *about* putting the Argo objects where Argo watches them (GitOps §3).
+
+**Interview traps** —
+- *"How would you structure config to promote across environments?"* — Name the three models (values-per-env, base+overlay, separate repo) and their trade-offs; AntKart runs (a), targets (c). Testing whether you know the option space.
+- *"Why does ADR-024 point at a separate GitOps repo?"* — Write contention (six CD jobs racing on one repo) and putting Argo objects where Argo watches them. The design reasoning.
+- *"What's the downside of the values-per-env model?"* — Duplicated common keys across environments; grows with each new environment.
+- *"Where do qa's values live today?"* — `deploy/helm/values/qa/` and `deploy/argocd/qa/` — the parallel-folder (a) approach. The ran-it detail.
+
+**The 60-second answer** — "Promotion is really a config-structure decision, and there are three models: values per environment in parallel folders, a base-plus-overlay layout, or a separate GitOps repo per environment. We run the first today — dev values under `deploy/helm/values` with parallel qa folders — because it's the simplest and most explicit, at the cost of duplicating common keys. But ADR-024 names a separate repo as the long-term answer, for two reasons: a shared repo causes write contention, since one BuildingBlocks change trips all six CD jobs and they race to push; and a separate repo puts the Argo Application and AppProject objects into a repo Argo actually watches, which sidesteps the footgun that Argo doesn't watch its own manifests. So we're on model (a) and pointed at model (c)."
 
 **Read the code** — Runbook §5.0 decision table (the three promotion models)
 ([environment-provisioning-runbook.md](guides/environment-provisioning-runbook.md)); today `deploy/helm/values/`
 (dev) plus parallel `deploy/helm/values/qa/` and `deploy/argocd/qa/`. Long-term direction:
 [ADR-024](adr/ADR-024-cd-gitops-write-contention.md) (separate GitOps repo).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, name the three promotion models and their trade-offs, and say which AntKart runs vs targets. Then explain the write-contention reason ADR-024 gives for a separate repo.
 
 ---
 
@@ -3957,23 +3989,39 @@ CD runs on merge to master and builds/pushes an image then bumps the GitOps tag 
 code or you can't validate without deploying. Separating them — CI gates the merge, CD acts on the merged
 commit, coupled only through Git — keeps the gate honest and the delivery pull-based.
 
-**How it works** — _To be written._
+**How it works** — Two workflows per service, with different triggers and jobs:
 
-**How AntKart uses it** — _To be written._
+| | CI | CD |
+|---|---|---|
+| Trigger | pull request | merge to `master` |
+| Does | build, test, SonarCloud, Trivy | build + push a SHA-tagged image, bump the tag in Git |
+| Touches | no image, no cluster | ACR (via OIDC); **no** helm/kubectl |
+| Deploys? | no — it's a gate | no — Argo does, from the Git bump |
 
-**Alternatives and the trade-off** — _To be written._
+The two are **coupled only through Git**: the commit CI guarded is the same commit CD acts on, and CD's output is a Git commit that Argo reconciles. Neither pipeline holds cluster credentials.
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — 12 workflows: 6 CI + 6 CD (a pair per service). CI (`products-ci.yml`) runs `build-test → sonar → trivy` on a PR — unit tests plus an in-memory MassTransit integration suite, no live infra. CD (`products-cd.yml`) runs `build-and-push → update-gitops`: build the image, push to ACR via OIDC, then `yq`-bump `.image.tag` in the values file. Argo deploys from that commit. One generic chart is reused per service. Decision: [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md).
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — Alternatives: one combined pipeline that validates and deploys together (then you either deploy unvalidated code or can't validate without deploying), or chaining CD off CI with `workflow_run` (tight coupling, harder to reason about). Splitting CI (gate the merge) from CD (act on the merged commit), coupled only through Git, keeps the gate honest and delivery pull-based — at the cost of maintaining two workflows per service instead of one.
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **CD writes Git, not the cluster.** No helm/kubectl in CD — Argo deploys. Expecting CD to apply to the cluster is the wrong model.
+- **A shared library trips every CD.** `AK.BuildingBlocks/**` is in all six CD path filters, so one change fires all six — the write-contention issue ([ADR-024](adr/ADR-024-cd-gitops-write-contention.md)).
+- **CI ≠ integration-with-real-infra.** The integration suite is the in-memory MassTransit harness — no broker, no DB — so CI needs no live cloud.
+
+**Interview traps** —
+- *"How are CI and CD coupled here?"* — Only through Git: CI gates the commit, CD acts on it, Argo deploys the resulting commit. No `workflow_run`, no shared runner state. Testing whether you see the Git seam.
+- *"Does CD deploy to the cluster?"* — No — it pushes an image and bumps a Git tag; Argo deploys. The pull-model point.
+- *"Why separate CI and CD at all?"* — So you can validate without deploying and never deploy unvalidated code. The design rationale.
+- *"What do CI's integration tests actually run against?"* — An in-memory MassTransit harness — no broker or DB — so CI is fast and infra-free. The ran-it detail.
+
+**The 60-second answer** — "Each service has two workflows. CI runs on a pull request and is a pure quality gate — build, test, SonarCloud, Trivy — and it touches no image and no cluster. CD runs on merge to master and does two things: build a commit-SHA-tagged image and push it to ACR over OIDC, then bump that tag in the Git values file. It does *not* run helm or kubectl — Argo CD deploys from the Git bump. So CI and CD are coupled only through Git: the commit CI guarded is the commit CD acts on, and neither pipeline holds cluster credentials. That separation means we can validate without deploying and never ship unvalidated code, and delivery stays pull-based. The tests in CI even run against an in-memory MassTransit harness, so CI needs no live infrastructure."
 
 **Read the code** — `.github/workflows/products-ci.yml` (build-test → sonar → trivy; no image, no cluster) and
 `.github/workflows/products-cd.yml` (build-and-push → update-gitops; no helm/kubectl). Decision:
 [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain how CI and CD couple only through Git and why CD writes Git not the cluster. Then trace a merge from CD's image push to Argo deploying it.
 
 ---
 
@@ -4087,24 +4135,37 @@ infra/docs changes.
 status checks make "it passed the gates" a precondition of merge, not a hope, and shift security scanning left
 to the pull request.
 
-**How it works** — _To be written._
+**How it works** — Branch protection marks certain CI jobs as **required status checks**: a PR cannot merge to `master` until they're green. That "shifts security left" — vulnerabilities and quality issues are caught on the PR, before anything ships, not after deploy.
 
-**How AntKart uses it** — _To be written._
+| Gate | Checks | Fails the merge when |
+|---|---|---|
+| `build-test` | compile + unit + in-memory integration tests | anything doesn't build or a test fails |
+| `sonar` / SonarCloud | code quality + coverage | the SonarCloud quality gate fails |
+| `trivy` | image/filesystem vuln + misconfig scan | a `HIGH`/`CRITICAL` finding (`exit-code: 1`) |
 
-**Alternatives and the trade-off** — _To be written._
+**How AntKart uses it** — The `master-protection` ruleset requires **four** checks — `build-test`, `sonar`, `trivy`, and SonarCloud's own PR gate — before merge. Trivy runs with `TRIVY_SEVERITY: HIGH,CRITICAL` and `exit-code: 1` (a finding fails the job), scanning both the filesystem and the Dockerfile. **Repository admin is on the bypass list** for infrastructure/docs changes, which are gated differently (a `terraform plan` review), so application code goes through the PR gate while infra/docs can go direct. Decision: [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md); details in [docs/development/4-devops.md](development/4-devops.md).
 
-**Gotchas** — _To be written._
+**Alternatives and the trade-off** — Alternatives: human review only (misses coverage regressions and CVEs), scanning *after* deploy (too late — the vulnerable image already shipped), or no enforced gates (anything merges). Required checks make "it passed" a *precondition* of merge rather than a hope, at the cost of gate latency on every PR and some false positives to triage. The admin bypass for infra/docs is a pragmatic split so a doc typo doesn't sit behind the full app gate.
 
-**Interview traps** — _To be written._
+**Gotchas** —
+- **`SONAR_TOKEN` is a GitHub Actions secret**, so a **fork** PR (which can't see it) can't run the Sonar job — a known limitation of secret-dependent checks on forks.
+- **Trivy `exit-code: 1` actually blocks the merge** — a HIGH/CRITICAL finding fails the job, so it's a real gate, not an advisory scan.
+- **The admin bypass is a genuine bypass.** Infra/docs can go direct to master; that's deliberate (gated separately), but it means the branch protection isn't absolute.
 
-**The 60-second answer** — _To be written._
+**Interview traps** —
+- *"What stops vulnerable code from shipping here?"* — Required status checks — build-test, Sonar, Trivy — that must pass before merge; Trivy fails on HIGH/CRITICAL. The shift-left answer.
+- *"Does Trivy just warn, or does it block?"* — Blocks — `exit-code: 1` fails the job and the required check. Testing whether you know it's enforced.
+- *"Why might the Sonar check not run on a contributor's fork?"* — `SONAR_TOKEN` is a secret forks can't access. The ran-it limitation.
+- *"How do infra and docs changes get to master?"* — Admin bypass, gated separately (terraform plan review) rather than the app CI gate. Testing whether you know the split.
+
+**The 60-second answer** — "Quality and security are enforced as required status checks on the pull request — you can't merge to master until they're green. There are four: build-test with unit and in-memory integration tests, SonarCloud for quality and coverage, and Trivy for vulnerabilities and misconfigurations, which runs at HIGH and CRITICAL severity with exit-code one, so a finding actually fails the merge — it's a gate, not a warning. That shifts security left: we catch a vulnerable dependency on the PR, not after it ships. Repository admin is on the bypass list for infrastructure and docs, which are gated differently through a terraform plan review, so application code goes through the full gate while a doc fix can go direct. One wrinkle: the Sonar token is a secret, so the Sonar check can't run on a contributor's fork."
 
 **Read the code** — `.github/workflows/products-ci.yml` (`build-test`, `sonar`, `trivy` jobs;
 `TRIVY_SEVERITY: HIGH,CRITICAL`, `exit-code: 1`); the required checks + admin bypass are described in
 [docs/development/4-devops.md](development/4-devops.md). Decision:
 [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, name the four required checks and explain how Trivy blocks a merge and why forks can't run Sonar. Then explain the admin bypass and what it's for.
 
 ---
 
@@ -4118,17 +4179,29 @@ commits). **Concurrency** groups cancel or serialise overlapping runs so two pip
 actually happened — KI-006); without concurrency control, a rapid second push either wastes a run (CI) or
 half-completes a delivery (CD). The two keep the pipeline efficient and safe.
 
-**How it works** — _To be written._
+**How it works** — **Path filters** (`on.push.paths`) gate whether a workflow runs at all: a service's workflow triggers only when *its* files (or shared ones) change. In GitHub Actions **later patterns win**, so a negation like `- '!**/*.md'` must be **last** to exclude markdown for real. **Concurrency** groups control overlapping runs: a `concurrency.group` with `cancel-in-progress: true` cancels a superseded run; `false` queues instead.
 
-**How AntKart uses it** — _To be written._
+| | CI | CD |
+|---|---|---|
+| Concurrency group | `products-ci-${{ github.ref }}` | `products-cd` (per service) |
+| `cancel-in-progress` | `true` (a new push cancels the stale run) | `false` (never cancel a half-done deploy) |
 
-**Alternatives and the trade-off** — _To be written._
+**How AntKart uses it** — CI/CD path filters include the service folder, `AK.BuildingBlocks/**`, and `- '!**/*.md'` **last**. CI cancels superseded runs (`cancel-in-progress: true`); CD does **not** (`false`) — a half-finished delivery is worse than waiting. The CD filter deliberately **excludes** `deploy/helm/values/**`, so CD's own tag-bump commit can't retrigger CD (the loop guard). Gap: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-006; related [ADR-024](adr/ADR-024-cd-gitops-write-contention.md).
 
-**Gotchas** — _To be written._
+**Alternatives and the trade-off** — Alternatives: no path filters (every commit runs every service's pipeline — wasteful and, per KI-006, actively harmful), workflow-level rather than job-level concurrency (coarser), or `paths-ignore` instead of a trailing negation (equivalent but easy to misorder). Filters + per-workflow concurrency buy efficiency and safety — only relevant pipelines run, and deliveries don't collide — at the cost of getting the pattern order and the loop-guard exclusion exactly right.
 
-**Interview traps** — _To be written._
+**Gotchas** —
+- **KI-006 (Resolved):** the filters originally lacked a markdown exclusion, so a markdown-only commit triggered **five** CD pipelines (each built, pushed, and bumped a tag). Fix: append `- '!**/*.md'` as the **last** paths entry — because later patterns win. Source: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-006.
+- **CD's `cancel-in-progress: false` is deliberate.** Cancelling a running delivery mid-push is worse than queuing behind it.
+- **The loop guard is the values-path exclusion.** CD bumps `deploy/helm/values/**`, which is excluded from CD's own filter, so the bump can't retrigger CD. (`AK.BuildingBlocks/**` being in every filter, though, is the ADR-024 write-contention source.)
 
-**The 60-second answer** — _To be written._
+**Interview traps** —
+- *"Why must `- '!**/*.md'` be the last paths entry?"* — In GitHub Actions later patterns win; a negation earlier would be overridden. The exact-mechanics question (and the KI-006 fix).
+- *"A markdown-only commit deployed five services once — what happened?"* — KI-006: filters lacked the markdown exclusion, so the positive folder filter matched. The war story.
+- *"Why is `cancel-in-progress` true for CI but false for CD?"* — A stale CI run is waste (cancel it); a half-done deploy is dangerous (queue, don't cancel). Testing the reasoning.
+- *"What stops CD's tag-bump from retriggering CD forever?"* — The CD path filter excludes `deploy/helm/values/**`, where the bump lands. The loop-guard detail.
+
+**The 60-second answer** — "Two controls keep the pipelines efficient and safe. Path filters decide whether a workflow runs — a service's pipeline only fires when its files or shared ones change — and critically, a markdown exclusion `!**/*.md` has to be the *last* pattern, because in GitHub Actions later patterns win. That last bit is KI-006: originally the exclusion was missing, so a markdown-only commit triggered five CD pipelines that each built and deployed. Concurrency groups handle overlap: CI cancels superseded runs because a stale build is just waste, but CD does *not* cancel-in-progress, because interrupting a half-done delivery is worse than waiting. And the CD filter excludes the values path where CD writes its own tag bump, so a deploy can't retrigger itself in a loop."
 
 **Read the code** — `.github/workflows/products-ci.yml` / `products-cd.yml` (`on.push.paths` including
 `- '!**/*.md'` last; `concurrency.group` with `cancel-in-progress: true` for CI, `false` for CD). Gap:
@@ -4136,7 +4209,7 @@ half-completes a delivery (CD). The two keep the pipeline efficient and safe.
 triggered five CD pipelines; **Resolved** by appending `- '!**/*.md'`). Related write-contention design:
 [ADR-024](adr/ADR-024-cd-gitops-write-contention.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain why `!**/*.md` must be last, why CI cancels but CD queues, and what the loop guard is. Then recount KI-006 and its one-line fix.
 
 ---
 
@@ -4150,26 +4223,33 @@ which Argo then deploys. A mutable tag (like `dev` or `latest`) reused across bu
 cached image after a new push to the same tag, so a deploy silently doesn't take (KI-004). An immutable
 SHA tag makes every deploy reference distinct bytes — what you see in Git is what runs.
 
-**How it works** — _To be written._
+**How it works** — Every build tags the image with the **short commit SHA** (`${GITHUB_SHA::7}`) — a tag that is *immutable*: it always names the exact bytes built from that commit, and it's never reused. CD then writes that tag into the Git values file, and Argo deploys it. The anti-pattern is a **mutable** tag (`dev`, `latest`) reused across builds: with `imagePullPolicy: IfNotPresent`, a node keeps serving the *old* cached image even after a new push to the same tag, so a deploy silently doesn't take.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — CD builds `acrantkartdev.azurecr.io/antkart/<service>:<sha>` (plus a `latest` convenience pointer) and `yq`-bumps `.image.tag` in the service's values file to that SHA. Argo syncs and deploys the SHA-tagged image. Because the tag is a commit SHA, **what's in Git is exactly what runs**, and any running image traces back to a precise commit. Decision: [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md).
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Alternatives: a **mutable** tag like `latest`/`dev` (simple, but the KI-004 stale-image trap), **semantic version** tags (human-friendly, but need a release/versioning process), or **digest pinning** (`@sha256:…` — maximally immutable but opaque and hard to correlate to a commit). Commit-SHA tags buy immutability *and* traceability (tag ↔ commit) with no extra release process, at the cost of unmemorable tags — which the `latest` pointer softens for humans.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **KI-004 (Low):** a mutable tag + `imagePullPolicy: IfNotPresent` (the chart default) lets a node serve a stale cached image after a new push to the same tag, so code "doesn't deploy." Mitigation/resolution: **immutable commit-SHA tags** (adopted with the CI/CD pipeline). Source: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-004.
+- **`latest` is a convenience pointer, not a deploy target.** Deploys reference the SHA; using `latest` reintroduces the mutable-tag problem.
+- **The SHA is the audit trail.** A running image's tag *is* the commit — don't lose that by deploying a floating tag.
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"Why tag images with the commit SHA instead of `latest`?"* — Immutability + traceability: what's in Git is what runs, and the tag maps to an exact commit; `latest` is mutable and stale-prone (KI-004). The core question.
+- *"A push to the same tag didn't change what's running — why?"* — Mutable tag + `IfNotPresent` served the cached image (KI-004). The war story.
+- *"Immutable tag vs digest pinning — trade-off?"* — Both immutable; the SHA tag stays correlatable to a commit, a digest is opaque. Testing depth.
+- *"What's `latest` for if you deploy by SHA?"* — A human convenience pointer only — never the deploy target.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "We tag every image with the short commit SHA, which is immutable — it always names the exact bytes from that commit and is never reused — and CD writes that SHA into the Git values file, so what's in Git is exactly what runs and any running image traces straight back to a commit. The anti-pattern we're avoiding is a mutable tag like `latest`: with the default IfNotPresent pull policy, a node keeps serving the old cached image even after you push a new one to the same tag, so the deploy silently doesn't take — that's KI-004, and the SHA tags are the fix. We also push a `latest` pointer, but only as a human convenience — deploys always reference the SHA, because that's what makes them immutable and auditable."
 
 **Read the code** — `.github/workflows/products-cd.yml` (tag = `${GITHUB_SHA::7}`, pushed to
 `acrantkartdev.azurecr.io/antkart/<service>:<sha>`; `yq` bumps `.image.tag` in the values file). Gap:
 [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-004 (mutable tag can serve a stale image; **mitigated** by immutable
 SHA tags). Decision: [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain why a commit-SHA tag is immutable and how a mutable tag causes KI-004. Then trace one image from CD's SHA tag to the `.image.tag` bump to Argo deploying it.
 
 ---
 
-_End of syllabus. Seventy concepts, twenty at full depth. Every tag starts 🟡 — earn the rest one concept at a
-time. When you change the last one to 🟢, this platform is yours to explain to anyone._
+_End of syllabus. Seventy concepts, all written to the full template. Every tag starts 🟡 — the writing is
+done; the proving is yours. When you change the last one to 🟢, this platform is yours to explain to anyone._
