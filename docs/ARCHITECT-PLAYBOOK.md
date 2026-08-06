@@ -3865,6 +3865,23 @@ Knowing which pillar answers which question — and which ones a platform actual
 
 The power comes from correlation: all of it lands in one Log Analytics workspace, and a log's `TraceId` equals a span's `OperationId`, so one query joins "what happened" to "where the time went."
 
+```mermaid
+flowchart TD
+    LOGS["LOGS — what happened<br/>Serilog → ContainerLog ✅"]:::service
+    TRACES["TRACES — where the time went<br/>OTel → AppRequests / AppDependencies ✅"]:::service
+    METRICS["METRICS — trends (p99, error rate)<br/>NOT collected (stack removed) ❌"]:::issue
+    WS[("ONE Log Analytics workspace")]:::datastore
+    JOIN["TraceId == OperationId → correlate"]:::edge
+    LOGS --> WS
+    TRACES --> WS
+    WS --> JOIN
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
+
 **How AntKart uses it** — Two of the three are delivered. Serilog writes structured JSON to stdout, collected into `ContainerLog`; OpenTelemetry exports spans through App Insights into `AppRequests`/`AppDependencies`. **Metrics are deliberately not collected** — a self-hosted Prometheus/Grafana stack was built then removed ([ADR-025](adr/ADR-025-observability-architecture.md), Observability §6). Everything co-queries in the one workspace. Decision: [ADR-025](adr/ADR-025-observability-architecture.md).
 
 **Alternatives and the trade-off** — Alternatives: run all three yourself (self-hosted logs + traces + Prometheus/Grafana — AntKart removed the metrics half as disproportionate to a two-node cluster), buy a managed APM that does all three (Datadog is under evaluation), or skip traces (cheaper, but you can't answer "where did the time go" across services). Delivering logs + traces via Azure Monitor buys cross-signal correlation with no infra to run, at the cost of no metrics *for now* — an honest scope, not a hidden gap.
@@ -3903,6 +3920,23 @@ traces. Writing to stdout (not a file or a sink with credentials) means the plat
 app holding any logging secret.
 
 **How it works** — Each log event is an object — a message template plus named properties — not a formatted string, so you can later query "all events where `OrderId = X`." **Enrichers** attach ambient context to every event (`ServiceName`, `Environment`, `TraceId`/`SpanId`, `CorrelationId`). In the cloud, Serilog writes one **compact-JSON** line per event to **stdout**; the AKS Azure Monitor agent scrapes stdout from every node into the `ContainerLog` table. Writing to stdout (not a file or a credentialed sink) is what makes log collection secret-less.
+
+```mermaid
+flowchart TD
+    EV["event = message template + named properties"]:::service
+    ENR["enrichers: ServiceName · TraceId · SpanId · CorrelationId"]:::service
+    JSON["cloud: compact JSON → stdout"]:::service
+    AGENT["Azure Monitor agent scrapes stdout"]:::edge
+    CL[("ContainerLog — queryable by field")]:::datastore
+    EV --> ENR --> JSON --> AGENT --> CL
+    NOTE["stdout (no file / no sink) = NO logging credential · no ELK"]:::issue
+    NOTE -.-> JSON
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — `SerilogExtensions.AddSerilogLogging` (BuildingBlocks): the cloud branch is `WriteTo.Console(new RenderedCompactJsonFormatter())` (one JSON object per event); the dev branch is a human-readable template plus a rolling file for local convenience. Enrichers add `ServiceName`, `Environment`, `FromLogContext` (CorrelationId), and an `ActivityEnricher` that stamps `TraceId`/`SpanId` (the join to traces — Observability §4). There is **no Elasticsearch/Kibana sink** — ELK was replaced by Azure Monitor. Decision: [ADR-025](adr/ADR-025-observability-architecture.md).
 
@@ -4136,6 +4170,21 @@ error that looks like a KQL bug but is really the wrong API. Knowing which schem
 
 Pass workspace table names to the classic API and you get `BadArgumentError` — which reads like a KQL syntax bug but is really the wrong API/schema pairing.
 
+```mermaid
+flowchart TD
+    WSAPI["az monitor log-analytics query → WORKSPACE schema ✅<br/>AppRequests · AppDependencies · TimeGenerated"]:::service
+    CLASSIC["az monitor app-insights query → CLASSIC schema<br/>requests · dependencies · timestamp"]:::edge
+    ERR["workspace tables via the CLASSIC api → BadArgumentError<br/>(looks like a KQL bug — it's the wrong API)"]:::issue
+    WIN["Windows: single-quote KQL literals (CLI strips double quotes)"]:::issue
+    WSAPI -.-> ERR
+    CLASSIC -.-> ERR
+    WSAPI --> WIN
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — Because App Insights is workspace-based, all queries use the **workspace** schema via `az monitor log-analytics query`. The runbook's Phase 6.6 telemetry check is real KQL: `union AppRequests, AppDependencies | where TimeGenerated > ago(60m) | summarize roles=make_set(AppRoleName), spans=count() by OperationId | where array_length(roles) > 1` — a multi-role `OperationId` proves a request was traced across services. Logs are `ContainerLog | extend L = parse_json(LogEntry)`. Examples in [docs/development/5-observability.md](development/5-observability.md).
 
 **Alternatives and the trade-off** — There isn't a real "alternative" so much as a correct pairing: you must match the schema to the API. The portal query blade is an alternative surface (no CLI), and Azure Monitor Workbooks/dashboards sit on top of the same KQL. The trade is simply that KQL has a learning curve; the payoff is one query language across logs and traces in one workspace.
@@ -4185,6 +4234,23 @@ being honest. Removing it — and saying so — is a maturity signal, not a gap.
 | Discount's 2nd HTTP/1.1 Kestrel listener (for scraping) | OTel pinned to the 1.13.x line |
 
 Earlier, ELK/Kibana was also removed in favour of Azure Monitor. The removals are the point: knowing what a platform *left out* and why is interview-grade.
+
+```mermaid
+flowchart TD
+    BUILT["BUILT: kube-prometheus-stack (Prometheus + Grafana)<br/>ServiceMonitors · /metrics · Discount 2nd listener"]:::issue
+    REMOVED["→ REMOVED (disproportionate to a 2-node dev cluster)"]:::issue
+    KEPT["KEPT: Serilog logs + OTel traces"]:::service
+    DATADOG["managed APM (Datadog) under evaluation"]:::edge
+    KI["KI-008 (Discount /metrics scrape) → Withdrawn (moot)"]:::issue
+    BUILT --> REMOVED
+    REMOVED --> KEPT
+    REMOVED --> DATADOG
+    REMOVED -.-> KI
+
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
 
 **How AntKart uses it** — Concretely removed ([ADR-025](adr/ADR-025-observability-architecture.md)): the `deploy/argocd/monitoring/` Application + `monitoring` AppProject, the chart's `servicemonitor.yaml` template and `serviceMonitor`/`metricsPort` values, the BuildingBlocks metrics pipeline, and Discount's second Kestrel listener (reverting it to a single HTTP/2-only gRPC endpoint). What remains is logs + traces, untouched. A managed platform (Datadog) is under evaluation as the metrics answer. [ADR-025](adr/ADR-025-observability-architecture.md) is Accepted with the metrics portion **superseded**.
 
@@ -4236,6 +4302,23 @@ cluster (nothing external can push), makes Git the audit log of every change, an
 | Source of truth | wherever the pipeline ran | Git — also the audit log |
 
 Argo reports two statuses: **Sync** (`Synced`/`OutOfSync` — does live match Git?) and **Health** (`Healthy`/`Progressing`/`Degraded` — are the resources actually working?).
+
+```mermaid
+flowchart TD
+    PUSH["PUSH (classic CI) — pipeline holds cluster admin, kubectl inward<br/>rejected"]:::issue
+    CD["CD only bumps a tag in Git (never touches cluster)"]:::cicd
+    GIT["Git = source of truth + audit log"]:::cicd
+    ARGO["Argo CD IN-cluster reads Git → reconciles (pull)"]:::edge
+    CLUSTER["cluster matches Git (drift self-healed)"]:::service
+    CD --> GIT --> ARGO --> CLUSTER
+    NOTE["public repo → Argo clones ANONYMOUSLY (zero credential custody)"]:::service
+    NOTE -.-> ARGO
+
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+```
 
 **How AntKart uses it** — Argo CD runs *inside* the cluster and reconciles it to `master`. CD (GitHub Actions) never touches the cluster — it builds an image and **bumps a tag in Git**; Argo picks that up and deploys. Because the repo is public, Argo clones it **anonymously** — there's no external credential custody at all. Decisions: [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md), [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md); guide: [docs/guides/gitops-guide.md](guides/gitops-guide.md).
 
@@ -4560,6 +4643,22 @@ duplicated config or fragile shared config.
 
 The model determines where a new environment's values go and whether Argo watches them where they change (ties to "what Argo does NOT watch").
 
+```mermaid
+flowchart TD
+    A["(a) values per environment — values/env/svc.yaml<br/>TODAY (simplest, duplicates common keys)"]:::service
+    B["(b) base + overlay — DRY, more indirection"]:::edge
+    C["(c) separate GitOps repo per environment<br/>TARGET (ADR-024)"]:::cicd
+    WHY["why (c): write-contention (one BuildingBlocks change trips all 6 CD jobs)<br/>+ Argo then watches its own objects"]:::issue
+    A --> C
+    B --> C
+    C --> WHY
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — Today it leans toward **(a)**: dev values under `deploy/helm/values/` plus parallel `deploy/helm/values/qa/` and `deploy/argocd/qa/`. The runbook §5.0 decision table lays out all three options for a new build. [ADR-024](adr/ADR-024-cd-gitops-write-contention.md) names a **separate GitOps repository (c)** as the long-term answer — driven by the CD write-contention problem where a shared repo makes six CD jobs race to push. Decision: [ADR-024](adr/ADR-024-cd-gitops-write-contention.md).
 
 **Alternatives and the trade-off** — The three models *are* the alternatives. (a) is the least ceremony and easiest to read, at the cost of duplicating shared keys across environments. (b) removes duplication but adds overlay indirection. (c) isolates each environment completely — and crucially moves the Argo objects and app config into a repo Argo actually watches, sidestepping the "Argo doesn't watch its own manifests" footgun and the multi-job write contention — at the cost of another repo and promotion path. AntKart runs (a) now and points at (c) as the destination.
@@ -4609,6 +4708,22 @@ commit, coupled only through Git — keeps the gate honest and the delivery pull
 | Deploys? | no — it's a gate | no — Argo does, from the Git bump |
 
 The two are **coupled only through Git**: the commit CI guarded is the same commit CD acts on, and CD's output is a Git commit that Argo reconciles. Neither pipeline holds cluster credentials.
+
+```mermaid
+flowchart TD
+    PR["pull request"]:::cicd
+    CI["CI: build-test → sonar → trivy<br/>(no image, no cluster) — the GATE"]:::cicd
+    MERGE["merge to master"]:::cicd
+    CD["CD: build + push SHA image (OIDC) → bump tag in Git<br/>(no helm / kubectl)"]:::cicd
+    ARGO["Argo CD deploys from the Git bump"]:::edge
+    PR --> CI --> MERGE --> CD --> ARGO
+    NOTE["coupled ONLY through Git · neither pipeline holds cluster credentials"]:::issue
+    NOTE -.-> CD
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — 12 workflows: 6 CI + 6 CD (a pair per service). CI (`products-ci.yml`) runs `build-test → sonar → trivy` on a PR — unit tests plus an in-memory MassTransit integration suite, no live infra. CD (`products-cd.yml`) runs `build-and-push → update-gitops`: build the image, push to ACR via OIDC, then `yq`-bump `.image.tag` in the values file. Argo deploys from that commit. One generic chart is reused per service. Decision: [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md).
 
@@ -4753,6 +4868,24 @@ to the pull request.
 | `sonar` / SonarCloud | code quality + coverage | the SonarCloud quality gate fails |
 | `trivy` | image/filesystem vuln + misconfig scan | a `HIGH`/`CRITICAL` finding (`exit-code: 1`) |
 
+```mermaid
+flowchart TD
+    PRQ["PR cannot merge until 4 REQUIRED checks pass"]:::cicd
+    BT["build-test (unit + in-memory integration)"]:::service
+    SN["SonarCloud quality gate"]:::service
+    TV["Trivy HIGH/CRITICAL · exit-code 1 → BLOCKS merge"]:::issue
+    ADMIN["repo admin BYPASS for infra/docs (gated by terraform plan)"]:::edge
+    PRQ --> BT
+    PRQ --> SN
+    PRQ --> TV
+    PRQ -.-> ADMIN
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
+
 **How AntKart uses it** — The `master-protection` ruleset requires **four** checks — `build-test`, `sonar`, `trivy`, and SonarCloud's own PR gate — before merge. Trivy runs with `TRIVY_SEVERITY: HIGH,CRITICAL` and `exit-code: 1` (a finding fails the job), scanning both the filesystem and the Dockerfile. **Repository admin is on the bypass list** for infrastructure/docs changes, which are gated differently (a `terraform plan` review), so application code goes through the PR gate while infra/docs can go direct. Decision: [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md); details in [docs/development/4-devops.md](development/4-devops.md).
 
 **Alternatives and the trade-off** — Alternatives: human review only (misses coverage regressions and CVEs), scanning *after* deploy (too late — the vulnerable image already shipped), or no enforced gates (anything merges). Required checks make "it passed" a *precondition* of merge rather than a hope, at the cost of gate latency on every PR and some false positives to triage. The admin bypass for infra/docs is a pragmatic split so a doc typo doesn't sit behind the full app gate.
@@ -4796,6 +4929,24 @@ half-completes a delivery (CD). The two keep the pipeline efficient and safe.
 | Concurrency group | `products-ci-${{ github.ref }}` | `products-cd` (per service) |
 | `cancel-in-progress` | `true` (a new push cancels the stale run) | `false` (never cancel a half-done deploy) |
 
+```mermaid
+flowchart TD
+    PUSH["push to master"]:::cicd
+    FILTER["on.push.paths: service + AK.BuildingBlocks + '!**/*.md' LAST<br/>(later patterns win)"]:::cicd
+    RUN["service CD runs only if relevant files changed"]:::service
+    CONC["concurrency: CI cancel-in-progress=true · CD=false<br/>(never cancel a half-done deploy)"]:::edge
+    LOOP["CD filter EXCLUDES deploy/helm/values → tag-bump can't retrigger CD"]:::issue
+    KI["KI-006: missing '!**/*.md' once fired 5 CD pipelines (resolved)"]:::issue
+    PUSH --> FILTER --> RUN --> CONC
+    FILTER -.-> LOOP
+    FILTER -.-> KI
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — CI/CD path filters include the service folder, `AK.BuildingBlocks/**`, and `- '!**/*.md'` **last**. CI cancels superseded runs (`cancel-in-progress: true`); CD does **not** (`false`) — a half-finished delivery is worse than waiting. The CD filter deliberately **excludes** `deploy/helm/values/**`, so CD's own tag-bump commit can't retrigger CD (the loop guard). Gap: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-006; related [ADR-024](adr/ADR-024-cd-gitops-write-contention.md).
 
 **Alternatives and the trade-off** — Alternatives: no path filters (every commit runs every service's pipeline — wasteful and, per KI-006, actively harmful), workflow-level rather than job-level concurrency (coarser), or `paths-ignore` instead of a trailing negation (equivalent but easy to misorder). Filters + per-workflow concurrency buy efficiency and safety — only relevant pipelines run, and deliveries don't collide — at the cost of getting the pattern order and the loop-guard exclusion exactly right.
@@ -4834,6 +4985,24 @@ cached image after a new push to the same tag, so a deploy silently doesn't take
 SHA tag makes every deploy reference distinct bytes — what you see in Git is what runs.
 
 **How it works** — Every build tags the image with the **short commit SHA** (`${GITHUB_SHA::7}`) — a tag that is *immutable*: it always names the exact bytes built from that commit, and it's never reused. CD then writes that tag into the Git values file, and Argo deploys it. The anti-pattern is a **mutable** tag (`dev`, `latest`) reused across builds: with `imagePullPolicy: IfNotPresent`, a node keeps serving the *old* cached image even after a new push to the same tag, so a deploy silently doesn't take.
+
+```mermaid
+flowchart TD
+    BUILD["CD build"]:::cicd
+    SHA["tag = short commit SHA — IMMUTABLE (never reused)"]:::cicd
+    PUSH["push antkart/service:sha (+ latest pointer for humans)"]:::paas
+    BUMP["yq bumps .image.tag in Git → Argo deploys"]:::edge
+    RUN["what's in Git = what runs (traces to a commit)"]:::service
+    BUILD --> SHA --> PUSH --> BUMP --> RUN
+    KI["KI-004: mutable tag (latest) + IfNotPresent → node serves STALE cached image<br/>fixed by immutable SHA tags"]:::issue
+    SHA -.-> KI
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — CD builds `acrantkartdev.azurecr.io/antkart/<service>:<sha>` (plus a `latest` convenience pointer) and `yq`-bumps `.image.tag` in the service's values file to that SHA. Argo syncs and deploys the SHA-tagged image. Because the tag is a commit SHA, **what's in Git is exactly what runs**, and any running image traces back to a precise commit. Decision: [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md).
 
