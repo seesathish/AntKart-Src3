@@ -101,6 +101,22 @@ isolation and lets the outer, volatile layers be swapped without touching the bu
 
 The inward rule means the Domain is a pure library you can unit-test with no database or broker, and the volatile outer layers can be swapped without touching it. Dependencies are inverted at the boundary: the Application *declares* `IOrderRepository`; Infrastructure *implements* it.
 
+```mermaid
+flowchart TD
+    subgraph L4["API / Grpc — thin host (outermost ring)"]
+        subgraph L3["Infrastructure — EF Core · Mongo · MassTransit"]
+            subgraph L2["Application — CQRS handlers · DTOs · interfaces"]
+                L1["Domain core<br/>entities · value objects · rules<br/>zero framework dependencies"]:::datastore
+            end
+        end
+    end
+    DIR["THE RULE: dependencies point INWARD only<br/>API → Infrastructure → Application → Domain"]:::issue
+    DIR -.-> L1
+
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — Every service repeats the same four projects (`AK.<Service>.Domain/.Application/.Infrastructure/.API`). The direction is enforced by `ProjectReference`, not discipline: `AK.Order.Application` references only `AK.Order.Domain` + `AK.BuildingBlocks`; `AK.Order.Infrastructure` references Application. `MongoDB.Driver` is confined to `AK.Products.Infrastructure`; the Products Domain has zero infrastructure dependencies. Tests reference Domain/Application/Infrastructure but never the API/Grpc host, so the whole platform is unit-tested without a running host.
 
 **Alternatives and the trade-off** — The alternative is classic **n-tier** (the business layer depends *downward* on the data layer, so rules are coupled to the database) or a **transaction-script / "big ball of mud"** where everything sits in the controller. Clean Architecture inverts the data dependency so the core is dependency-free, at the cost of more projects and a little ceremony (an interface in Application, an implementation in Infrastructure). For a six-service platform meant to be testable and independently evolvable, that ceremony pays for itself. Decision: [ADR-002](adr/ADR-002-clean-architecture-and-ddd.md).
@@ -308,6 +324,26 @@ the unit of work ensures a set of changes commits atomically rather than pieceme
 
 A handler asks the repository for data (optionally passing a specification), mutates aggregates, then calls `uow.SaveChangesAsync()` once — so multiple changes land in a single transaction, and the handler never touches `DbContext`.
 
+```mermaid
+flowchart TD
+    H["command / query handler"]:::service
+    SPEC["Specification<br/>OrdersByUserSpecification"]:::service
+    REPO["IOrderRepository → OrderRepository"]:::service
+    UOW["IUnitOfWork.SaveChangesAsync<br/>one transaction"]:::service
+    CTX["OrderDbContext (EF Core)"]:::service
+    DB[("PostgreSQL")]:::datastore
+    H -->|query with| SPEC
+    SPEC --> REPO
+    H -->|mutate| REPO
+    H -->|commit| UOW
+    REPO --> CTX
+    UOW --> CTX
+    CTX --> DB
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+```
+
 **How AntKart uses it** — `IOrderRepository` (Application) exposes `GetByIdAsync`, `ListAsync(ISpecification<Order>)`, `AddAsync`, `CountAsync`, etc.; `OrderRepository` (Infrastructure) implements it over `OrderDbContext`. Specifications live in `AK.Order.Domain/Specifications/` (`OrderByIdSpecification`, `OrdersByUserSpecification`, `OrdersByStatusSpecification`, `OrdersPagedSpecification`) on a shared `BaseSpecification`. `IUnitOfWork` exposes `Orders` + `SaveChangesAsync`. The same trio appears in Products (over Mongo) and ShoppingCart, so the pattern is uniform across stores.
 
 **Alternatives and the trade-off** — The alternative is injecting `DbContext` straight into handlers (couples Application to EF Core and scatters LINQ) or a single generic `Repository<T>` (less abstraction but leaks IQueryable). The known critique — **"EF Core's `DbContext` is already a Unit of Work and its `DbSet`s are already repositories"** — is real: this adds a layer on top of one. AntKart accepts that indirection deliberately, for a testable Application layer that mocks `IOrderRepository`/`IUnitOfWork` and for query reuse via specifications. Decision: [ADR-011](adr/ADR-011-Repository-Specification-and-Unit-of-Work.md).
@@ -358,6 +394,23 @@ denormalised integration event crosses the service boundary.
 | **Dependency** | none (Domain has no messaging) | the messaging contract both sides reference |
 
 An aggregate raises a domain event as a fact ("order created"); it's dispatched in-process after the save. When that fact must leave the service, a handler publishes a *separate* integration event — a stable, denormalised contract — so other services never see the internal domain model.
+
+```mermaid
+flowchart TD
+    AGG["Order aggregate"]:::service
+    DE["domain event<br/>OrderCreatedEvent<br/>in-process, same transaction"]:::service
+    DISP["in-process dispatcher"]:::service
+    IE["integration event<br/>OrderCreatedIntegrationEvent<br/>BuildingBlocks contract, enriched"]:::edge
+    SB["Service Bus → other services"]:::paas
+    AGG -->|raises| DE
+    DE -->|handled inside the service| DISP
+    DISP -->|publishes a SEPARATE, denormalised event| IE
+    IE --> SB
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+```
 
 **How AntKart uses it** — Domain events (`OrderCreatedEvent`, `OrderStatusChangedEvent`, `OrderCancelledEvent`) are raised inside `Order.cs` and cleared after commit (`order.ClearDomainEvents()`). The cross-service contracts live once in `AK.BuildingBlocks/Messaging/IntegrationEvents/` (`OrderCreatedIntegrationEvent`, `StockReservedIntegrationEvent`, `PaymentSucceededIntegrationEvent`, …) and are *enriched* — they carry `CustomerEmail`/`CustomerName`/`OrderNumber` so consumers needn't call back. One definition, referenced by both publisher and consumer, so the shape can't drift. Decision: [ADR-009](adr/ADR-009-domain-events-vs-integration-events.md); shared-contracts rationale: [ADR-008](adr/ADR-008-shared-ddd-contracts-in-buildingblocks.md).
 
@@ -682,6 +735,24 @@ scale to zero and cost nothing when idle — while the saga stays durable and ex
 
 The order/payment is committed durably first; **only then** does the handler emit an Event Grid notification as a side-effect. `TryPublishAsync` never throws, so a failed publish can't roll back or fail the business operation. Event Grid pushes to a Functions app that dispatches the email through ACS and scales back to zero.
 
+```mermaid
+flowchart TD
+    H["Order / Payments handler"]:::service
+    TX[("durable commit — outbox<br/>the money-and-stock transaction")]:::datastore
+    SBUS["Service Bus SAGA<br/>durable · tracked · retried"]:::paas
+    EG["Event Grid<br/>fire-and-forget, best-effort"]:::edge
+    FN["Azure Functions<br/>scale-to-zero"]:::service
+    MAIL["ACS email"]:::paas
+    H --> TX --> SBUS
+    H -->|AFTER commit — TryPublishAsync never throws| EG
+    EG --> FN --> MAIL
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
+
 **How AntKart uses it** — `IEventGridSideEffectPublisher.TryPublishAsync` is called after commit in `CreateOrderCommandHandler`, `VerifyPaymentCommandHandler`, and the `OrderConfirmed`/`OrderCancelled` consumers. The five event contracts live once in `AK.BuildingBlocks/Messaging/Notifications/` (`NotificationEventTypes` + the payload records), published to the `evgt-antkart-dev` topic. `AK.Notification.Functions` has one `[EventGridTrigger]` per event (`OnOrderCreated`, `OnPaymentSucceeded`, …); each is thin — deserialize, build a `NotificationRequest`, call `INotificationDispatcher` in `AK.Notification.Core`, which resolves a template and sends via the ACS email channel. Decision: [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
 **Alternatives and the trade-off** — Alternatives: put notifications on the Service Bus saga (durable, but couples a non-critical email into the money-and-stock transaction and needs an always-on consumer) or send the email synchronously in the handler (a slow SMTP call blocks the request and a failure fails the order). The two-mechanism split trades delivery *guarantee* on notifications (they're best-effort) for the guarantee that **notifications can never affect the business transaction** — plus scale-to-zero cost. The durable saga keeps its guarantees; only the disposable side-effect is fire-and-forget.
@@ -732,6 +803,23 @@ degrades gracefully instead of dragging the caller down with it.
 | **Data store** | `AddDataStoreResiliencePipeline` | honours a server `Retry-After` verbatim, else exp+jitter | Products → Cosmos (429 throttling) |
 | **DB / cache** | `AddNpgsqlResilience` / `AddRedisResilience` | retry with exp backoff + jitter (avoid thundering herd) | Postgres / Redis |
 
+```mermaid
+flowchart TD
+    CALL["outbound call — pick tier by criticality"]:::service
+    CRIT["CRITICAL (Order → Products price)<br/>patient: retry+jitter → circuit breaker → timeout<br/>fail CLOSED"]:::service
+    OPT["OPTIONAL (Products → Discount gRPC)<br/>fail-fast: NO retry · quick breaker · 2s"]:::edge
+    DS["DATA STORE (Cosmos 429)<br/>honour server Retry-After, else backoff+jitter"]:::datastore
+    DB["DB / cache (Npgsql, Redis)<br/>retry with backoff + jitter"]:::datastore
+    CALL --> CRIT
+    CALL --> OPT
+    CALL --> DS
+    CALL --> DB
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+```
+
 **How AntKart uses it** — All policies are centralised in `ResilienceExtensions` (BuildingBlocks). The Order→Products catalogue client uses the *patient* pipeline because pricing is critical and fails closed. The Products→Discount gRPC client uses `AddOptionalDependencyResilience` — **no retry** + a quick circuit-break + 2s timeout — so a down Discount degrades silently and never slows the catalogue. Products runs Cosmos calls through `AddDataStoreResiliencePipeline`, which **honours the 429 `RetryAfterMs`** rather than guessing. Npgsql uses exponential backoff + jitter so a DB reconnect doesn't stampede.
 
 **Alternatives and the trade-off** — Alternatives: no resilience (every transient blip becomes a user error), a single blunt "retry everything" policy (amplifies outages, hammers a dead dependency), or per-caller ad-hoc `try/catch`. The tiered library trades a little upfront design (deciding each dependency's criticality) for graceful degradation that matches intent — patient for critical, fail-fast for optional. Decision: [ADR-003](adr/ADR-003-fault-tolerance-with-polly.md).
@@ -771,6 +859,23 @@ the platform demonstrate a second transport style alongside the REST services.
 
 **How it works** — gRPC defines the service contract in a `.proto` file (messages + RPC methods); a build step generates a strongly-typed server base and client from it. Calls travel as **Protobuf** (compact binary) over **HTTP/2** (multiplexed, long-lived connections). The client is generated, so there's no hand-written JSON serialization; both sides share the exact contract. In AntKart the call is treated as an *optional* dependency, so the client is tuned to fail fast and never throw.
 
+```mermaid
+flowchart TD
+    P["AK.Products (rendering catalogue)"]:::service
+    C["DiscountGrpcClient<br/>2s timeout · no retry · NEVER throws"]:::service
+    D["AK.Discount — gRPC h2c<br/>ak-discount:8080 (HTTP/2)"]:::service
+    CAT["catalogue renders<br/>with OR without a discount price"]:::service
+    P --> C
+    C -->|GetDiscount over HTTP/2 Protobuf| D
+    D -->|null on failure → one warning| C
+    C --> CAT
+    KI["KI-002 — decodes JWT but does NOT verify it<br/>safe only because ClusterIP-only"]:::issue
+    KI -.-> D
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — The contract `discount.proto` defines `GetDiscount`, `CreateDiscount`, `UpdateDiscount`, `DeleteDiscount`, `GetAllDiscounts`. `DiscountGrpcClient` (in Products Infrastructure) calls `GetDiscount` while rendering the catalogue, over a named `discount-grpc` client with a 2s timeout and `AddOptionalDependencyResilience` (no retry, quick breaker). It **never throws**: an `RpcException/NotFound` returns null, any other failure logs *one* concise warning (message only, no stack, guarded so it's once per request) and returns null — so the catalogue always renders, with or without a discount price. In-cluster it's reached at `http://ak-discount:8080` over h2c (HTTP/2 cleartext).
 
 **Alternatives and the trade-off** — REST/JSON (universal, human-readable, but larger payloads and no shared contract) or a message/event for pricing (decoupled, but pricing is a synchronous read here). gRPC buys a compact, strongly-typed, low-latency internal call and a generated client, at the cost of being binary (not curl-friendly) and needing HTTP/2 end to end — which is why Discount's Kubernetes probes are **TCP**, not HTTP (an HTTP/1.1 httpGet probe would be rejected by the h2c-only listener). Decision: [ADR-006](adr/ADR-006-ocelot-api-gateway.md) context; gRPC choice is per-service.
@@ -809,6 +914,27 @@ enforce auth and rate limits, and clients coupled to internal topology. One gate
 front door and one place for cross-cutting edge concerns, with everything behind it kept ClusterIP-only.
 
 **How it works** — Ocelot reads a JSON route table: each route maps an **upstream** public path (what the client calls) to a **downstream** service host+path (the in-cluster service). Per route it can apply rate limiting, a QoS/circuit-breaker, and — here — passes the JWT straight through to the downstream service (which re-validates it). It's an *in-process* .NET app, so it runs as just another service in the cluster, in front of the others.
+
+```mermaid
+flowchart TD
+    CLIENT["client"]:::external
+    ING["ingress-nginx<br/>api.antkart.in (TLS)"]:::edge
+    GW["AK.Gateway — Ocelot<br/>route · rate-limit (10-30 RPS) · QoS · JWT passthrough"]:::service
+    S1["ak-products:8080"]:::service
+    S2["ak-order:8080"]:::service
+    S3["ak-payments / cart / discount<br/>(ClusterIP-only)"]:::service
+    CLIENT --> ING --> GW
+    GW --> S1
+    GW --> S2
+    GW --> S3
+    APIM["planned APIM edge sits IN FRONT (ADR-020)"]:::issue
+    APIM -.-> ING
+
+    classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — `AK.Gateway` runs Ocelot 23.4.2, configured by `ocelot.json` (with `ocelot.Development.json` overrides). Its downstream routes point at the in-cluster DNS names `ak-<service>:8080`; it applies per-route rate limiting (10–30 RPS) and a QoS circuit breaker, and passes the Entra JWT through. It is the **only** service exposed (via Ingress at `api.antkart.in`); the other five are ClusterIP-only. In the target state, Azure API Management sits *in front of* Ocelot as the managed edge ([ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md)) — a two-gateway model, not a replacement.
 
@@ -857,6 +983,21 @@ document DB, transactional orders in Postgres, an ephemeral cart in Redis.
 
 Because no service touches another's data, any field one service needs from another is **denormalised** (copied) — e.g. the order carries the customer email rather than joining to an identity store.
 
+```mermaid
+flowchart TD
+    PR["Products"]:::service --> COS[("Cosmos DB — Mongo API<br/>read-heavy document catalogue")]:::datastore
+    OR["Order / Payments / Discount"]:::service --> PG[("PostgreSQL<br/>transactional, ACID, EF migrations")]:::datastore
+    CA["ShoppingCart"]:::service --> RD[("Redis<br/>ephemeral key-value, 30-day TTL")]:::datastore
+    NOTE["no service reads another's DB → copy needed fields (denormalise)"]:::issue
+    NOTE -.-> PR
+    NOTE -.-> OR
+    NOTE -.-> CA
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — Store registration lives in each service's Infrastructure: Products wires `MongoDbContext` (Cosmos over the Mongo driver), Order/Payments/Discount call `UseNpgsql`, ShoppingCart uses StackExchange.Redis with key `AKCart:cart:{userId}`. Each store is hidden behind that service's repository, and each has its own resilience posture (Cosmos honours 429 Retry-After; Npgsql/Redis use jittered backoff). Decision: [ADR-004](adr/ADR-004-polyglot-persistence.md).
 
 **Alternatives and the trade-off** — Alternatives: one shared relational database for everything (simplest ops, but couples services, forces one model, and breaks independent deployability) or forcing a single store type everywhere (a document DB for transactions, or SQL for a cart, both poor fits). Polyglot trades a larger operational surface (three store technologies to run and secure) for each workload using the store that fits and for true service independence. Decision: [ADR-004](adr/ADR-004-polyglot-persistence.md).
@@ -896,6 +1037,23 @@ local transactions, there is a window where the order is created but stock isn't
 that assumes instantaneous global consistency will misread that window as a bug.
 
 **How it works** — Message brokers deliver **at-least-once**, so a consumer *will* occasionally see the same message twice; **idempotency** makes the second delivery a no-op. Three techniques do it here: an **inbox** table that records processed message ids (once-only), **deterministic ids** (derive the key from stable input so a re-write hits the same row), and **optimistic concurrency** (a version column rejects a stale write). **Eventual consistency** is the accepted consequence of replacing one ACID transaction with a saga of local transactions: for a short window the order exists but stock isn't reserved yet — the system converges, it isn't inconsistent forever.
+
+```mermaid
+flowchart TD
+    MSG["message (broker = at-least-once)"]:::paas
+    INBOX[("InboxState — records processed ids")]:::datastore
+    RUN["consumer runs ONCE"]:::service
+    SKIP["duplicate → already processed → no-op"]:::issue
+    MSG -->|first delivery| INBOX --> RUN
+    MSG -->|redelivery| INBOX --> SKIP
+    EC["eventual consistency: created → stock-pending → confirmed/cancelled<br/>(separate local transactions that converge)"]:::edge
+
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
 
 **How AntKart uses it** — MassTransit's `InboxState` (added in `OrderDbContext`) deduplicates redelivered messages so a consumer runs once. The saga's `OrderSagaState.Version` gives optimistic concurrency, so two messages for the same order can't both win. The `ProductsSeedLoader` derives each Cosmos `_id` from the SKU (MD5→hex), so re-running the loader is a set of single-partition point *upserts* that never duplicate; `DiscountSeedLoader` clears-then-seeds so every run converges to the same set. The saga itself is the eventual-consistency engine — created → stock-pending → confirmed/cancelled, each a separate committed step.
 
@@ -944,6 +1102,25 @@ Separating liveness (is the process alive?) from readiness (should it receive tr
 | `/health/deps` | Are dependencies healthy? | **all** checks incl. deep, detailed JSON | diagnostics, **not** a probe |
 
 Tags are namespaced (`ak:live` / `ak:ready` / `ak:deep`) so a third-party check — like MassTransit's own `"ready"`-tagged bus check — can't accidentally land on the readiness probe. A **startup** probe gates liveness/readiness so a slow boot (loading Key Vault) doesn't trip a restart.
+
+```mermaid
+flowchart TD
+    STARTUP["startup probe<br/>gates the two below until booted<br/>(covers Key-Vault-at-boot)"]:::edge
+    LIVE["/health/live — shallow self, NO external calls"]:::service
+    READY["/health/ready — tolerant, Degraded ⇒ 200"]:::service
+    DEEP["/health/deps — deep JSON (diagnostics, not a probe)"]:::datastore
+    RESTART["fail → restart the pod"]:::issue
+    OUT["fail → out of Service endpoints (no traffic)"]:::issue
+    STARTUP --> LIVE
+    STARTUP --> READY
+    LIVE --> RESTART
+    READY --> OUT
+
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — Every service calls `AddDefaultHealthChecks()` + `MapDefaultHealthChecks()` from BuildingBlocks. Liveness is deliberately shallow — no DB call — so a transient database blip can't cause a restart storm; readiness is tolerant (Degraded returns 200) so one degraded dependency doesn't blackout the whole fleet. Deep checks (real Cosmos `ping`, Key Vault metadata list) are tagged `ak:deep` and appear only on `/health/deps`. The startup probe covers the Key-Vault-at-boot delay.
 
