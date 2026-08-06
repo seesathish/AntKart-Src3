@@ -1685,7 +1685,7 @@ same code. Pinning plus a lock file make provider resolution reproducible.
 
 ```mermaid
 flowchart TD
-    PIN["required_providers CONSTRAINT<br/>azurerm ~> 4.76 (allowed versions)"]:::cicd
+    PIN["required_providers CONSTRAINT<br/>azurerm ~&gt; 4.76 (allowed versions)"]:::cicd
     INIT["terraform init<br/>resolves within the constraint"]:::edge
     LOCK[("committed .terraform.lock.hcl<br/>EXACT version + checksums")]:::datastore
     ALL["every machine + CI installs identical providers"]:::paas
@@ -1818,7 +1818,7 @@ flowchart TD
     OIDC["OIDC issuer + workload identity<br/>enabled AT CREATION"]:::identity
     PODS["6 services · namespace antkart · CNI Overlay"]:::service
     AZURE --> POOL --> PODS
-    OIDC -->|secret-less pod auth (federation)| PODS
+    OIDC -->|secret-less pod auth via federation| PODS
 
     classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
     classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
