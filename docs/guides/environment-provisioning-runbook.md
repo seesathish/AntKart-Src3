@@ -78,7 +78,7 @@ disappointment.
 - **Plan before apply.** `terragrunt plan` on every unit before the first `apply` of a wave.
 - **Stop what you start.** AKS and PostgreSQL are the expensive resources. Phase 7 is teardown.
 - **One wave at a time.** Do not run `run-all apply` across the whole tree on a first build.
-- **`⚠️ UNVERIFIED`** marks a step written from the repository but not yet executed against a live cluster. Treat it as a starting point, verify the result, and remove the marker once it is proven. Phases 0-4 and 6, and sections 5.1-5.7, carry no markers — they have been run end to end. Sections 5.8 (CD promotion) and 5.9 (Notification path) remain marked — they are still outstanding.
+- **`⚠️ UNVERIFIED`** marks a step written from the repository but not yet executed against a live cluster. Treat it as a starting point, verify the result, and remove the marker once it is proven. Phases 0-4 and 6, and sections 5.1-5.7, carry no markers — they have been run end to end. Sections 5.8 (CD promotion), 5.9 (Notification path), and the optional Phase 6A (API Management edge) remain marked — they are still outstanding.
 
 ### 0.4 The five ideas behind every command in this runbook
 
@@ -1080,8 +1080,8 @@ kubectl get namespaces
 > Takes a provisioned-but-empty cluster (end of Phase 4) to all six services running and reconciled
 > by Argo CD. **Sections 5.1–5.7 and all of Phase 6 have now been run end to end against a real QA
 > build** (which ended with the full Postman saga passing over HTTPS at `https://qa.antkart.in`);
-> **sections 5.8 (CD promotion) and 5.9 (Notification path) remain `⚠️ UNVERIFIED`.** Each section follows the
-> house pattern: **Understand → Execute → Verify → If it fails.**
+> **sections 5.8 (CD promotion), 5.9 (Notification path), and the optional Phase 6A (API Management edge)
+> remain `⚠️ UNVERIFIED`.** Each section follows the house pattern: **Understand → Execute → Verify → If it fails.**
 
 ### 5.0 Decisions to make before starting
 
@@ -1692,6 +1692,166 @@ across roles; the second returns structured log lines carrying a `TraceId`, corr
 > `requests`, `dependencies` and `timestamp` — passing workspace table names to it returns
 > `BadArgumentError: The request had some invalid properties`, which looks like a KQL problem and is
 > not one.
+
+---
+
+## Phase 6A — Optional: API Management edge ⚠️ UNVERIFIED
+
+Optional and ephemeral. This phase stands up the [ADR-020](../adr/ADR-020-api-management-managed-edge-gateway.md)
+managed edge in front of an already-working environment, exercises it, and destroys it **in the same
+session**. It is **not** part of a standard environment build — Phases 0-6 produce a complete, reachable
+platform without it. Provision it only to prove the edge, then tear it down.
+
+> **API Management does not behave like the rest of this platform.** Every other expensive resource here
+> can be stopped between sessions — AKS and PostgreSQL both support stop and start, and Phase 7 relies on
+> that. **API Management cannot be stopped.** Once created it bills continuously until it is deleted,
+> regardless of use.
+>
+> Provisioning takes 30–45 minutes. Deletion takes a comparable time.
+>
+> Treat this phase as create, exercise, destroy — in one session. Do not provision it and come back to it
+> next week.
+>
+> Check the current SKU pricing for the target region before creating anything; do not rely on a figure
+> written in this document.
+
+### 6A.1 What this replaces, and what it does not
+
+Per [ADR-020](../adr/ADR-020-api-management-managed-edge-gateway.md) and the **APIM edge (target state)**
+section of [6-security.md](../development/6-security.md), APIM is a **two-gateway** model — an addition, not
+a replacement:
+
+- **What moves to the edge (APIM).** TLS termination, `validate-jwt` against Entra, rate-limit/quota,
+  subscription keys / products, and request/response transformation become APIM policy at the public front
+  door, so malformed or unauthenticated traffic is rejected before it reaches the cluster.
+- **What the in-cluster gateway keeps doing.** `AK.Gateway` (Ocelot) remains the **routing** gateway behind
+  the cluster's internal ingress — it routes each path to the service that owns it, exactly as before.
+- **Defence-in-depth token validation is retained.** APIM validating the JWT does **not** remove in-service
+  validation: `AK.Gateway` and each service **re-validate** audience, issuer, roles, and ownership. The edge
+  is an outer wall and an optimization, never the trust boundary the services rely on (ADR-020).
+- **The cluster works unchanged if APIM is absent.** Today traffic reaches `ingress-nginx` directly and the
+  in-cluster gateway validates the token. Removing APIM at the end of this phase returns the environment to
+  exactly that state.
+
+### 6A.2 Decisions before creating
+
+Settle these first — each has a consequence, and several are **not** fixed by ADR-020 (marked → confirm at
+build time and listed in the PR description):
+
+| Decision | Options / what ADR-020 says | Consequence |
+|---|---|---|
+| **SKU / tier** | ADR-020 selects **Developer tier, VNet-integrated**. The tier is the gate: it determines whether **VNet integration** and a **self-hosted gateway** are available at all — Consumption tier, for example, has neither. → confirm the exact `--sku-name` value and capacity against current Azure docs before running. | Developer has no production SLA and single-unit scale; adequate to prove the edge, not for production load (Premium is the planned step up). |
+| **Placement — public or VNet-integrated** | ADR-020 assumes **VNet-integrated with private backends** — services reachable only from APIM and the internal ingress. | → confirm the existing environment actually has a VNet/subnet suitable for APIM injection; the networking unit provisions the cluster network but APIM VNet injection has **subnet-delegation and NSG requirements not settled in the repo**. |
+| **How APIM reaches the cluster** | ADR-020 assumes **private** reach (VNet) to the internal ingress. Today `ingress-nginx` is **public** (see the Network and traffic path in [2-azure-services.md](../development/2-azure-services.md)). | → the bridge between "APIM assumes private backends" and "the current ingress is public" is **unresolved** — either front the existing public ingress hostname, or make the ingress internal-only first. Decide and record. |
+| **DNS record** | Not settled by ADR-020: move the environment's hostname (`api.antkart.in` / the env subdomain) to APIM, or give APIM its own hostname. | **Moving the record makes the environment unreachable until APIM is ready** (30–45 min). For an ephemeral test, prefer giving APIM its own hostname and leaving the existing record intact. |
+| **Certificate at the new edge** | ADR-020 says TLS terminates at APIM but does **not** say how the cert is supplied (APIM managed certificate, a Key Vault certificate, or the existing Let's Encrypt path). | → confirm; note the environment's in-cluster TLS is cert-manager + Let's Encrypt (5.7), which does **not** transfer to APIM automatically. |
+
+### 6A.3 Create
+
+Provision the service. Pass the publisher identity as parameters — do not hardcode:
+
+```powershell
+$APIM        = "apim-antkart-<env>"        # follow the antkart-<resource> convention
+$PUBLISHER   = "<publisher name>"
+$PUBEMAIL    = "<publisher email>"
+# $RG and $LOCATION are already set from earlier phases.
+
+# ⚠️ Confirm --sku-name (ADR-020: Developer tier) and any VNet flags against current Azure docs
+# before running — see the 6A.2 gaps. This is the create call; it returns before provisioning finishes.
+az apim create --name $APIM --resource-group $RG --location $LOCATION `
+  --publisher-name $PUBLISHER --publisher-email $PUBEMAIL `
+  --sku-name Developer --no-wait
+```
+
+`--no-wait` returns immediately; **provisioning runs 30–45 minutes.** Poll rather than waiting blind:
+
+```powershell
+# Repeat until this reads "Succeeded"
+az apim show --name $APIM --resource-group $RG --query "provisioningState" -o tsv
+```
+
+### 6A.4 Configure
+
+Import the API and apply the policy chain. **Do not restate the chain here** — it is the
+`validate-jwt → rate-limit/quota → subscription key/product → transform` sequence drawn in the
+**APIM edge (target state)** section of [6-security.md](../development/6-security.md); author the APIM policy
+XML to that diagram. (The repository does not commit APIM policy XML, so the exact policy document is written
+at build time and corrected here afterward — → listed in the PR description.)
+
+The `validate-jwt` policy MUST use **this** environment's Entra audience and tenant — the same values set in
+the Helm layer in **section 5.3**:
+
+- **Audience** — `api://antkart-api-<env>` (the per-environment App ID URI; the client-id GUID is also a
+  valid audience form — see `ResolveValidAudiences` in the auth wiring).
+- **Tenant / OpenID metadata** — tenant `4cacc56a-…` (single-tenant, same across environments), giving the
+  Entra v2 OpenID configuration at
+  `https://login.microsoftonline.com/4cacc56a-…/v2.0/.well-known/openid-configuration`.
+
+> **The same trap that caught the Helm values applies here.** An audience left pointing at another
+> environment (`api://antkart-api-dev` on a QA edge) produces a **401 that looks like a broken login** — the
+> token is valid, but for a different audience. This is exactly the 5.3 audience trap, one layer further out.
+> Grep the policy for the source environment's name before applying it, as in 5.3.
+
+### 6A.5 Verify
+
+An ordered sequence — each step proves one thing. Set `$APIM_HOST` to the APIM gateway hostname
+(`az apim show --name $APIM --resource-group $RG --query "gatewayUrl" -o tsv`).
+
+1. **APIM is reachable and rejects the anonymous request.** An unauthenticated call must return the
+   rejection the `validate-jwt` policy defines (a 401), proving APIM is in the path and enforcing policy:
+   ```powershell
+   curl -i "$APIM_HOST/api/v1/products"     # expect 401 from the validate-jwt policy
+   ```
+2. **A valid token passes APIM and reaches the in-cluster gateway.** Call again with a bearer token, then
+   prove the request actually arrived at `AK.Gateway` using the gateway's own logs (not just the APIM 200):
+   ```powershell
+   curl -i -H "Authorization: Bearer <token>" "$APIM_HOST/api/v1/products"   # expect 200
+   kubectl logs -n antkart deploy/ak-gateway --since=2m | Select-String "products"
+   ```
+   A matching request line in the gateway log is the proof it traversed APIM → ingress → gateway.
+3. **The full Postman collection passes through the new edge.** Point the collection's `baseUrl` at
+   `$APIM_HOST` and run the `AntKart Cloud E2E Saga` collection (Collection Runner, 8000 ms delay). All 12
+   steps must pass and the order must reach `Paid` — the full journey through the added edge.
+4. **Telemetry still correlates.** A request through APIM must still produce a multi-role `OperationId` in
+   the workspace — re-run the first Phase 6.6 query and confirm a single `OperationId` still spans
+   `ak-gateway` + the backing services. APIM in front must not break the existing trace correlation.
+
+### 6A.6 Destroy, and the name lock
+
+> **APIM is soft-deleted, and the name is held.** Deleting the service does not free its name; the name
+> remains reserved for the retention window unless the soft-deleted instance is purged. This is the same
+> shape as **KI-007** (Key Vault purge protection, see [KNOWN_ISSUES.md](../KNOWN_ISSUES.md)) and will block
+> recreating the same environment under the same name.
+>
+> Delete, then confirm the soft-deleted instance is listed, then purge it, then confirm it is gone. Do not
+> consider this phase complete until the name is free.
+
+```powershell
+# 1 — delete the service (soft-delete; ~30–45 min)
+az apim delete --name $APIM --resource-group $RG --yes
+
+# 2 — confirm it is soft-deleted and its name is being held
+#     ⚠️ confirm the exact 'deletedservice' command form against current Azure docs
+az apim deletedservice list --query "[?name=='$APIM'].{name:name, location:location}" -o table
+
+# 3 — purge the soft-deleted instance to release the name
+az apim deletedservice purge --service-name $APIM --location $LOCATION
+
+# 4 — confirm it is gone (must return nothing)
+az apim deletedservice list --query "[?name=='$APIM'].name" -o tsv
+```
+
+Final cost check — confirm no APIM resource remains billing anywhere in the subscription:
+
+```powershell
+az apim list --query "[?contains(name, 'antkart')].{name:name, state:provisioningState}" -o table   # expect empty
+```
+
+> **This phase has never been executed.** Every command above is written from ADR-020 and 6-security.md,
+> not from experience — the exact SKU flag, the VNet/subnet requirements, the policy XML, the certificate
+> path, and the `deletedservice` command forms are all marked to confirm. The first person to run this
+> should correct it against reality, the way Phases 0-6 were corrected, and remove the ⚠️ UNVERIFIED marker
+> once it is proven.
 
 ---
 
