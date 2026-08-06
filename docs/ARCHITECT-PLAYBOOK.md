@@ -2111,24 +2111,51 @@ you.
 babysit individual containers. The Deployment→ReplicaSet→Pod chain delivers replica-count enforcement and
 controlled rollouts declaratively.
 
-**How it works** — _To be written._
+**How it works** — You write a **Deployment** declaring a replica count and a pod template. The Deployment controller creates a **ReplicaSet**, which creates the **Pods**. Change the pod template and the Deployment creates a *new* ReplicaSet and shifts pods over gradually (a rolling update), keeping the old ReplicaSet for instant rollback. You only ever touch the Deployment; ReplicaSets and Pods are managed for you.
 
-**How AntKart uses it** — _To be written._
+```mermaid
+flowchart TD
+    DEP["Deployment (you write this)<br/>replicas + pod template"]:::service
+    RS["ReplicaSet (managed)<br/>keeps N pods"]:::service
+    P1["Pod"]:::datastore
+    P2["Pod"]:::datastore
+    DEP --> RS --> P1
+    RS --> P2
+    NEW["template change → NEW ReplicaSet → rolling update<br/>(old kept for rollback)"]:::issue
+    DEP -.-> NEW
 
-**Alternatives and the trade-off** — _To be written._
+    classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — The chart's `deployment.yaml` sets `replicas: {{ .Values.replicaCount }}` — default `1` in `values.yaml`, overridden to `2` for `products`. The three-layer chain was proven via GitOps: bumping `replicaCount` in Git and committing made Argo scale the ReplicaSet 1→2 with no `kubectl` (recorded in [docs/guides/gitops-guide.md](guides/gitops-guide.md)). The container name is `{{ .Values.serviceName }}`.
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — Alternatives: bare **Pods** (no self-healing, no rollout — you babysit them), a **StatefulSet** (for stateful workloads needing stable identity/storage — unnecessary here since services are stateless), or a **DaemonSet** (one pod per node — for agents, not apps). The Deployment is the right abstraction for stateless, replicated services: declarative replica count and safe rolling updates, at the cost of nothing you'd want for this workload.
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **A rolling update makes a new ReplicaSet.** The old one is retained so a rollback is instant — don't be surprised to see several ReplicaSets per Deployment.
+- **KI-013 crossover:** the replica count is a value, but a *ConfigMap-only* change doesn't alter the pod template, so it won't roll the pods (Kubernetes §5). Changing the template (image, env in the template) does.
+
+**Interview traps** —
+- *"Deployment, ReplicaSet, Pod — who creates whom, and which do you write?"* — You write the Deployment; it makes the ReplicaSet, which makes the Pods. Getting the direction wrong is the tell.
+- *"What happens to the old pods during a rolling update?"* — A new ReplicaSet is created and pods shift gradually; the old ReplicaSet is kept for rollback.
+- *"Why a Deployment and not a StatefulSet here?"* — Services are stateless; no need for stable identity or per-pod storage.
+- *"You changed replicaCount in Git — what scaled it?"* — Argo synced the Deployment and the ReplicaSet added a pod, no kubectl. The GitOps proof.
+
+**The 60-second answer** — "The workload hierarchy is Deployment, ReplicaSet, Pod. You only write the Deployment — a replica count and a pod template — and it creates a ReplicaSet that keeps that many pods running. Change the pod template and it spins up a new ReplicaSet and rolls pods over gradually, keeping the old one for instant rollback. Our services are stateless, so a Deployment is exactly right — no StatefulSet needed. In the chart, replicas come from `replicaCount`, default one, two for Products, and we proved the chain via GitOps: bump the count in Git, commit, and Argo scaled the ReplicaSet with no kubectl. The KI-013 subtlety is that a ConfigMap-only change doesn't touch the pod template, so it won't trigger a roll."
 
 **Read the code** — `deploy/helm/antkart-service/templates/deployment.yaml` (`kind: Deployment`,
 `replicas: {{ .Values.replicaCount }}`); default `replicaCount: 1` in
 `deploy/helm/antkart-service/values.yaml`, overridden to `2` in `deploy/helm/values/products.yaml`.
 Scale-by-Git proof: [docs/guides/gitops-guide.md](guides/gitops-guide.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain what a rolling update does to ReplicaSets and why a Deployment (not StatefulSet) fits here. Then bump `replicaCount` in Git and predict what Argo does before you watch it.
 
 ---
 
@@ -2142,23 +2169,30 @@ service is `ClusterIP` (internal only); pods reach each other as `http://ak-<ser
 across the current pods. A Service plus cluster DNS gives that, and keeping them `ClusterIP` means only the
 gateway (via Ingress) is reachable from outside.
 
-**How it works** — _To be written._
+**How it works** — A Service selects a set of pods (by label) and gives them one **stable ClusterIP + DNS name**, load-balancing across whichever pods currently match. Cluster DNS resolves the service name — fully `<svc>.<namespace>.svc.cluster.local`, or just `<svc>` within the namespace — so callers never chase ephemeral pod IPs. `type: ClusterIP` means the address is reachable **only inside the cluster**.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — The chart's `service.yaml` is `type: ClusterIP`, port `8080`. In-cluster callers use `http://ak-<service>:8080`: `deploy/helm/values/order.yaml` sets `ProductsApi__BaseUrl: http://ak-products:8080/`, and `deploy/helm/values/products.yaml` sets `DiscountGrpc__Address: http://ak-discount:8080` (Discount's service marks `appProtocol: grpc` for h2c). All six services are ClusterIP; only the gateway is additionally exposed via Ingress. The service/DNS name `ak-<service>` must match the Kubernetes object name — which is *also* the workload-identity subject, so a rename breaks two things at once.
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Alternatives: `NodePort`/`LoadBalancer` per service (each gets a port or public IP — more exposure, more IPs, no L7 routing), a headless service (direct pod DNS, for stateful/peer discovery), or hard-coding pod IPs (they change — brittle). ClusterIP + cluster DNS gives a stable internal address with load-balancing and zero public exposure, so the single Ingress on the gateway is the only front door.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **The DNS name is load-bearing twice.** `ak-<service>` is the Service name *and* the workload-identity federated subject (`system:serviceaccount:antkart:ak-<service>`); renaming the object breaks in-cluster DNS callers *and* pod auth.
+- **gRPC needs h2c.** Discount's service sets `appProtocol: grpc`; a plain HTTP client to it would fail — it speaks HTTP/2 only.
+- **ClusterIP is internal-only.** You can't reach `ak-order:8080` from outside the cluster; that's the point.
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"How does Order find Products without a fixed IP?"* — Cluster DNS resolves the ClusterIP Service `ak-products`; the Service load-balances across current pods. Testing whether you know the DNS+Service pairing.
+- *"What does `ClusterIP` buy you vs `LoadBalancer`?"* — Internal-only, stable address; no public IP — so only the gateway's Ingress is exposed. The exposure question.
+- *"Why is the DNS name so tightly controlled?"* — It's also the workload-identity subject; a rename breaks auth and routing together. The ran-it detail.
+- *"Why does the Discount service carry `appProtocol: grpc`?"* — It's h2c/HTTP-2-only; the metadata tells the platform to treat it as gRPC.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "A Kubernetes Service gives a set of pods one stable ClusterIP and DNS name and load-balances across them, so callers never chase pod IPs. All six of our services are ClusterIP — internal only — and pods reach each other by cluster DNS as `http://ak-<service>:8080`; Order calls `http://ak-products:8080`, Products calls `ak-discount` over gRPC. Only the gateway is additionally exposed, via Ingress, so that's the single front door. One thing to respect: the name `ak-<service>` is load-bearing twice — it's the Service DNS name *and* the workload-identity subject — so renaming the Kubernetes object breaks both in-cluster routing and pod authentication at once."
 
 **Read the code** — `deploy/helm/antkart-service/templates/service.yaml` (`type: ClusterIP`, port 8080);
 concrete DNS wiring in `deploy/helm/values/products.yaml` (`DiscountGrpc__Address: http://ak-discount:8080`)
 and `deploy/helm/values/order.yaml` (`ProductsApi__BaseUrl: http://ak-products:8080/`).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain how cluster DNS + a ClusterIP Service replace pod IPs, and why the `ak-<service>` name matters twice. Then trace Order → Products by name and predict the DNS it resolves.
 
 ---
 
@@ -2172,24 +2206,31 @@ AK.Gateway has an Ingress; it publishes `api.antkart.in`.
 controller terminates TLS (cert from cert-manager) and routes to the gateway Service; everything else stays
 ClusterIP-only.
 
-**How it works** — _To be written._
+**How it works** — Two distinct things. An **Ingress** is a Kubernetes object — a rule set ("host `api.antkart.in`, path `/` → this Service"). An **ingress controller** (`ingress-nginx`) is a pod that watches Ingress objects and actually does the work: it holds a `LoadBalancer` Service with a public IP, terminates TLS (cert from cert-manager), and proxies matching requests to the target Service. The Ingress rule does nothing without a controller to enforce it.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — The chart's `ingress.yaml` is gated on `.Values.ingress.enabled` (default **false**), `className: nginx`, with a `cert-manager.io/cluster-issuer` annotation for TLS. Only the **gateway** enables it — via the Argo Helm *parameter* on `deploy/argocd/applications/ak-gateway.yaml` (`ingress.host = api.antkart.in`), not the values file. The ingress-nginx controller is installed **out of band** (runbook 5.7), and its LoadBalancer public IP is pointed at by a GoDaddy A record for `api.antkart.in`. In the target state, APIM sits in front as the managed edge ([ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md)).
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Alternatives: a `LoadBalancer` Service per app (a public IP each, no shared L7 routing or TLS), a cloud-native ingress (AGIC/Application Gateway), or exposing NodePorts (crude). One ingress-nginx controller buys a single public IP, host/path routing, and one place for TLS, at the cost of running the controller (installed out of band) — and it keeps every non-gateway service ClusterIP-only, shrinking the attack surface to one front door.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **The controller isn't in the repo.** ingress-nginx is installed by hand (runbook 5.7), so a fresh cluster has no ingress until you install it — the chart's Ingress object alone does nothing.
+- **`ingress.host` is an Argo parameter, not a values-file field.** Copying the gateway Application unchanged points a new environment at the *source* host and requests a cert for it — the same "wrong host" trap as the Helm values (§5.3); set the new subdomain and `letsencrypt-staging`.
+- **Only the gateway is exposed on purpose.** Enabling ingress on another service would break the single-front-door model.
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"Ingress vs ingress controller — what's the difference?"* — The Ingress is the rule object; the controller is the pod that implements it (public IP, TLS, proxying). Conflating them is the tell.
+- *"Where does TLS terminate and where does the cert come from?"* — At the ingress-nginx controller, with a cert-manager-issued Let's Encrypt certificate. Testing the TLS path.
+- *"Why is only the gateway exposed?"* — Single front door, smallest attack surface; the rest stay ClusterIP.
+- *"You applied the chart to a fresh cluster and nothing is reachable at the host — why?"* — No ingress controller installed yet (out-of-band step), or the host parameter points elsewhere. The ran-it trap.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "There are two things: an Ingress is a Kubernetes rule object — host and path to a Service — and the ingress controller, ingress-nginx, is the pod that actually enforces it, holding the public IP, terminating TLS with a cert-manager certificate, and proxying to the Service. Only our gateway enables an Ingress, at api.antkart.in, so it's the single public front door; the other five services stay ClusterIP-only. Two gotchas: the controller isn't in the repo — it's installed out of band in the runbook — so a fresh cluster has no ingress until you add it; and the host is an Argo parameter, not a values field, so copying the gateway Application unchanged points a new environment at the wrong host and requests a cert for it. In the target state, APIM will sit in front of all this as the managed edge."
 
 **Read the code** — `deploy/helm/antkart-service/templates/ingress.yaml` (gated on `.Values.ingress.enabled`,
 `className: nginx`, cert-manager annotation); enabled only for the gateway via the Argo Helm parameter in
 `deploy/argocd/applications/ak-gateway.yaml` (`ingress.host = api.antkart.in`). The controller itself is
 installed out of band (runbook 5.7).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, distinguish the Ingress object from the controller and say where TLS terminates. Then explain why a fresh cluster serves nothing at the host even after the chart is applied.
 
 ---
 
@@ -2301,23 +2342,30 @@ the h2c gRPC Discount service).
 restarts the pod forever; without separate readiness, a not-yet-ready pod takes traffic. The three probes
 separate "alive" from "ready" from "still starting."
 
-**How it works** — _To be written._
+**How it works** — Each probe is an `httpGet` or `tcpSocket` check on an interval. The **startup** probe runs first and *gates* liveness/readiness until it passes — so a slow boot doesn't trip liveness. A failing **liveness** probe restarts the container; a failing **readiness** probe removes the pod from its Service's endpoints (no traffic) without restarting it. The endpoints they hit are the app's own — `/health/live` and `/health/ready` (Kubernetes §... "Health probes as an application concern").
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — In `deployment.yaml`, the **startup + liveness** probes hit `/health/live` (shallow) and **readiness** hits `/health/ready` (tolerant). The startup probe covers the Key-Vault-at-boot delay (period 5s × 30 ≈ 150s) so a slow start never restart-loops. Discount switches to `tcpSocket` probes (`probes.type: tcp` in `deploy/helm/values/discount.yaml`) because its h2c/HTTP-2-only listener would reject an HTTP/1.1 `httpGet`. Endpoints come from `AK.BuildingBlocks/HealthChecks/HealthCheckExtensions.cs`.
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Alternatives: no probes (Kubernetes can't tell alive from ready — it routes traffic to a booting pod and never restarts a wedged one), `exec` probes (run a command in the container — heavier, and fine only for non-HTTP checks), or a single probe for both roles (causes the restart-storm/bad-traffic failures). Three purpose-built probes cost a little config for correct restart and traffic behaviour.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **Liveness must be shallow.** If liveness hit the database, a transient blip would restart every pod (restart storm) — which is exactly why `/health/live` is `self`-only (Health-probes concept).
+- **Discount must use TCP, not HTTP.** Its h2c listener rejects HTTP/1.1; an `httpGet` liveness probe would fail-loop. `probes.type: tcp`.
+- **Skip the startup probe and a slow boot loops.** Loading Key Vault takes seconds; without the startup gate, liveness fires mid-boot and restarts forever.
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"Liveness vs readiness — what does each failing do?"* — Liveness fail → restart; readiness fail → out of the Service endpoints (no restart). Merging them is the classic error.
+- *"Why a startup probe?"* — To gate liveness/readiness during a slow boot (Key Vault load) so the pod isn't restarted before it's up. The ran-it insight.
+- *"Why are Discount's probes TCP?"* — h2c/HTTP-2-only; an HTTP/1.1 httpGet would be rejected. The gRPC detail.
+- *"Should the liveness probe check the database?"* — No — a transient DB blip would restart the fleet. Testing whether you know the restart-storm trap.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "Three probes, each with a job. The startup probe runs first and gates the other two, so a slow boot — loading Key Vault takes a few seconds — doesn't trip liveness and restart-loop the pod. Liveness restarts a wedged container; readiness pulls a not-ready pod out of the Service without restarting it. We point liveness and startup at a shallow `/health/live` — deliberately no database call, because a DB blip on liveness would restart every pod — and readiness at a tolerant `/health/ready`. Discount is the exception: it's h2c, HTTP-2-only, so its probes are TCP, because an HTTP/1.1 health check would be rejected."
 
 **Read the code** — `deploy/helm/antkart-service/templates/deployment.yaml` (startup/liveness →
 `/health/live`, readiness → `/health/ready`; `tcpSocket` branch for discount when `probes.type: tcp` in
 `deploy/helm/values/discount.yaml`). App endpoints: `AK.BuildingBlocks/AK.BuildingBlocks/HealthChecks/HealthCheckExtensions.cs`.
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, say what a failing liveness vs readiness probe does and why Discount uses TCP. Then predict the probe behaviour during a 5-second Key Vault boot delay.
 
 ---
 
@@ -2331,23 +2379,35 @@ it may not exceed. Together they let the scheduler pack pods safely.
 overcommitted; without limits one runaway pod starves its neighbours. Setting both makes placement
 predictable and isolates blast radius.
 
-**How it works** — _To be written._
+**How it works** — A **namespace** logically partitions the cluster (names, RBAC, quotas scope to it). **Requests** are what the scheduler reserves for a container and bin-packs against; **limits** are the hard ceiling. The gap between them defines the pod's QoS class. Exceeding a **memory** limit **OOM-kills** the container (hard); exceeding a **CPU** limit **throttles** it (soft) — CPU is compressible, memory isn't.
 
-**How AntKart uses it** — _To be written._
+| | Request (guaranteed, scheduled against) | Limit (ceiling) |
+|---|---|---|
+| CPU | `100m` | `500m` (throttle if exceeded) |
+| Memory | `192Mi` | `512Mi` (OOM-kill if exceeded) |
 
-**Alternatives and the trade-off** — _To be written._
+**How AntKart uses it** — Everything runs in the `antkart` namespace. The chart sets `resources` from `values.yaml`: requests `cpu 100m` / `memory 192Mi`, limits `cpu 500m` / `memory 512Mi`, applied via `resources: {{ toYaml .Values.resources }}` in `deployment.yaml`. The sizing is deliberate for the fixed 2-node pool: 6 services × 100m requested = 600m, which fits `2 × Standard_D2s_v3` with headroom. Decision context: [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md).
 
-**Gotchas** — _To be written._
+**Alternatives and the trade-off** — Alternatives: no requests/limits (the scheduler can't reason about capacity — nodes overcommit and one greedy pod starves neighbours), a namespace `ResourceQuota`/`LimitRange` (enforce budgets/defaults at the namespace level — more governance, more config), or generous limits everywhere (fewer OOMs, worse bin-packing). Explicit per-pod requests+limits buy predictable placement and blast-radius isolation, at the cost of tuning the numbers to the node size.
 
-**Interview traps** — _To be written._
+**Gotchas** —
+- **Memory limit exceeded = OOMKill (hard), CPU limit = throttle (soft).** A pod that occasionally `OOMKilled`s needs a higher memory limit, not more CPU. Know which resource is compressible.
+- **Requests too high = unschedulable.** If total requests exceed node capacity, pods stay `Pending`; on a fixed 2-node pool that's a real ceiling.
+- **The numbers are tuned to the node size.** 6 × 100m fits 2 × D2s_v3; changing the node pool means revisiting them.
 
-**The 60-second answer** — _To be written._
+**Interview traps** —
+- *"Requests vs limits — what's each for?"* — Requests are reserved/scheduled-against; limits are the hard ceiling. Testing whether you know the scheduler uses requests, not limits.
+- *"What happens when a pod exceeds its memory limit vs its CPU limit?"* — Memory → OOMKill; CPU → throttle. The compressible-vs-not distinction.
+- *"Your pod is `Pending` and never schedules — why might that be?"* — Requests exceed available node capacity (a fixed 2-node pool caps it). The ran-it trap.
+- *"Why namespaces at all here?"* — Logical isolation, scoped RBAC/quotas; everything runs in `antkart`. Testing the basics.
+
+**The 60-second answer** — "Everything runs in the `antkart` namespace, and each container declares resource requests and limits. Requests are what the scheduler reserves and bin-packs against — ours are 100 millicores and 192 mebibytes — and limits are the hard ceiling, 500m and 512Mi. The key distinction is what happens at the ceiling: exceeding the memory limit OOM-kills the container because memory isn't compressible, while exceeding the CPU limit just throttles it. The numbers are deliberate for our fixed two-node pool — six services at 100m requested is 600m, which fits two D2s_v3 with headroom. If requests were too high, pods would just sit Pending, which on a fixed pool is a real ceiling."
 
 **Read the code** — `deploy/helm/antkart-service/values.yaml` (namespace `antkart`; `resources` requests
 `cpu 100m`/`memory 192Mi`, limits `cpu 500m`/`memory 512Mi`);
 `deploy/helm/antkart-service/templates/deployment.yaml` (`resources: {{ toYaml .Values.resources }}`).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain OOMKill vs throttle and why the scheduler uses requests. Then compute whether 6 services at 100m fit a 2-node D2s_v3 pool before you check the comment.
 
 ---
 
@@ -2360,17 +2420,24 @@ provisioned. They let stateful pods keep data across restarts.
 **The problem it solves** — Pods are ephemeral; their local disk vanishes on restart. PV/PVC/StorageClass
 give a pod durable storage that outlives it — *for stateful workloads*.
 
-**How it works** — _To be written._
+**How it works** — A **StorageClass** describes how volumes are provisioned (e.g. Azure Disk); a pod (usually in a **StatefulSet**) declares a **PersistentVolumeClaim** for a size/class; Kubernetes dynamically provisions a **PersistentVolume** and mounts it, so the data survives pod restarts and rescheduling. This is how you'd run stateful workloads *inside* the cluster.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — **It doesn't — deliberately.** There are no PV/PVC/StorageClass manifests in `deploy/`. Every service is **stateless**; all state lives in managed Azure stores (Cosmos, PostgreSQL, Redis) reached via vaulted connection strings. The only volume in the chart is the gateway's Ocelot config mounted from a ConfigMap — that's *configuration*, not persistent storage. Knowing what the platform deliberately *doesn't* put in the cluster is the point of this entry.
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — The real decision is *where state lives*: **in-cluster** (databases as StatefulSets on PVs — portable and cloud-agnostic, but you operate the database, backups, and storage) versus **managed Azure stores** (ops-free, SLA-backed, but an external dependency and Azure-tied). AntKart chose managed stores, so the cluster stays stateless and disposable — you can delete and rebuild it without touching data. The trade is a hard dependency on Azure data services.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **"Stateless" is a design invariant, not an accident.** Writing to a pod's local disk loses it on restart/reschedule — there's no PV to catch it. If a service needs durable state, it belongs in a managed store, not local disk.
+- **The Ocelot ConfigMap mount is not storage.** It's a config file mounted read-only; don't mistake it for persistence.
+- **A stateless cluster is disposable.** That's a feature here — teardown/rebuild is safe because no data lives in the cluster.
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"Where does AntKart's persistent state live, and why not in the cluster?"* — In managed Azure stores; the cluster is kept stateless and disposable so it can be rebuilt without data loss. Testing the design choice.
+- *"When would you actually need a PVC here?"* — If you ran a stateful workload in-cluster (a database pod); AntKart doesn't, so it doesn't. Testing whether you know *why* it's absent.
+- *"Is the gateway's config volume persistent storage?"* — No — it's a ConfigMap mount (configuration). The precise distinction.
+- *"What does keeping the cluster stateless buy you?"* — Safe teardown/rebuild and simpler operations; the trade is depending on Azure data services.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "We deliberately don't use Kubernetes persistent storage — no PVs, PVCs, or StorageClasses. Every service is stateless, and all the state lives in managed Azure stores: Cosmos, PostgreSQL, Redis, reached through vaulted connection strings. The only volume in the chart is the gateway's Ocelot config mounted from a ConfigMap, which is configuration, not storage. The upside is the cluster is disposable — we can delete and rebuild it without touching any data — and the trade is a hard dependency on Azure's data services. You'd only reach for PVCs here if you ran a database inside the cluster, which we don't."
 
 **Read the code** — **Not implemented, deliberately.** There are **no** PV/PVC/StorageClass manifests
 anywhere in `deploy/` — every AntKart service is **stateless**, with all data in managed Azure stores
@@ -2379,7 +2446,7 @@ gateway's Ocelot config mounted from a ConfigMap (`deploy/helm/antkart-service/t
 which is configuration, not persistent storage. Kubernetes storage is listed as future depth in
 [docs/development/3-kubernetes.md](development/3-kubernetes.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain why the cluster is stateless and what that buys, and where state actually lives. Then confirm there are no PVC manifests in `deploy/` before you grep.
 
 ---
 
@@ -2392,24 +2459,31 @@ a cluster grow and shrink with load.
 **The problem it solves** — Fixed capacity either wastes money at idle or falls over under spikes.
 Autoscaling matches capacity to demand automatically.
 
-**How it works** — _To be written._
+**How it works** — Two independent scalers. The **HorizontalPodAutoscaler** watches a metric (CPU, memory, or custom) and adds/removes *pod replicas* to hit a target — it needs a metrics source (metrics-server or a custom-metrics adapter). The **cluster autoscaler** watches for *unschedulable* pods and adds *nodes* (and removes idle ones). They compose: HPA wants more pods, the autoscaler provides nodes to fit them.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — **It doesn't — deliberately.** There is no `HorizontalPodAutoscaler` in `deploy/`, and the cluster autoscaler is off (`auto_scaling_enabled = false` in the AKS module) — a single fixed 2-node pool. [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md) records a two-pool autoscaling cluster as production **Future Work**; dev runs fixed capacity on purpose (predictable cost, simpler to reason about on a demo cluster).
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — The choice is **fixed capacity** vs **autoscaling**. Fixed is cheaper and simpler for a two-node dev cluster and makes cost predictable; autoscaling matches capacity to demand (no waste at idle, survives spikes) but adds a metrics dependency, node churn, and cost variability. AntKart chose fixed for dev and names autoscaling as the production step — an honest "not yet," not a gap pretending to be a feature.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **No HPA means no automatic response to load.** A spike is handled by manually scaling replicas (within the fixed node budget), not by the platform.
+- **Metrics aren't even collected.** The metrics stack was removed ([ADR-025](adr/ADR-025-observability-architecture.md)), so a *custom-metrics* HPA would have no data source until that's re-added.
+- **A fixed 2-node pool is a hard ceiling.** Requests that don't fit leave pods `Pending` — no autoscaler will add a node.
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"HPA vs cluster autoscaler — what does each scale?"* — HPA scales pod *replicas* on a metric; the cluster autoscaler scales *nodes* for unschedulable pods. Conflating them is the tell.
+- *"Does AntKart autoscale, and if not, why?"* — No — fixed 2-node pool by choice for a dev cluster; ADR-018 marks autoscaling as production Future Work. Testing whether you know the deliberate absence.
+- *"You added an HPA on a custom metric — would it work here?"* — Not yet — metrics aren't collected (the stack was removed), so there's no data source. The ran-it subtlety.
+- *"What happens to a load spike today?"* — Manual replica scaling within the fixed node budget; no automatic response.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "We deliberately don't autoscale. There's no HorizontalPodAutoscaler, and the cluster autoscaler is off — it's a fixed two-node pool. HPA would scale pod replicas on a metric, and the cluster autoscaler would add nodes for unschedulable pods; together they match capacity to demand. For a two-node dev cluster, fixed capacity is cheaper, simpler, and makes cost predictable, so ADR-018 names autoscaling as the production step rather than pretending it's there. Two honest consequences: a load spike is handled by manually scaling replicas within the node budget, not automatically; and since we removed the metrics stack, a custom-metrics HPA wouldn't even have a data source yet."
 
 **Read the code** — **Not implemented, deliberately.** There is **no** `HorizontalPodAutoscaler` manifest in
 `deploy/`, and the cluster autoscaler is **disabled** — `infrastructure/modules/aks/main.tf`
 (`auto_scaling_enabled = false`), a single fixed 2-node pool. [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md)
 records a two-pool autoscaling cluster as production Future Work; dev runs fixed capacity on purpose.
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, distinguish HPA from the cluster autoscaler and explain why dev runs fixed capacity. Then explain why a custom-metrics HPA wouldn't work here today.
 
 ---
 
@@ -2424,24 +2498,31 @@ workload identity.
 runs as. Azure RBAC ties cluster access to Entra identities (one less credential system), and per-service
 ServiceAccounts are the anchor for workload-identity federation.
 
-**How it works** — _To be written._
+**How it works** — Native Kubernetes RBAC grants **verbs** (get/list/create…) on **resources** via a **Role** (namespaced) or **ClusterRole**, bound to a subject (user, group, ServiceAccount) by a **RoleBinding**. AntKart instead enables **Azure RBAC for Kubernetes**, so *who can `kubectl`* is decided by Entra role assignments (mapped to cluster roles) rather than hand-authored Roles + kubeconfig certs. Separately, each pod runs as a **ServiceAccount** — the anchor for workload identity, not for cluster permissions.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — The chart defines **one ServiceAccount per service** (`ak-<service>`) in `serviceaccount.yaml`, labelled `azure.workload.identity/use: "true"` and annotated with the identity's `azure.workload.identity/client-id` — its job is federation (Security §4), not granting Kubernetes verbs. The chart defines **no Role/RoleBinding**; cluster authorization is `azure_rbac_enabled` on the AKS cluster, so `kubectl` access uses Entra + the *Azure Kubernetes Service RBAC Cluster Admin* role. Decision: [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md).
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Alternatives: native Kubernetes RBAC with kubeconfig client certificates (portable across any cluster, but a *separate* credential system to issue and rotate) or an external OIDC provider wired into the API server. Azure RBAC for AKS buys **one identity system** — Entra — for both cluster access and workload identity, so there's no second set of credentials, at the cost of being Azure-specific. The trade fits a platform already all-in on Entra.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **There are no in-cluster Roles to read.** Authorization is Azure RBAC, so don't go looking for RoleBindings in the chart — access is granted by Azure role assignments.
+- **The ServiceAccount's real job is workload identity, not permissions.** `ak-<service>` exists to federate to Entra; it's not there to grant the pod Kubernetes verbs.
+- **Local accounts are left enabled in dev.** Convenient for a demo cluster; production would disable them and rely solely on Entra.
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"How is `kubectl` access authorized here — native RBAC or something else?"* — Azure RBAC for AKS: Entra identities mapped to cluster roles, not hand-authored Roles. Testing whether you noticed there are no RoleBindings.
+- *"What's the ServiceAccount actually for?"* — Workload identity (federation to Entra), not granting the pod Kubernetes permissions. The common misconception.
+- *"Native RBAC vs Azure RBAC — the trade-off?"* — Native is portable but a separate credential system; Azure RBAC unifies on Entra but ties you to Azure. The design judgment.
+- *"Where are the RoleBindings in this repo?"* — There aren't any in the chart — cluster auth is Azure RBAC. The ran-it detail.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "Kubernetes' native RBAC is Roles and RoleBindings granting verbs on resources — but we don't hand-author those. Instead the cluster has Azure RBAC for Kubernetes enabled, so who can kubectl is decided by Entra role assignments mapped to cluster roles, using the Azure Kubernetes Service RBAC Cluster Admin role. That gives us one identity system — Entra — for both cluster access and pod identity, at the cost of being Azure-specific. Each service has a ServiceAccount, `ak-<service>`, but its job is workload identity — federating to Entra — not granting the pod Kubernetes permissions, and the chart defines no Roles or RoleBindings at all. So if someone asks where the RBAC manifests are, the answer is there aren't any; it's Azure RBAC."
 
 **Read the code** — `deploy/helm/antkart-service/templates/serviceaccount.yaml` (one SA `ak-<service>`,
 label `azure.workload.identity/use: "true"`, annotation `azure.workload.identity/client-id`); Azure-RBAC
 cluster authorization in `infrastructure/modules/aks/main.tf` (`azure_rbac_enabled`). The chart defines no
 in-cluster Role/RoleBinding. Decision: [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain Azure RBAC vs native RBAC and what the ServiceAccount is really for. Then confirm the chart has no Role/RoleBinding before you grep.
 
 ---
 
