@@ -346,7 +346,7 @@ sequenceDiagram
         P-)O: StockReservationFailedIntegrationEvent
         Note over O: StockPending → publishes OrderCancelledIntegrationEvent → Finalize
     end
-    Note over O,P: KI-005 — a payment that fails AFTER stock was reserved has no<br/>compensating stock-release step; the reserved stock stays decremented
+    Note over O,P: KI-005 — a payment that fails AFTER stock was reserved has no<br/>compensating stock-release step — the reserved stock stays decremented
 ```
 
 **How AntKart uses it** — `OrderSaga : MassTransitStateMachine<OrderSagaState>` in
@@ -1061,8 +1061,8 @@ other units consume. Provisioning a second environment reuses the exact same mod
 ```mermaid
 flowchart TD
     subgraph M["infrastructure/modules/  (blueprints — the HOW)"]
-        MRG["resource-group/{main,variables,outputs}.tf"]:::cicd
-        MAKS["aks/{main,variables,outputs}.tf"]:::cicd
+        MRG["resource-group module<br/>main.tf · variables.tf · outputs.tf"]:::cicd
+        MAKS["aks module<br/>main.tf · variables.tf · outputs.tf"]:::cicd
     end
     subgraph DEV["environments/dev/  (instances — the WHAT)"]
         DRG["resource-group/terragrunt.hcl<br/>name=rg-antkart-dev-eastus"]:::paas
@@ -1167,7 +1167,7 @@ flowchart TD
     MOCK["mock_outputs<br/>allowed only for init / plan / validate<br/>→ plan a fresh tree before apply"]:::issue
 
     RG -->|outputs.name| AKS
-    NET -->|outputs.subnet_ids['aks']| AKS
+    NET -->|"outputs.subnet_ids['aks']"| AKS
     ACR -->|outputs.id| AKS
     OBS -->|outputs.workspace_id| AKS
     MOCK -.-> AKS
@@ -2222,7 +2222,7 @@ sequenceDiagram
     E->>E: hash verifier, compare to challenge
     E-->>C: access token (signed JWT: sub, roles, aud, iss, exp)
     C->>A: request + Bearer JWT
-    A->>A: validate issuer, audience, lifetime, signature; read roles
+    A->>A: validate issuer, audience, lifetime, signature, then read roles
     Note over A: audience trap — a token for the WRONG aud (e.g. Graph)<br/>is valid but rejected 401 before any role check
 ```
 
@@ -2835,7 +2835,7 @@ ships the finished spans to a backend.
 ```mermaid
 flowchart TD
     REQ["inbound request"]:::edge
-    ASP["AspNetCore instrumentation<br/>(span; /health* filtered out)"]:::service
+    ASP["AspNetCore instrumentation<br/>(span, /health* filtered out)"]:::service
     OUT["HttpClient / gRPC / Npgsql / Mongo / Redis<br/>instrumentation → child spans"]:::service
     CTX["W3C traceparent propagated<br/>(same TraceId across services)"]:::edge
     EXP["AddAzureMonitorTraceExporter"]:::service
