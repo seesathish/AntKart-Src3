@@ -129,5 +129,6 @@ One gap is tracked rather than hidden: Discount decodes the caller's token but d
 - [Development Guide](DevelopmentGuide.md) — how the platform is built, layer by layer.
 - [Testing](docs/test/README.md) — how it is verified: the automated `dotnet test` baseline (unit + integration) plus cloud-only end-to-end and security testing against the live platform at `api.antkart.in`.
 - [Environment Provisioning Runbook](docs/guides/environment-provisioning-runbook.md) — stand up a complete new environment from an empty subscription, step by step.
+- [Architect's Playbook](docs/ARCHITECT-PLAYBOOK.md) — every concept this platform uses, explained, with the gotchas that came from building it.
 - [Architecture decisions](docs/adr/README.md) — the ADRs and why each choice was made.
 - [Known Issues Register](docs/KNOWN_ISSUES.md) — open defects and deferred fixes, notably KI-002 and KI-005.
