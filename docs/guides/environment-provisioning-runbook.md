@@ -1715,6 +1715,29 @@ platform without it. Provision it only to prove the edge, then tear it down.
 > Check the current SKU pricing for the target region before creating anything; do not rely on a figure
 > written in this document.
 
+### 6A.0 Nine things this phase does not settle
+
+> Phase 6A is written from ADR-020 and the target-state section of 6-security.md. Nine details are decided
+> by neither. They are marked `→ confirm` where they occur; this list exists so they can be seen before
+> anything is provisioned rather than discovered at minute thirty of a forty-five minute create.
+
+| Gap | Why it is not settled | Blocks |
+|---|---|---|
+| **1 · Exact SKU CLI value & capacity** | ADR-020 decides *Developer tier, VNet-integrated*, but the precise `az apim create --sku-name` value/capacity and current pricing are not in the repo (and pricing must be checked live). | 6A.3 Create |
+| **2 · A suitable VNet/subnet for APIM injection** | ADR-020 assumes VNet integration, but APIM injection has subnet-delegation + NSG requirements the networking unit does not provision. | 6A.2 (placement) → 6A.3 |
+| **3 · How APIM reaches the cluster (public vs private)** | ADR-020 assumes *private* backends; today `ingress-nginx` is **public**. Fronting the public hostname vs making the ingress internal-only first is settled nowhere. | 6A.2 (and everything downstream) |
+| **4 · DNS record strategy** | Move the env hostname to APIM vs give APIM its own hostname — not settled by ADR-020. | 6A.2 → 6A.5 (addressing) |
+| **5 · Certificate handling at the APIM edge** | ADR-020 says TLS terminates at APIM but not *how* the cert is supplied (APIM managed cert / Key Vault cert / Let's Encrypt); the in-cluster cert-manager path (5.7) does not transfer. | 6A.4 Configure |
+| **6 · The policy XML itself** | 6-security.md describes the chain but the repo commits no APIM policy XML. | 6A.4 Configure |
+| **7 · `validate-jwt` OpenID metadata / policy shape** | Tenant and audience are known (§5.3), but the exact policy element/attribute shape is not in the repo. | 6A.4 Configure |
+| **8 · Rate-limit/quota numbers & the product/subscription model** | Tiers, product names, and limit figures are specified nowhere concrete. | 6A.4 Configure |
+| **9 · `az apim deletedservice` command forms** | The soft-delete list/purge commands are written from the KI-007 shape; the exact sub-command flags need confirming against current Azure docs. | 6A.6 Destroy |
+
+> **Gap 3 is the one to resolve first.** ADR-020 assumes APIM reaches private backends, but the cluster's
+> ingress is public today. Whether to front the existing public hostname or make the ingress internal-only
+> first is a design decision, not a configuration detail — and making the ingress internal would break the
+> verified environment until APIM is working. Settle it before provisioning anything.
+
 ### 6A.1 What this replaces, and what it does not
 
 Per [ADR-020](../adr/ADR-020-api-management-managed-edge-gateway.md) and the **APIM edge (target state)**
@@ -1745,6 +1768,12 @@ build time and listed in the PR description):
 | **How APIM reaches the cluster** | ADR-020 assumes **private** reach (VNet) to the internal ingress. Today `ingress-nginx` is **public** (see the Network and traffic path in [2-azure-services.md](../development/2-azure-services.md)). | → the bridge between "APIM assumes private backends" and "the current ingress is public" is **unresolved** — either front the existing public ingress hostname, or make the ingress internal-only first. Decide and record. |
 | **DNS record** | Not settled by ADR-020: move the environment's hostname (`api.antkart.in` / the env subdomain) to APIM, or give APIM its own hostname. | **Moving the record makes the environment unreachable until APIM is ready** (30–45 min). For an ephemeral test, prefer giving APIM its own hostname and leaving the existing record intact. |
 | **Certificate at the new edge** | ADR-020 says TLS terminates at APIM but does **not** say how the cert is supplied (APIM managed certificate, a Key Vault certificate, or the existing Let's Encrypt path). | → confirm; note the environment's in-cluster TLS is cert-manager + Let's Encrypt (5.7), which does **not** transfer to APIM automatically. |
+
+> **Do not move the working environment's DNS record for this test.** Give APIM its own hostname. Moving the
+> record makes the verified environment unreachable for the 30-45 minutes APIM takes to provision, and again
+> for the same period on teardown — and if the phase is abandoned partway, the environment stays unreachable
+> until the record is moved back manually. A separate hostname means the existing environment keeps working
+> throughout and the test can be abandoned at any point with no cleanup beyond deleting APIM.
 
 ### 6A.3 Create
 
