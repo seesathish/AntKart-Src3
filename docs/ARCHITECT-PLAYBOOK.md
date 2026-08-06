@@ -1811,6 +1811,20 @@ workload identity (secret-less pod auth) possible.
 | networking | CNI Overlay, `network_policy = "azure"` | overlay IPs; policy engine on |
 | identity | OIDC issuer + workload identity | secret-less pod auth |
 
+```mermaid
+flowchart TD
+    AZURE["Azure — MANAGED control plane<br/>API server · etcd · scheduler · upgrades"]:::paas
+    POOL["node pool: 2 × Standard_D2s_v3 (fixed, Free tier)"]:::service
+    OIDC["OIDC issuer + workload identity<br/>enabled AT CREATION"]:::identity
+    PODS["6 services · namespace antkart · CNI Overlay"]:::service
+    AZURE --> POOL --> PODS
+    OIDC -->|secret-less pod auth (federation)| PODS
+
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+```
+
 **How AntKart uses it** — `aks-antkart-dev` is defined by `infrastructure/modules/aks/main.tf` with dev values in `infrastructure/environments/dev/aks/terragrunt.hcl`. The kubelet identity is granted **AcrPull** (in the AKS module) so nodes can pull images; the OMS agent ships logs to the Log Analytics workspace; `azure_rbac_enabled` ties cluster access to Entra. The six services all run on this one cluster in the `antkart` namespace. Decision: [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md).
 
 **Alternatives and the trade-off** — Alternatives: self-managed Kubernetes (you operate etcd/API/upgrades — huge toil), a simpler PaaS like Azure Container Apps or App Service (less to run, but no full Kubernetes and, decisively, no OIDC-issuer workload identity story), or another cloud's managed k8s. AKS trades real Kubernetes complexity for managed control-plane + the OIDC issuer that makes secret-less pod auth possible — the feature the whole security model leans on. Decision: [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md).
@@ -1847,6 +1861,21 @@ can push to — without a stored registry password. ACR provides that with Entra
 (`admin_enabled = false`), so both push and pull authenticate by identity.
 
 **How it works** — A private OCI/Docker registry. Images are named `acrantkartdev.azurecr.io/antkart/<service>:<tag>`. Access is identity-based: with `admin_enabled = false` there is **no username/password**, so both the pusher (CD) and the puller (the cluster) authenticate with an Entra identity holding an RBAC role — **AcrPush** to push, **AcrPull** to pull.
+
+```mermaid
+flowchart TD
+    CD["CI/CD identity id-ak-cicd<br/>role: AcrPush ONLY (no cluster access)"]:::cicd
+    ACR["acrantkartdev<br/>admin disabled → identity-based, no password"]:::paas
+    KUBELET["AKS kubelet identity<br/>role: AcrPull"]:::identity
+    NODE["node pulls antkart/service:sha"]:::service
+    CD -->|push image :commit-sha| ACR
+    ACR -->|pull| KUBELET --> NODE
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+```
 
 **How AntKart uses it** — `acrantkartdev` (SKU Basic) is defined in `infrastructure/modules/container-registry/main.tf` with `admin_enabled = false`. The AKS **kubelet identity** is granted AcrPull (in the AKS module) so nodes pull images with no secret; the CI/CD identity `id-ak-cicd-dev` is granted **AcrPush only** (github-oidc) so the pipeline can push but touch nothing else. Images carry immutable commit-SHA tags. Decision: [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md).
 
@@ -1896,6 +1925,21 @@ is the core of using it well.
 
 AntKart runs Cosmos **serverless** (pay per RU consumed, no provisioned throughput, near-zero idle cost) via the **MongoDB API**, so `MongoDB.Driver` talks to it unchanged. The shard key is a **hashed `_id`**, so a write keyed by `_id` is a single-partition point operation.
 
+```mermaid
+flowchart TD
+    APP["Products — MongoDB.Driver unchanged"]:::service
+    COS["Cosmos DB SERVERLESS · Mongo API<br/>Session consistency · pay per RU"]:::datastore
+    PART["hashed _id shard key<br/>→ single-partition point ops (cheap, idempotent)"]:::datastore
+    T429["429 = throttle → honour server Retry-After"]:::issue
+    APP -->|every op costs Request Units| COS
+    COS --> PART
+    COS -.-> T429
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — `cosmos-antkart-dev` / database `antkart-products` is defined in `infrastructure/modules/cosmosdb/main.tf` (kind `MongoDB`, `EnableServerless`, `consistency_level = "Session"`). The `{ "_id": "hashed" }` shard key and the `products` collection are created by the **app/seeder at runtime, not Terraform** (which only provisions the account + database). The seed loader derives `_id` from the SKU so its upserts are single-partition point writes (idempotent). Cosmos calls run through the resilience pipeline that **honours a 429 `Retry-After`**. Decisions: [ADR-004](adr/ADR-004-polyglot-persistence.md), [ADR-014](adr/ADR-014-cosmosdb-and-servicebus.md); guide: [docs/guides/cosmosdb-concepts.md](guides/cosmosdb-concepts.md).
 
 **Alternatives and the trade-off** — Alternatives: Cosmos's native **Core (SQL) API** (rejected in [ADR-014](adr/ADR-014-cosmosdb-and-servicebus.md) so the app keeps the familiar Mongo driver), **provisioned throughput** (predictable RU/s but you pay even when idle — serverless was chosen for a bursty dev catalogue), or a relational catalogue (poor fit for flexible product documents). Serverless + Mongo API trades a per-container burst ceiling (5,000 RU/s) for near-zero idle cost and a drop-in driver.
@@ -1935,6 +1979,24 @@ yourself.
 
 **How it works** — A managed PostgreSQL server: Azure runs the engine, backups, and patching; you get an ACID relational database with EF Core migrations. **One flexible server hosts several databases**, one per relational service. The admin password is generated by Terraform (into state, then copied to Key Vault), and access is gated by firewall rules; runtime services reach it via a vaulted connection string.
 
+```mermaid
+flowchart TD
+    SRV["psql-antkart-dev-eus2 · ONE Flexible Server<br/>region eastus2 (eastus offer-restricted)"]:::datastore
+    D1[("AKOrdersDb")]:::datastore
+    D2[("AKPaymentsDb")]:::datastore
+    D3[("AKDiscountDb")]:::datastore
+    D4[("AKNotificationsDb")]:::datastore
+    KV["conn string in Key Vault (Npgsql, jittered backoff)"]:::identity
+    SRV --> D1
+    SRV --> D2
+    SRV --> D3
+    SRV --> D4
+    KV -.-> SRV
+
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+```
+
 **How AntKart uses it** — `psql-antkart-dev-eus2` (`infrastructure/modules/postgresql/main.tf`) hosts `AKOrdersDb`, `AKPaymentsDb`, `AKDiscountDb`, `AKNotificationsDb`. It lives in **`eastus2`** (not the platform's `eastus`) because Postgres is offer-restricted in eastus on this subscription. Connection strings are Key Vault secrets; Npgsql calls use exponential backoff + jitter (avoid thundering herd on reconnect); the transactional **outbox tables** live in the Order/Payments databases here. Decision: [ADR-004](adr/ADR-004-polyglot-persistence.md).
 
 **Alternatives and the trade-off** — Alternatives: Azure SQL (a fine managed relational store, but the platform standardises on Postgres + Npgsql + EF migrations), self-managed Postgres (you run backups/patching), or forcing these workloads onto Cosmos (no true relational ACID for orders/payments). Managed Flexible Server trades some control for ACID transactions, migrations, and no server operations — the right fit for the transactional services. One flexible server for several databases trades a shared blast radius for lower cost.
@@ -1970,6 +2032,23 @@ offer-restricted; the four database names). Decision: [ADR-004](adr/ADR-004-poly
 perfect Redis fit, and far cheaper and faster than putting it in a relational store.
 
 **How it works** — An in-memory key-value store, managed by Azure. AntKart uses the newer `azurerm_managed_redis` resource (not the retired classic `azurerm_redis_cache`), reached over **TLS on port 10000** (classic used 6380). The cart is serialised to a single key with a natural expiry (TTL), so abandoned carts clean themselves up.
+
+```mermaid
+flowchart TD
+    CART["ShoppingCart"]:::service
+    RD["Azure Managed Redis (TLS port 10000)<br/>redis-antkart-dev"]:::datastore
+    KEY["one key per user · 30-day TTL<br/>→ abandoned carts auto-expire"]:::datastore
+    KV["conn string in Key Vault"]:::identity
+    CART -->|snapshot DTO ↔ JSON| RD --> KEY
+    KV -.-> RD
+    NOTE["non-durable by design (a cart is ephemeral)"]:::issue
+    NOTE -.-> RD
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — `redis-antkart-dev` (SKU `Balanced_B0`, `infrastructure/modules/redis/main.tf`) in `eastus2`. ShoppingCart stores each cart at key `AKCart:cart:{userId}` with a **30-day TTL**, serialising the domain to a `CartSnapshot` DTO (System.Text.Json) and back. It's reached via `StackExchange.Redis` with a Key-Vault-stored connection string, wrapped in `AddRedisResilience` (retry + timeout). Decision: [ADR-004](adr/ADR-004-polyglot-persistence.md).
 
@@ -2018,6 +2097,28 @@ hold only data-plane rights, and that gap is a live defect (KI-014).
 
 AntKart's identities hold **only the data plane** — topology is provisioned by IaC, not at runtime. Standard tier is required (Basic has queues but no topics).
 
+```mermaid
+flowchart TD
+    PUB["Order / Payments publish"]:::service
+    TOPIC["sb-antkart-dev · topic integration-events<br/>Standard tier · Entra-only (no SAS)"]:::paas
+    S1["sub: order"]:::datastore
+    S2["sub: products"]:::datastore
+    S3["sub: payments"]:::datastore
+    S4["sub: cart"]:::datastore
+    PUB --> TOPIC
+    TOPIC --> S1
+    TOPIC --> S2
+    TOPIC --> S3
+    TOPIC --> S4
+    KI["KI-014: identities hold DATA plane, not MANAGEMENT<br/>→ topology must be IaC-provisioned"]:::issue
+    KI -.-> TOPIC
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — `sb-antkart-dev` (Standard, `local_auth_enabled = false` → Entra-only, **no SAS/connection string**) hosts the `integration-events` topic with subscriptions `products`, `order`, `payments`, `cart`. Messages dead-letter after 10 delivery attempts. MassTransit consumes these subscriptions; the topology is owned by `infrastructure/modules/servicebus/main.tf`, not created by the app. Decisions: [ADR-014](adr/ADR-014-cosmosdb-and-servicebus.md), [ADR-015](adr/ADR-015-messaging-migration-to-service-bus.md).
 
 **Alternatives and the trade-off** — Alternatives: self-managed RabbitMQ (the earlier build — [ADR-007](adr/ADR-007-masstransit-over-raw-rabbitmq.md)/[ADR-015](adr/ADR-015-messaging-migration-to-service-bus.md) migrated to managed Service Bus), Azure Storage Queues (simpler, but no topics/subscriptions fan-out or rich dead-lettering), or Event Grid for everything (push, no durable work queue). Service Bus buys durable, ordered, dead-letter-capable topic/subscription messaging with Entra auth, at the cost of a Standard-tier spend and the management-vs-data-plane subtlety that trips MassTransit (KI-014).
@@ -2058,6 +2159,20 @@ fits notifications far better than a durable work queue.
 
 **How it works** — Event Grid is a **push** router: a publisher sends an event to a custom topic, and Event Grid *pushes* it to subscribers (here, an Azure Function) — the consumer doesn't poll. It's built for discrete, reactive, high-fan-out notifications, scales to zero on the consumer side, and retries delivery. It is deliberately *not* a durable work queue — that's Service Bus's job.
 
+```mermaid
+flowchart TD
+    PUB["Order / Payments (AFTER commit)"]:::service
+    EG["evgt-antkart-dev · PUSH router<br/>Entra auth (no key) · best-effort"]:::edge
+    FN["Notification Functions [EventGridTrigger]<br/>scale-to-zero"]:::service
+    PUB -->|fire-and-forget| EG -->|pushes on arrival| FN
+    NOTE["deliberately SEPARATE from the Service Bus saga"]:::issue
+    NOTE -.-> EG
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — `evgt-antkart-dev` (`infrastructure/modules/eventgrid/main.tf`, `local_auth_enabled = false` → Entra publish, no topic key, `EventGridSchema`) carries the five customer-notification events (`AntKart.Order.Created`, `AntKart.Payment.Succeeded`, …). Order and Payments publish to it fire-and-forget after commit; the notification Functions `[EventGridTrigger]` on it. This is the push, scale-to-zero half of the two-mechanism eventing model (Platform §9). Decisions: [ADR-017](adr/ADR-017-entra-id-functions-eventgrid.md), [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
 **Alternatives and the trade-off** — Alternatives: put notifications on Service Bus (durable and tracked, but needs an always-on consumer and couples a non-critical email into the business bus), webhooks/polling (the consumer must run and poll), or Storage Queues. Event Grid buys push delivery to a scale-to-zero consumer and clean separation from the saga, at the cost of best-effort semantics — it fits *notifications*, not the money-and-stock flow.
@@ -2097,6 +2212,22 @@ always-on host to run or pay for.
 
 **How it works** — Serverless compute: you deploy functions bound to triggers (here an Event Grid trigger), and the platform runs them on demand, scaling out under load and **to zero** when idle — you pay per execution (Consumption plan, `Y1`). AntKart uses the **.NET 9 isolated worker** — the function code runs in its own process, decoupled from the Functions host runtime.
 
+```mermaid
+flowchart TD
+    EG["Event Grid"]:::edge
+    FN["func-antkart-notifications-dev<br/>.NET 9 isolated · Consumption (scale-to-zero, pay per run)"]:::service
+    CORE["INotificationDispatcher — AK.Notification.Core<br/>(templates, channel, history)"]:::service
+    ACS["ACS email"]:::paas
+    MI["managed identity → Key Vault + ACS (no secret)"]:::identity
+    EG -->|trigger| FN --> CORE --> ACS
+    MI -.-> FN
+
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+```
+
 **How AntKart uses it** — `func-antkart-notifications-dev` (`infrastructure/modules/function-app/main.tf`, Consumption `Y1`, `dotnet_version = "9.0"`, `use_dotnet_isolated_runtime = true`, `SystemAssigned` identity). Each function is a thin `[EventGridTrigger]` (`OnOrderCreated`, `OnPaymentSucceeded`, …) that deserializes the shared event contract, builds a `NotificationRequest`, and calls `INotificationDispatcher` in `AK.Notification.Core` — all real logic (templates, ACS email, history) lives in the Core library. It reaches Key Vault and ACS by its **managed identity** (no secrets). Decision: [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
 **Alternatives and the trade-off** — Alternatives: an always-on host (App Service / a container in AKS) that runs a Service Bus consumer (predictable latency, but you pay 24/7 for a bursty, mostly-idle workload), or the in-process Functions model (simpler, but couples your dependencies to the host's). Consumption + isolated worker buys scale-to-zero cost and dependency isolation, at the cost of **cold starts** (the first request after idle is slower). For notifications — bursty, latency-tolerant — that trade is right.
@@ -2134,6 +2265,23 @@ centralises them behind identity-based access (RBAC authorization mode), so a se
 secrets its identity is granted, and rotation happens in one place.
 
 **How it works** — A managed secret store with two access models — legacy **access policies** and **RBAC authorization**; AntKart uses RBAC mode, so access is Azure role assignments (e.g. *Key Vault Secrets User*) rather than per-vault policies. At startup each service reads `KeyVault:Uri`, and the config provider folds **all** secrets it's allowed to read into .NET configuration via `DefaultAzureCredential` — so a connection string is never committed or set as a plain value.
+
+```mermaid
+flowchart TD
+    START["service startup"]:::service
+    DAC["DefaultAzureCredential<br/>(identity holds Key Vault Secrets User)"]:::identity
+    KV["kv-antkart-dev · RBAC-authorization mode"]:::identity
+    CFG["ALL allowed secrets folded into .NET config<br/>(nothing committed)"]:::service
+    STORES["conn strings → Cosmos / Postgres / Redis (transitive access)"]:::datastore
+    START -->|read at boot| DAC --> KV --> CFG --> STORES
+    KI["KI-007 purge protection → blocks same-name rebuild"]:::issue
+    KI -.-> KV
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — `kv-antkart-dev` (`infrastructure/modules/key-vault/main.tf`, `rbac_authorization_enabled = true`, `purge_protection_enabled = true` in dev) holds every connection string and API key. Each service's identity is granted **Key Vault Secrets User**, so data-store access is transitive through the vault (the stores themselves need no data-plane role). `AddAzureKeyVaultConfiguration` wires it; `KeyVaultHealthCheck` lists secret metadata only, as a deep check. Decision: [ADR-013](adr/ADR-013-key-vault-rbac-and-observability-foundation.md).
 
@@ -2174,6 +2322,21 @@ and the span it belongs to can be joined by a shared id is what makes cross-serv
 
 **How it works** — **Log Analytics** is the store and query engine (KQL); **Application Insights** is the APM front-end. In the modern **workspace-based** model, App Insights writes its telemetry *into* the Log Analytics workspace rather than a separate store — so logs (`ContainerLog`) and traces (`AppRequests`/`AppDependencies`) all live in one workspace and one KQL query can join across them.
 
+```mermaid
+flowchart TD
+    LOGS["Serilog JSON → stdout<br/>→ ContainerLog"]:::service
+    TRACES["OpenTelemetry spans<br/>→ AppRequests / AppDependencies"]:::service
+    WS[("log-antkart-dev — ONE Log Analytics workspace<br/>App Insights is workspace-based")]:::datastore
+    JOIN["KQL join: TraceId (log) == OperationId (span)"]:::edge
+    LOGS --> WS
+    TRACES --> WS
+    WS --> JOIN
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
+
 **How AntKart uses it** — `log-antkart-dev` (`azurerm_log_analytics_workspace.this`, `PerGB2018`, 30-day retention) plus the **workspace-based** `appi-antkart-dev` (`azurerm_application_insights.this`, `workspace_id → log-antkart-dev`), both in `infrastructure/modules/observability/main.tf` — the workspace must exist before App Insights. The AKS OMS agent ships Serilog stdout into `ContainerLog`; the OpenTelemetry exporter ships spans through App Insights into `AppRequests`/`AppDependencies`. A log's `TraceId` equals a span's `OperationId`, so one KQL query stitches them. Decisions: [ADR-013](adr/ADR-013-key-vault-rbac-and-observability-foundation.md), [ADR-025](adr/ADR-025-observability-architecture.md).
 
 **Alternatives and the trade-off** — Alternatives: **classic (non-workspace) App Insights** (retired Feb 2024; separate store, can't co-query with logs), separate stores per signal (no cross-signal join — the whole point is lost), or self-hosted ELK + Prometheus/Grafana (AntKart built the Prometheus stack then **removed** it — [ADR-025](adr/ADR-025-observability-architecture.md) — as disproportionate to a two-node dev cluster). The workspace-based model buys one store, KQL across logs and traces, and no infra to run, at a per-GB ingest cost.
@@ -2212,6 +2375,21 @@ all of which ACS manages. The notification path reaches it by managed identity, 
 password to store.
 
 **How it works** — Azure Communication Services provides managed communication channels; AntKart uses **Email**. An *Email Communication Service* owns a sender **domain** (Azure-managed, so SPF/DKIM and a `*.azurecomm.net` sender are set up automatically), linked to a *Communication Service* resource. The app sends via the `Azure.Communication.Email` SDK, authenticating with a **managed identity** — no SMTP password.
+
+```mermaid
+flowchart TD
+    APP["notification path — AcsEmailSender (Entra-first)"]:::service
+    MI["managed identity (Contributor on ACS)<br/>no SMTP password"]:::identity
+    ACS["acs-antkart-dev + Email service<br/>Azure-managed domain → SPF/DKIM auto"]:::paas
+    CUST["customer inbox"]:::external
+    APP --> ACS --> CUST
+    MI -.-> APP
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
+```
 
 **How AntKart uses it** — `acs-antkart-dev` plus an Email service and an **Azure-managed domain** (`infrastructure/modules/communication-services/main.tf`). `AcsEmailSender` (BuildingBlocks) sends via the SDK, selecting auth **Entra-first**: managed identity by default; a Key-Vault connection string if present; and a **safe no-op** if neither is configured (so local dev doesn't error). The sender display name is applied as an RFC 5322 `"AntKart <DoNotReply@…>"`. `AddAcsEmailSender` wires it; it's used by the notification path. It replaced the earlier build's SMTP/Mailhog. Decisions: [ADR-017](adr/ADR-017-entra-id-functions-eventgrid.md), [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
