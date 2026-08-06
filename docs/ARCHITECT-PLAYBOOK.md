@@ -1566,24 +1566,39 @@ issuer, and workload identity enabled.
 upgrades. A managed cluster removes that toil and, crucially here, provides the **OIDC issuer** that makes
 workload identity (secret-less pod auth) possible.
 
-**How it works** — _To be written._
+**How it works** — Azure runs and patches the control plane (API server, etcd, scheduler); you declare a **node pool** of VMs that run your pods. Two features are enabled at *creation* and can't be bolted on later: the **OIDC issuer** (signs ServiceAccount tokens → the basis of workload identity) and **workload identity**. Networking is Azure **CNI Overlay** (pods get IPs from an overlay CIDR, not the VNet).
 
-**How AntKart uses it** — _To be written._
+| Setting | dev value | Why |
+|---|---|---|
+| version | `1.35` (pinned) | reproducible upgrades |
+| node pool | 2 × `Standard_D2s_v3` | fixed; `auto_scaling_enabled = false` |
+| tier | Free | dev (no control-plane SLA) |
+| networking | CNI Overlay, `network_policy = "azure"` | overlay IPs; policy engine on |
+| identity | OIDC issuer + workload identity | secret-less pod auth |
 
-**Alternatives and the trade-off** — _To be written._
+**How AntKart uses it** — `aks-antkart-dev` is defined by `infrastructure/modules/aks/main.tf` with dev values in `infrastructure/environments/dev/aks/terragrunt.hcl`. The kubelet identity is granted **AcrPull** (in the AKS module) so nodes can pull images; the OMS agent ships logs to the Log Analytics workspace; `azure_rbac_enabled` ties cluster access to Entra. The six services all run on this one cluster in the `antkart` namespace. Decision: [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md).
 
-**Gotchas** — _To be written._
+**Alternatives and the trade-off** — Alternatives: self-managed Kubernetes (you operate etcd/API/upgrades — huge toil), a simpler PaaS like Azure Container Apps or App Service (less to run, but no full Kubernetes and, decisively, no OIDC-issuer workload identity story), or another cloud's managed k8s. AKS trades real Kubernetes complexity for managed control-plane + the OIDC issuer that makes secret-less pod auth possible — the feature the whole security model leans on. Decision: [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md).
 
-**Interview traps** — _To be written._
+**Gotchas** —
+- **OIDC issuer + workload identity must be on at creation.** They're not a runtime toggle; the whole federation model (Security §4) depends on them.
+- **The CNI network-policy engine is on, but no NetworkPolicy objects exist** — so pod-to-pod is unrestricted by default (see Security §9). Engine ≠ policy.
+- **Free tier, fixed 2-node pool.** No control-plane SLA and no autoscaling in dev (Kubernetes §9) — deliberate for cost; production would change both.
 
-**The 60-second answer** — _To be written._
+**Interview traps** —
+- *"What does the managed control plane free you from, and what do you still run?"* — Azure runs API/etcd/upgrades; you run the node pool and workloads. Testing the managed boundary.
+- *"Why does AKS specifically enable an OIDC issuer here?"* — It signs ServiceAccount tokens so pods can federate to Entra with no stored secret — the basis of workload identity.
+- *"CNI Overlay vs classic CNI — what changes?"* — Pods get IPs from an overlay CIDR rather than consuming VNet IPs; it scales pod density without VNet IP exhaustion.
+- *"Network policy engine is on — are pods isolated?"* — No, not without NetworkPolicy objects, and there are none; the engine being enabled isn't isolation.
+
+**The 60-second answer** — "AKS is managed Kubernetes — Azure runs the control plane, we run a node pool of VMs for the pods. Ours is `aks-antkart-dev`: a fixed two-node pool, Free tier, CNI Overlay networking, pinned to version 1.35. The two settings that matter most are enabled at creation and can't be added later — the OIDC issuer and workload identity — because they're what let a pod authenticate to Azure with no stored secret, which the whole security model depends on. The kubelet gets AcrPull to pull images and the OMS agent ships logs to Log Analytics. Two honest caveats: the network-policy engine is on but we've authored no policies, so pods aren't actually isolated; and autoscaling is off with a fixed two-node pool — both deliberate for a dev cluster."
 
 **Read the code** — `infrastructure/modules/aks/main.tf` (`azurerm_kubernetes_cluster.this`;
 `oidc_issuer_enabled`/`workload_identity_enabled = true`; CNI Overlay; `network_policy = "azure"`;
 `auto_scaling_enabled = false`) and `infrastructure/environments/dev/aks/terragrunt.hcl` (version `1.35`,
 2×`Standard_D2s_v3`, Free tier). Decision: [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain why the OIDC issuer must be enabled at creation and what it enables. Then open the aks module and name the two identity settings and the node count before you read the dev unit.
 
 ---
 
@@ -1596,24 +1611,31 @@ workload identity (secret-less pod auth) possible.
 can push to — without a stored registry password. ACR provides that with Entra/RBAC access
 (`admin_enabled = false`), so both push and pull authenticate by identity.
 
-**How it works** — _To be written._
+**How it works** — A private OCI/Docker registry. Images are named `acrantkartdev.azurecr.io/antkart/<service>:<tag>`. Access is identity-based: with `admin_enabled = false` there is **no username/password**, so both the pusher (CD) and the puller (the cluster) authenticate with an Entra identity holding an RBAC role — **AcrPush** to push, **AcrPull** to pull.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — `acrantkartdev` (SKU Basic) is defined in `infrastructure/modules/container-registry/main.tf` with `admin_enabled = false`. The AKS **kubelet identity** is granted AcrPull (in the AKS module) so nodes pull images with no secret; the CI/CD identity `id-ak-cicd-dev` is granted **AcrPush only** (github-oidc) so the pipeline can push but touch nothing else. Images carry immutable commit-SHA tags. Decision: [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md).
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Alternatives: Docker Hub (public, rate-limited, awkward private auth), GitHub Container Registry, or a self-hosted registry (you operate it). ACR buys a managed private registry co-located with AKS and Entra-based access — no stored registry password anywhere — at a small cost per tier. The Basic SKU is fine for dev; a note in ADR-013 records the one-line upgrade to Premium (geo-replication, more storage) when needed.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **No admin credentials means everything is identity-based.** If you reach for an ACR username/password, there isn't one — push/pull go through AcrPush/AcrPull on an Entra identity.
+- **A new environment's registry starts empty.** `acrantkartqa` has no images until CD targets it or you import them (runbook 5.4) — pods `ImagePullBackOff` until then.
+- **Mutable tags can serve stale images (KI-004).** The mitigation is immutable commit-SHA tags (see DevOps §5).
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"How does the cluster pull images without a stored registry password?"* — The kubelet identity holds AcrPull; `admin_enabled = false`. Testing the secret-less pull.
+- *"What role does the CI/CD identity have on ACR, and what does it deliberately *not* have?"* — AcrPush only — no cluster access. Least privilege.
+- *"You created a new environment and pods `ImagePullBackOff` — why?"* — Its registry is empty (or the identity lacks AcrPull); import images / grant the role.
+- *"Why disable the admin account?"* — It's a shared username/password — a stored credential; identity-based RBAC is the secret-less model.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "ACR is our private image registry — `acrantkartdev`, images under `antkart/<service>`. The key thing is it's fully identity-based: the admin account is disabled, so there's no registry password anywhere. The cluster's kubelet identity holds AcrPull to pull images, and the CI/CD identity holds AcrPush and nothing else — it can push an image but can't touch the cluster. Tags are immutable commit SHAs. Two gotchas: a brand-new environment's registry is empty, so pods ImagePullBackOff until images are imported or CD targets it; and a mutable tag can serve a stale cached image, which is KI-004, mitigated by the SHA tags."
 
 **Read the code** — `infrastructure/modules/container-registry/main.tf` (`azurerm_container_registry.this`,
 `admin_enabled = false`) and `infrastructure/environments/dev/container-registry/terragrunt.hcl` (SKU
 `Basic`); AcrPull granted to the kubelet identity in `infrastructure/modules/aks/main.tf`. Decision:
 [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain how both push and pull authenticate with no registry password, and which identity has which role. Then predict what happens if you point a fresh cluster at an empty registry.
 
 ---
 
@@ -1629,17 +1651,32 @@ Cosmos's managed scaling and SLAs. Understanding **RUs** (request units — the 
 **partitioning** (the shard key spreads data and load), and **consistency** (Session = read-your-writes)
 is the core of using it well.
 
-**How it works** — _To be written._
+**How it works** — Three Cosmos concepts drive everything:
 
-**How AntKart uses it** — _To be written._
+| Concept | Meaning here |
+|---|---|
+| **RU (Request Unit)** | the throughput currency — every read/write/query costs RUs (a point read ≈ 1 RU, a write ≈ 5+, a complex query far more) |
+| **Partitioning** | the shard key spreads documents across physical partitions; a good key spreads load evenly and enables single-partition point operations |
+| **Consistency** | Session (read-your-own-writes) — the e-commerce default, between strong and eventual |
 
-**Alternatives and the trade-off** — _To be written._
+AntKart runs Cosmos **serverless** (pay per RU consumed, no provisioned throughput, near-zero idle cost) via the **MongoDB API**, so `MongoDB.Driver` talks to it unchanged. The shard key is a **hashed `_id`**, so a write keyed by `_id` is a single-partition point operation.
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — `cosmos-antkart-dev` / database `antkart-products` is defined in `infrastructure/modules/cosmosdb/main.tf` (kind `MongoDB`, `EnableServerless`, `consistency_level = "Session"`). The `{ "_id": "hashed" }` shard key and the `products` collection are created by the **app/seeder at runtime, not Terraform** (which only provisions the account + database). The seed loader derives `_id` from the SKU so its upserts are single-partition point writes (idempotent). Cosmos calls run through the resilience pipeline that **honours a 429 `Retry-After`**. Decisions: [ADR-004](adr/ADR-004-polyglot-persistence.md), [ADR-014](adr/ADR-014-cosmosdb-and-servicebus.md); guide: [docs/guides/cosmosdb-concepts.md](guides/cosmosdb-concepts.md).
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — Alternatives: Cosmos's native **Core (SQL) API** (rejected in [ADR-014](adr/ADR-014-cosmosdb-and-servicebus.md) so the app keeps the familiar Mongo driver), **provisioned throughput** (predictable RU/s but you pay even when idle — serverless was chosen for a bursty dev catalogue), or a relational catalogue (poor fit for flexible product documents). Serverless + Mongo API trades a per-container burst ceiling (5,000 RU/s) for near-zero idle cost and a drop-in driver.
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **A 429 is throttling, not an error — honour `Retry-After`.** The data-store pipeline waits the server-specified time; guessing a backoff hammers Cosmos.
+- **The shard key and collection live in app/seed code, not Terraform.** Don't look for them in the module — it provisions the account + database only.
+- **⚠️ Version discrepancy:** the module default is `mongo_server_version = "7.0"` (not overridden in dev), while [ADR-014](adr/ADR-014-cosmosdb-and-servicebus.md) states 4.2 was the highest supported — confirm the live value before quoting it.
+
+**Interview traps** —
+- *"What's an RU and why does it matter?"* — Cosmos's throughput currency; every operation costs RUs, and serverless bills per RU — so query shape is a cost decision, not just a latency one.
+- *"Why is the shard key a hashed `_id`?"* — It spreads writes evenly and makes an `_id`-keyed write a single-partition point operation (fast, cheap, idempotent for the seeder).
+- *"You're getting 429s from Cosmos — what do you do?"* — Honour the server's `Retry-After` (the data-store pipeline does), don't guess a backoff. The throttling-etiquette question.
+- *"Why the Mongo API instead of Cosmos's native SQL API?"* — To keep `MongoDB.Driver` unchanged (ADR-014); it's wire-compatible.
+
+**The 60-second answer** — "Products' catalogue is on Cosmos DB through the Mongo API, so `MongoDB.Driver` talks to it unchanged. Three ideas run it: RUs are the throughput currency — every operation costs request units, and we run serverless so we pay per RU with near-zero idle cost; partitioning spreads documents by a shard key, and ours is a hashed `_id`, so a write keyed by id is a single-partition point operation; and consistency is Session — read-your-own-writes. The shard key and collection are created by the app and seeder at runtime, not in Terraform, which only provisions the account and database. And a 429 from Cosmos is throttling, not failure — our resilience pipeline honours the server's Retry-After rather than guessing."
 
 **Read the code** — `infrastructure/modules/cosmosdb/main.tf` (`azurerm_cosmosdb_account.this` kind
 `MongoDB`, `EnableServerless`, `consistency_level = "Session"`, `azurerm_cosmosdb_mongo_database.this` =
@@ -1648,7 +1685,7 @@ runtime, not in Terraform. Concept guide: [docs/guides/cosmosdb-concepts.md](gui
 (RUs, serverless vs provisioned, 429 throttling, partition keys). Decisions:
 [ADR-004](adr/ADR-004-polyglot-persistence.md), [ADR-014](adr/ADR-014-cosmosdb-and-servicebus.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, define RU, partitioning, and Session consistency, and explain why the shard key is a hashed `_id`. Then explain what your resilience does on a 429 before you look it up.
 
 ---
 
@@ -1661,24 +1698,31 @@ relational service — `AKOrdersDb`, `AKPaymentsDb`, `AKDiscountDb`, `AKNotifica
 guarantees and EF Core migrations — exactly what a managed Postgres provides, without operating the server
 yourself.
 
-**How it works** — _To be written._
+**How it works** — A managed PostgreSQL server: Azure runs the engine, backups, and patching; you get an ACID relational database with EF Core migrations. **One flexible server hosts several databases**, one per relational service. The admin password is generated by Terraform (into state, then copied to Key Vault), and access is gated by firewall rules; runtime services reach it via a vaulted connection string.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — `psql-antkart-dev-eus2` (`infrastructure/modules/postgresql/main.tf`) hosts `AKOrdersDb`, `AKPaymentsDb`, `AKDiscountDb`, `AKNotificationsDb`. It lives in **`eastus2`** (not the platform's `eastus`) because Postgres is offer-restricted in eastus on this subscription. Connection strings are Key Vault secrets; Npgsql calls use exponential backoff + jitter (avoid thundering herd on reconnect); the transactional **outbox tables** live in the Order/Payments databases here. Decision: [ADR-004](adr/ADR-004-polyglot-persistence.md).
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Alternatives: Azure SQL (a fine managed relational store, but the platform standardises on Postgres + Npgsql + EF migrations), self-managed Postgres (you run backups/patching), or forcing these workloads onto Cosmos (no true relational ACID for orders/payments). Managed Flexible Server trades some control for ACID transactions, migrations, and no server operations — the right fit for the transactional services. One flexible server for several databases trades a shared blast radius for lower cost.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **Region is `eastus2`, not `eastus`.** eastus is offer-restricted for Postgres on this subscription — a real deploy gotcha; Redis is pinned to eastus2 for the same reason. Cross-region calls from the eastus cluster cross a boundary.
+- **Azure force-starts a stopped Flexible Server after 7 days.** Phase 7 stops it for cost; set a reminder to re-stop or it silently resumes billing.
+- **One server, many databases** — a server-level issue affects all four; the trade for cost.
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"Why is Postgres in a different region from the cluster?"* — eastus is offer-restricted for Postgres on this subscription, so it's in eastus2; those calls cross a region boundary. The ran-it detail.
+- *"Where does the generated admin password live before it's used?"* — In Terraform state, then copied to Key Vault; services read the connection string from the vault. Ties to state-holds-secrets.
+- *"You stopped the DB to save cost — will it stay stopped?"* — No — Azure force-starts a Flexible Server after 7 days; re-stop it. The cost gotcha.
+- *"One server or one per service?"* — One server, a database per service — cost vs a shared blast radius.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "The transactional services — Order, Payments, Discount, Notification — run on a managed PostgreSQL Flexible Server, one server hosting a database each, because they need ACID transactions and EF migrations. Azure runs the engine, backups, and patching. The generated admin password lands in Terraform state and gets copied to Key Vault, and services read a vaulted connection string; Npgsql calls use jittered backoff so a reconnect doesn't stampede. Two things bite people: the server is in eastus2, not our eastus, because Postgres is offer-restricted in eastus on this subscription, so those calls cross a region boundary; and Azure force-starts a stopped Flexible Server after seven days, so the cost-saving stop needs a reminder to re-stop."
 
 **Read the code** — `infrastructure/modules/postgresql/main.tf` (`azurerm_postgresql_flexible_server.this`
 + per-DB `azurerm_postgresql_flexible_server_database`) and
 `infrastructure/environments/dev/postgresql/terragrunt.hcl` (region **`eastus2`** because eastus is
 offer-restricted; the four database names). Decision: [ADR-004](adr/ADR-004-polyglot-persistence.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain why Postgres is in eastus2 and what happens to a stopped server after 7 days. Then name the four databases before you open the dev unit.
 
 ---
 
@@ -1690,24 +1734,31 @@ offer-restricted; the four database names). Decision: [ADR-004](adr/ADR-004-poly
 **The problem it solves** — A cart is ephemeral, high-churn key-value data with a natural expiry — a
 perfect Redis fit, and far cheaper and faster than putting it in a relational store.
 
-**How it works** — _To be written._
+**How it works** — An in-memory key-value store, managed by Azure. AntKart uses the newer `azurerm_managed_redis` resource (not the retired classic `azurerm_redis_cache`), reached over **TLS on port 10000** (classic used 6380). The cart is serialised to a single key with a natural expiry (TTL), so abandoned carts clean themselves up.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — `redis-antkart-dev` (SKU `Balanced_B0`, `infrastructure/modules/redis/main.tf`) in `eastus2`. ShoppingCart stores each cart at key `AKCart:cart:{userId}` with a **30-day TTL**, serialising the domain to a `CartSnapshot` DTO (System.Text.Json) and back. It's reached via `StackExchange.Redis` with a Key-Vault-stored connection string, wrapped in `AddRedisResilience` (retry + timeout). Decision: [ADR-004](adr/ADR-004-polyglot-persistence.md).
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Alternatives: in-process memory (lost on pod restart and not shared across replicas — wrong for a cart), Postgres for the cart (durable but overkill and slower for high-churn key-value), or the classic `azurerm_redis_cache` (retired for new creation). Managed Redis buys a fast, shared, auto-expiring store with no server to run, at the cost of a managed dependency and being non-durable (acceptable — a cart is ephemeral).
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **Port 10000, not 6380.** The managed resource uses a different TLS port than classic Redis — a connection-string gotcha if you copy classic settings.
+- **The connection string is a Key Vault secret**, not a Helm value — reached via the vault at startup like every other secret.
+- **Carts are non-durable by design.** A cache eviction or a lost cache means lost carts; that's an accepted trade for an ephemeral cart with a TTL.
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"Why Redis for the cart and not the database?"* — Ephemeral, high-churn key-value with a natural expiry; Redis is fast and shared across pods, and the TTL cleans up abandoned carts. The fit question.
+- *"In-memory cache in the service — why not just that?"* — It's lost on restart and not shared across replicas; the cart must survive a pod restart and be visible to every replica.
+- *"What port does the managed Redis use?"* — 10000 over TLS (classic was 6380). The ran-it detail.
+- *"What happens to carts if Redis is evicted?"* — They're lost — non-durable by design; acceptable for an ephemeral cart. Testing whether you understand the durability trade.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "The shopping cart lives in Azure Managed Redis — an in-memory key-value store — because a cart is ephemeral, high-churn, and has a natural expiry. Each cart is one key, `AKCart:cart:{userId}`, with a 30-day TTL, so abandoned carts clean themselves up. We serialise the domain to a snapshot DTO and back with System.Text.Json, reach Redis via StackExchange.Redis with a vaulted connection string, and wrap calls in a retry-plus-timeout policy. Two details: it's the newer managed Redis resource on TLS port 10000, not the classic one on 6380; and it's deliberately non-durable — if the cache is evicted the cart is gone, which is fine for a cart but would be wrong for an order."
 
 **Read the code** — `infrastructure/modules/redis/main.tf` (`azurerm_managed_redis.this`, SKU
 `Balanced_B0`, TLS on port 10000) and `infrastructure/environments/dev/redis/terragrunt.hcl` (region
 `eastus2`). App side: `AK.ShoppingCart/AK.ShoppingCart.Infrastructure/` (StackExchange.Redis). Decision:
 [ADR-004](adr/ADR-004-polyglot-persistence.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, justify Redis over the database for the cart and state the key pattern, TTL, and TLS port. Then explain what a cache eviction costs and why that's acceptable here.
 
 ---
 
@@ -1723,17 +1774,31 @@ subscribe. The key distinction to master is **management plane** (creating/alter
 subscriptions) versus **data plane** (sending and receiving messages) — because the platform's identities
 hold only data-plane rights, and that gap is a live defect (KI-014).
 
-**How it works** — _To be written._
+**How it works** — A namespace holds **topics**; each topic has **subscriptions**. A publisher sends one message to the topic; each subscription gets its own copy, so an event fans out to exactly the services that subscribe. Undeliverable messages dead-letter after `max_delivery_count`. The crucial distinction:
 
-**How AntKart uses it** — _To be written._
+| Plane | Operations | Role needed |
+|---|---|---|
+| **Data plane** | send / receive messages | Data Sender / Data Receiver |
+| **Management plane** | create / alter topics & subscriptions | Data Owner (or Manage) |
 
-**Alternatives and the trade-off** — _To be written._
+AntKart's identities hold **only the data plane** — topology is provisioned by IaC, not at runtime. Standard tier is required (Basic has queues but no topics).
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — `sb-antkart-dev` (Standard, `local_auth_enabled = false` → Entra-only, **no SAS/connection string**) hosts the `integration-events` topic with subscriptions `products`, `order`, `payments`, `cart`. Messages dead-letter after 10 delivery attempts. MassTransit consumes these subscriptions; the topology is owned by `infrastructure/modules/servicebus/main.tf`, not created by the app. Decisions: [ADR-014](adr/ADR-014-cosmosdb-and-servicebus.md), [ADR-015](adr/ADR-015-messaging-migration-to-service-bus.md).
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — Alternatives: self-managed RabbitMQ (the earlier build — [ADR-007](adr/ADR-007-masstransit-over-raw-rabbitmq.md)/[ADR-015](adr/ADR-015-messaging-migration-to-service-bus.md) migrated to managed Service Bus), Azure Storage Queues (simpler, but no topics/subscriptions fan-out or rich dead-lettering), or Event Grid for everything (push, no durable work queue). Service Bus buys durable, ordered, dead-letter-capable topic/subscription messaging with Entra auth, at the cost of a Standard-tier spend and the management-vs-data-plane subtlety that trips MassTransit (KI-014).
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **KI-014 (High):** MassTransit reconciles subscriptions at startup — a *management-plane* call — but the identities hold only *data-plane* roles, so it faults `401 SubCode 40100`, logged as a warning; pods stay healthy while messaging is silently broken. Provision topology in IaC or grant Data Owner. Source: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-014.
+- **No connection string.** `local_auth_enabled = false` disables SAS; auth is `DefaultAzureCredential`. Don't look for a Service Bus secret.
+- **Standard tier is required for topics.** Basic offers only queues — you can't build the fan-out on Basic.
+
+**Interview traps** —
+- *"Management plane vs data plane on Service Bus — why does it matter here?"* — Sending/receiving is data plane; creating subscriptions is management plane. Our identities have only data plane, which is exactly why MassTransit's startup topology call fails (KI-014). The signature question.
+- *"Everything's healthy but no messages flow — where do you look?"* — KI-014: the management-plane topology reconciliation warning.
+- *"Topic vs queue — why topics here?"* — Fan-out: one event to many subscriptions; a queue is point-to-point. Testing the model.
+- *"How does the platform authenticate to Service Bus?"* — Entra via `DefaultAzureCredential`; `local_auth_enabled = false`, no SAS. Secret-less.
+
+**The 60-second answer** — "Service Bus is the durable backbone of the saga — a Standard-tier namespace, `sb-antkart-dev`, with one `integration-events` topic and a subscription per consuming service, so a published event fans out to exactly the services that subscribe, and undeliverable messages dead-letter after ten attempts. Auth is Entra-only — local auth is disabled, so there's no connection string. The concept to nail is management plane versus data plane: sending and receiving is data plane, but *creating* subscriptions is management plane, and our identities hold only the data plane. That's deliberate least privilege — topology is provisioned by IaC — but it's also KI-014, because MassTransit tries to reconcile subscriptions at startup and fails with a 401 that's logged as a warning, so pods look healthy while messaging is quietly broken."
 
 **Read the code** — `infrastructure/modules/servicebus/main.tf` (`azurerm_servicebus_namespace.this`,
 Standard, `local_auth_enabled = false`) and `infrastructure/environments/dev/servicebus/terragrunt.hcl`
@@ -1742,7 +1807,7 @@ Standard, `local_auth_enabled = false`) and `infrastructure/environments/dev/ser
 Decisions: [ADR-014](adr/ADR-014-cosmosdb-and-servicebus.md),
 [ADR-015](adr/ADR-015-messaging-migration-to-service-bus.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain management vs data plane and walk KI-014 as a plane mismatch. Then name the topic and its four subscriptions before you open the dev unit.
 
 ---
 
@@ -1756,17 +1821,24 @@ deliberately separate from the Service Bus saga.
 block the business transaction. Event Grid's push model triggers a serverless consumer on demand, which
 fits notifications far better than a durable work queue.
 
-**How it works** — _To be written._
+**How it works** — Event Grid is a **push** router: a publisher sends an event to a custom topic, and Event Grid *pushes* it to subscribers (here, an Azure Function) — the consumer doesn't poll. It's built for discrete, reactive, high-fan-out notifications, scales to zero on the consumer side, and retries delivery. It is deliberately *not* a durable work queue — that's Service Bus's job.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — `evgt-antkart-dev` (`infrastructure/modules/eventgrid/main.tf`, `local_auth_enabled = false` → Entra publish, no topic key, `EventGridSchema`) carries the five customer-notification events (`AntKart.Order.Created`, `AntKart.Payment.Succeeded`, …). Order and Payments publish to it fire-and-forget after commit; the notification Functions `[EventGridTrigger]` on it. This is the push, scale-to-zero half of the two-mechanism eventing model (Platform §9). Decisions: [ADR-017](adr/ADR-017-entra-id-functions-eventgrid.md), [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Alternatives: put notifications on Service Bus (durable and tracked, but needs an always-on consumer and couples a non-critical email into the business bus), webhooks/polling (the consumer must run and poll), or Storage Queues. Event Grid buys push delivery to a scale-to-zero consumer and clean separation from the saga, at the cost of best-effort semantics — it fits *notifications*, not the money-and-stock flow.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **Best-effort, not the saga.** Reach for Event Grid only for disposable side-effects; durable, tracked work belongs on Service Bus.
+- **Topic name is `evgt-antkart-dev`.** [ADR-017](adr/ADR-017-entra-id-functions-eventgrid.md) text writes it as `egt-antkart-{env}` — stale; trust the resource.
+- **No topic key.** `local_auth_enabled = false` means publishers use Entra (`DefaultAzureCredential`), not an access key.
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"Event Grid vs Service Bus — when each?"* — Event Grid for push, scale-to-zero notifications; Service Bus for durable, ordered, tracked work. Choosing wrong is the tell.
+- *"Push vs pull — which is Event Grid and why does it matter?"* — Push: the consumer doesn't run until an event arrives, enabling scale-to-zero.
+- *"How does a publisher authenticate to the topic?"* — Entra via `DefaultAzureCredential`; no topic access key (`local_auth_enabled = false`).
+- *"Is notification delivery guaranteed?"* — Best-effort; it's deliberately not the durable saga. Testing whether you know the guarantee.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "Event Grid is our push-based event router for customer notifications — the topic `evgt-antkart-dev`. Order and Payments publish the five notification events to it fire-and-forget after they commit, and it pushes them to the notification Functions, which scale to zero when idle. It's deliberately separate from the Service Bus saga: Event Grid is for discrete, best-effort side-effects, while the durable, tracked money-and-stock flow stays on Service Bus. Publishers authenticate with Entra — there's no topic key, because local auth is disabled. So the rule of thumb is: notifications and scale-to-zero go on Event Grid; anything that must be durable and exactly-tracked goes on Service Bus."
 
 **Read the code** — `infrastructure/modules/eventgrid/main.tf` (`azurerm_eventgrid_topic.this`,
 `local_auth_enabled = false`, `EventGridSchema`) and
@@ -1774,7 +1846,7 @@ fits notifications far better than a durable work queue.
 [ADR-017](adr/ADR-017-entra-id-functions-eventgrid.md),
 [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, state when you'd choose Event Grid over Service Bus and why publishers need no key. Then name the five notification event types before you check the contracts.
 
 ---
 
@@ -1788,24 +1860,31 @@ through `AK.Notification.Core`.
 scale-to-zero Consumption plan means it costs nothing when no events flow and scales out under load — no
 always-on host to run or pay for.
 
-**How it works** — _To be written._
+**How it works** — Serverless compute: you deploy functions bound to triggers (here an Event Grid trigger), and the platform runs them on demand, scaling out under load and **to zero** when idle — you pay per execution (Consumption plan, `Y1`). AntKart uses the **.NET 9 isolated worker** — the function code runs in its own process, decoupled from the Functions host runtime.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — `func-antkart-notifications-dev` (`infrastructure/modules/function-app/main.tf`, Consumption `Y1`, `dotnet_version = "9.0"`, `use_dotnet_isolated_runtime = true`, `SystemAssigned` identity). Each function is a thin `[EventGridTrigger]` (`OnOrderCreated`, `OnPaymentSucceeded`, …) that deserializes the shared event contract, builds a `NotificationRequest`, and calls `INotificationDispatcher` in `AK.Notification.Core` — all real logic (templates, ACS email, history) lives in the Core library. It reaches Key Vault and ACS by its **managed identity** (no secrets). Decision: [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Alternatives: an always-on host (App Service / a container in AKS) that runs a Service Bus consumer (predictable latency, but you pay 24/7 for a bursty, mostly-idle workload), or the in-process Functions model (simpler, but couples your dependencies to the host's). Consumption + isolated worker buys scale-to-zero cost and dependency isolation, at the cost of **cold starts** (the first request after idle is slower). For notifications — bursty, latency-tolerant — that trade is right.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **Cold starts.** After idle, the first invocation pays a start-up cost; fine for emails, not for a hot path.
+- **Isolated, not in-process.** .NET 9 uses the isolated worker (`OutputType=Exe`, its own process) — a different programming/hosting model than the older in-process functions.
+- **Still on the classic App Insights SDK.** The Functions app reports telemetry via the classic SDK, not OpenTelemetry — the one component off the OTel path ([ADR-025](adr/ADR-025-observability-architecture.md)).
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"Why serverless for notifications specifically?"* — Bursty and idle-most-of-the-time; Consumption scales to zero, so it costs nothing when quiet. The fit question.
+- *"Isolated vs in-process Functions — which and why?"* — Isolated (.NET 9), so function dependencies aren't tied to the host runtime. Testing whether you know the model.
+- *"What's the cost of Consumption you have to accept?"* — Cold starts. The trade-off.
+- *"How does the Function reach Key Vault and ACS with no secret?"* — Its managed identity via `DefaultAzureCredential`. The secret-less point.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "Notifications run on Azure Functions — a .NET 9 isolated worker on a Consumption plan, so it scales out under load and to zero when idle and we pay per execution, which fits a bursty, mostly-idle email workload. Each function is a thin Event Grid trigger that deserializes the event and hands off to a dispatcher in the Core library, where the real logic lives — templates, the ACS email channel, history. It reaches Key Vault and ACS by its managed identity, no secrets. The trade is cold starts — the first call after idle is slower — which is fine for email. Two details: it's the isolated worker, not in-process; and it's the one component still on the classic App Insights SDK rather than OpenTelemetry."
 
 **Read the code** — `infrastructure/modules/function-app/main.tf` (`azurerm_linux_function_app.this`, plan
 `Y1` Consumption, `dotnet_version = "9.0"`, `use_dotnet_isolated_runtime = true`, SystemAssigned identity).
 App: `AK.Notification/AK.Notification.Functions/`. Decision:
 [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain scale-to-zero, cold starts, and isolated-vs-in-process. Then trace one `OnOrderCreated` invocation from Event Grid to the dispatcher, predicting where the email actually gets sent.
 
 ---
 
@@ -1819,17 +1898,25 @@ plain config value.
 centralises them behind identity-based access (RBAC authorization mode), so a service reads only the
 secrets its identity is granted, and rotation happens in one place.
 
-**How it works** — _To be written._
+**How it works** — A managed secret store with two access models — legacy **access policies** and **RBAC authorization**; AntKart uses RBAC mode, so access is Azure role assignments (e.g. *Key Vault Secrets User*) rather than per-vault policies. At startup each service reads `KeyVault:Uri`, and the config provider folds **all** secrets it's allowed to read into .NET configuration via `DefaultAzureCredential` — so a connection string is never committed or set as a plain value.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — `kv-antkart-dev` (`infrastructure/modules/key-vault/main.tf`, `rbac_authorization_enabled = true`, `purge_protection_enabled = true` in dev) holds every connection string and API key. Each service's identity is granted **Key Vault Secrets User**, so data-store access is transitive through the vault (the stores themselves need no data-plane role). `AddAzureKeyVaultConfiguration` wires it; `KeyVaultHealthCheck` lists secret metadata only, as a deep check. Decision: [ADR-013](adr/ADR-013-key-vault-rbac-and-observability-foundation.md).
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Alternatives: secrets in appsettings/env vars (leak into Git and logs, rotate badly), Kubernetes Secrets (only base64, not encrypted at rest), or a Secrets Store CSI driver mounting the vault as files. Reading the vault directly in-process keeps **no secret material in the cluster** and centralises rotation, at the cost of a startup dependency on Key Vault (handled by the startup probe) — and the RBAC-mode switch is irreversible.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **KI-007 (Low):** `purge_protection_enabled = true` is irreversible and reserves the vault name for a retention window on delete — blocking a same-name rebuild (the zero-to-Azure runbook). QA uses `false` to avoid it. Source: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-007.
+- **KI-011 (Low):** two dev-vault secrets (`cosmos-connection-string`, `servicebus-connection-string`) have **no consumer** — pre-secret-less-migration residue; a Service Bus connection string even embeds a SAS key. To be deleted. Source: KI-011.
+- **The `KeyVault__Uri` 403 trap** (Security §6): a new environment that doesn't override the vault URI reads the *source* vault, gets 403, and crash-loops naming a vault nobody built.
+- **RBAC mode is a one-way switch** — you can't fall back to access policies.
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"How does a service get its connection strings without them being in config?"* — At startup it reads Key Vault via `DefaultAzureCredential`, folding secrets into configuration; nothing is committed.
+- *"Access policies vs RBAC mode — which and why?"* — RBAC (irreversible), so access is standard Azure role assignments — one authorization model, least-privilege per identity.
+- *"How does Order reach Postgres with no database role?"* — Transitively: the connection string is a vault secret and Order holds *Key Vault Secrets User*. Ties to the permission-planes concept.
+- *"Why can't you immediately rebuild an environment under the same vault name?"* — KI-007: purge protection reserves the name for the retention window. The teardown gotcha.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "Key Vault holds every connection string and API key, and services read them at startup with `DefaultAzureCredential`, which folds the secrets the identity is allowed to read into .NET configuration — so nothing sensitive is ever committed or set as a plain value. It's in RBAC-authorization mode, so access is Azure role assignments; each service gets *Key Vault Secrets User*, and that's how it reaches the data stores too, transitively through the vaulted connection string. Two gotchas from the teardown side: purge protection is on and irreversible, so it reserves the vault name and blocks a same-name rebuild — that's KI-007; and there are two orphan secrets with no consumer, KI-011, that should be deleted. And the classic new-environment failure is forgetting to override the vault URI, which 403s and crash-loops."
 
 **Read the code** — `infrastructure/modules/key-vault/main.tf` (`azurerm_key_vault.this`,
 `rbac_authorization_enabled = true`) and `infrastructure/environments/dev/key-vault/terragrunt.hcl`
@@ -1837,7 +1924,7 @@ secrets its identity is granted, and rotation happens in one place.
 Gaps: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-007 (purge protection blocks rebuild), KI-011 (two secrets have
 no consumer). Decision: [ADR-013](adr/ADR-013-key-vault-rbac-and-observability-foundation.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain RBAC mode, transitive data-store access, and KI-007. Then predict what a pod does when its identity lacks *Key Vault Secrets User* (403 → crash-loop).
 
 ---
 
@@ -1850,17 +1937,24 @@ land in the one workspace, queried with KQL.
 **The problem it solves** — Telemetry scattered across services is useless; one workspace where a log line
 and the span it belongs to can be joined by a shared id is what makes cross-service debugging possible.
 
-**How it works** — _To be written._
+**How it works** — **Log Analytics** is the store and query engine (KQL); **Application Insights** is the APM front-end. In the modern **workspace-based** model, App Insights writes its telemetry *into* the Log Analytics workspace rather than a separate store — so logs (`ContainerLog`) and traces (`AppRequests`/`AppDependencies`) all live in one workspace and one KQL query can join across them.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — `log-antkart-dev` (`azurerm_log_analytics_workspace.this`, `PerGB2018`, 30-day retention) plus the **workspace-based** `appi-antkart-dev` (`azurerm_application_insights.this`, `workspace_id → log-antkart-dev`), both in `infrastructure/modules/observability/main.tf` — the workspace must exist before App Insights. The AKS OMS agent ships Serilog stdout into `ContainerLog`; the OpenTelemetry exporter ships spans through App Insights into `AppRequests`/`AppDependencies`. A log's `TraceId` equals a span's `OperationId`, so one KQL query stitches them. Decisions: [ADR-013](adr/ADR-013-key-vault-rbac-and-observability-foundation.md), [ADR-025](adr/ADR-025-observability-architecture.md).
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Alternatives: **classic (non-workspace) App Insights** (retired Feb 2024; separate store, can't co-query with logs), separate stores per signal (no cross-signal join — the whole point is lost), or self-hosted ELK + Prometheus/Grafana (AntKart built the Prometheus stack then **removed** it — [ADR-025](adr/ADR-025-observability-architecture.md) — as disproportionate to a two-node dev cluster). The workspace-based model buys one store, KQL across logs and traces, and no infra to run, at a per-GB ingest cost.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **Workspace vs classic schema** (Observability §5): the workspace schema is `AppRequests`/`AppDependencies`/`TimeGenerated` queried with `az monitor log-analytics query`; the classic schema (`requests`/`dependencies`/`timestamp`) is a *different API* — mixing them gives a `BadArgumentError` that looks like a KQL bug.
+- **30-day retention** is the free window; older data ages out unless you pay to extend.
+- **Metrics are not collected.** The self-hosted metrics stack was removed; only logs and traces land here ([ADR-025](adr/ADR-025-observability-architecture.md)).
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"What does 'workspace-based' App Insights actually mean?"* — Telemetry lands in the Log Analytics workspace, not a separate store, so logs and traces co-query. Testing whether you know the modern model.
+- *"How do you join a log line to its trace?"* — `TraceId` (ContainerLog) == `OperationId` (AppRequests/AppDependencies) in the one workspace. The correlation payoff.
+- *"Your KQL returns `BadArgumentError` on `AppRequests` — why?"* — Wrong API for the schema: workspace tables need `az monitor log-analytics query`, not `app-insights query`. The ran-it trap.
+- *"Do you collect metrics?"* — No — logs and traces only; the metrics stack was deliberately removed.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "Observability data lands in one place: Log Analytics is the store and KQL engine, and Application Insights is workspace-based, so its traces write *into* the same Log Analytics workspace rather than a separate store. That's the whole point — Serilog logs land in `ContainerLog`, OpenTelemetry spans land in `AppRequests` and `AppDependencies`, and because a log's TraceId equals a span's OperationId, one KQL query joins a log line to the exact span it belongs to. We chose workspace-based over the retired classic App Insights precisely so logs and traces co-query. Two things to know: the workspace schema needs the log-analytics query API, not the classic app-insights one, or you get a confusing error; and we collect logs and traces but not metrics — that stack was deliberately removed."
 
 **Read the code** — `infrastructure/modules/observability/main.tf`
 (`azurerm_log_analytics_workspace.this` `PerGB2018`, 30-day retention; workspace-based
@@ -1868,7 +1962,7 @@ and the span it belongs to can be joined by a shared id is what makes cross-serv
 Decisions: [ADR-013](adr/ADR-013-key-vault-rbac-and-observability-foundation.md),
 [ADR-025](adr/ADR-025-observability-architecture.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain workspace-based App Insights and the TraceId==OperationId join. Then write the KQL to find one request's logs and predict which table each signal is in.
 
 ---
 
@@ -1882,17 +1976,24 @@ SMTP/Mailhog of the earlier build.
 all of which ACS manages. The notification path reaches it by managed identity, so there's no SMTP
 password to store.
 
-**How it works** — _To be written._
+**How it works** — Azure Communication Services provides managed communication channels; AntKart uses **Email**. An *Email Communication Service* owns a sender **domain** (Azure-managed, so SPF/DKIM and a `*.azurecomm.net` sender are set up automatically), linked to a *Communication Service* resource. The app sends via the `Azure.Communication.Email` SDK, authenticating with a **managed identity** — no SMTP password.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — `acs-antkart-dev` plus an Email service and an **Azure-managed domain** (`infrastructure/modules/communication-services/main.tf`). `AcsEmailSender` (BuildingBlocks) sends via the SDK, selecting auth **Entra-first**: managed identity by default; a Key-Vault connection string if present; and a **safe no-op** if neither is configured (so local dev doesn't error). The sender display name is applied as an RFC 5322 `"AntKart <DoNotReply@…>"`. `AddAcsEmailSender` wires it; it's used by the notification path. It replaced the earlier build's SMTP/Mailhog. Decisions: [ADR-017](adr/ADR-017-entra-id-functions-eventgrid.md), [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Alternatives: a third-party email API (SendGrid/Mailgun — another vendor and API key to hold), a self-hosted SMTP relay (a deliverability and reputation headache), or Mailhog (local capture only, not real delivery). ACS buys managed deliverability (SPF/DKIM handled), a first-party Azure resource, and managed-identity auth (no email API key), at the cost of a coarse permission model today (see gotcha) and being tied to Azure.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **The identity needs *Contributor* on the ACS resource** — there is no granular "email send" role yet, so the grant is broader than ideal. A known coarseness, not a bug.
+- **Azure-managed domain, not a custom one.** The sender is a `*.azurecomm.net` subdomain; a branded custom domain is future work.
+- **Safe no-op when unconfigured.** If neither managed identity nor a connection string is set, the sender silently does nothing — good for local dev, but means "no email sent" can be "not configured," not "failed."
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"How does the app send email without an SMTP password?"* — The `Azure.Communication.Email` SDK with a managed identity (Entra-first); no stored credential. The secret-less point.
+- *"What role does the sending identity need, and what's imperfect about it?"* — Contributor on the ACS resource — coarse, because there's no granular email-send role yet.
+- *"Who handles SPF/DKIM/deliverability?"* — The Azure-managed domain does, automatically — that's a big reason to use ACS over self-hosted SMTP.
+- *"Emails aren't arriving locally — is it broken?"* — Possibly just unconfigured: `AcsEmailSender` is a safe no-op with no identity/connection string. Testing whether you know the no-op path.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "Customer emails go through Azure Communication Services' Email capability. An Email service owns an Azure-managed sender domain, so SPF and DKIM and a sender address are set up for us — deliverability handled. The app sends via the ACS SDK, and `AcsEmailSender` in BuildingBlocks authenticates Entra-first: managed identity by default, a vaulted connection string if present, and a safe no-op if neither is configured, so local dev doesn't error. There's no SMTP password anywhere. Two caveats: the sending identity needs Contributor on the ACS resource because there's no granular email-send role yet, so the grant is coarser than ideal; and the sender is an Azure-managed `azurecomm.net` domain, with a branded custom domain still future work. It replaced the old build's SMTP and Mailhog."
 
 **Read the code** — `infrastructure/modules/communication-services/main.tf`
 (`azurerm_email_communication_service`, `azurerm_communication_service`, Azure-managed domain). App side:
@@ -1900,7 +2001,7 @@ password to store.
 [ADR-017](adr/ADR-017-entra-id-functions-eventgrid.md),
 [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain managed-identity email auth, the Contributor-role coarseness, and the safe no-op. Then trace one email from `AcsEmailSender` to ACS, predicting which auth path fires in the cluster vs locally.
 
 ---
 
