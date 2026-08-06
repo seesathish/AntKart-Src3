@@ -1,0 +1,472 @@
+{
+  "configuration" : { },
+  "description" : "Two authentication chains, neither storing a secret: the caller's token and the workload's federated identity",
+  "documentation" : { },
+  "id" : 1,
+  "lastModifiedDate" : "2026-08-06T09:35:30Z",
+  "model" : {
+    "people" : [ {
+      "description" : "Signs in with Entra using OAuth2 authorization code with PKCE.",
+      "id" : "1",
+      "name" : "Client",
+      "properties" : {
+        "structurizr.dsl.identifier" : "client"
+      },
+      "relationships" : [ {
+        "description" : "Signs in; receives an access token",
+        "destinationId" : "2",
+        "id" : "14",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      }, {
+        "description" : "HTTPS, bearer token",
+        "destinationId" : "3",
+        "id" : "15",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "description" : "Issues access tokens to callers, publishes the keys those tokens are validated against, and grants managed identities to workloads presenting a trusted federated token.",
+      "documentation" : { },
+      "id" : "2",
+      "name" : "Microsoft Entra ID",
+      "properties" : {
+        "structurizr.dsl.identifier" : "entra"
+      },
+      "relationships" : [ {
+        "description" : "Matches issuer and subject to a federated credential",
+        "destinationId" : "9",
+        "id" : "22",
+        "sourceId" : "2",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,Identity"
+    }, {
+      "description" : "Terminates TLS. cert-manager holds a Let's Encrypt certificate and renews it.",
+      "documentation" : { },
+      "group" : "Edge",
+      "id" : "3",
+      "name" : "ingress-nginx + cert-manager",
+      "properties" : {
+        "structurizr.dsl.identifier" : "ingress"
+      },
+      "relationships" : [ {
+        "description" : "Forwards after TLS termination",
+        "destinationId" : "4",
+        "id" : "16",
+        "sourceId" : "3",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,Edge"
+    }, {
+      "description" : "The only service reachable from outside. Validates the caller's token against Entra's published signing keys before routing.",
+      "documentation" : { },
+      "group" : "Edge",
+      "id" : "4",
+      "name" : "API gateway",
+      "properties" : {
+        "structurizr.dsl.identifier" : "gateway"
+      },
+      "relationships" : [ {
+        "description" : "Fetches the signing keys",
+        "destinationId" : "2",
+        "id" : "17",
+        "sourceId" : "4",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Routes; the token is validated again",
+        "destinationId" : "6",
+        "id" : "18",
+        "sourceId" : "4",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,Edge"
+    }, {
+      "description" : "Signs a short-lived ServiceAccount token and projects it into each pod. Entra is configured to trust this issuer.",
+      "documentation" : { },
+      "group" : "Cluster",
+      "id" : "5",
+      "name" : "AKS OIDC issuer",
+      "properties" : {
+        "structurizr.dsl.identifier" : "oidcIssuer"
+      },
+      "relationships" : [ {
+        "description" : "Projects a signed ServiceAccount token",
+        "destinationId" : "6",
+        "id" : "20",
+        "sourceId" : "5",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,Identity"
+    }, {
+      "description" : "Products, Cart, Order, Payments. ClusterIP-only. Each validates the caller's token again rather than trusting the gateway.",
+      "documentation" : { },
+      "group" : "Cluster",
+      "id" : "6",
+      "name" : "Services",
+      "properties" : {
+        "structurizr.dsl.identifier" : "rest"
+      },
+      "relationships" : [ {
+        "description" : "gRPC",
+        "destinationId" : "7",
+        "id" : "19",
+        "sourceId" : "6",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Presents it — no stored secret",
+        "destinationId" : "2",
+        "id" : "21",
+        "sourceId" : "6",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,Service"
+    }, {
+      "description" : "KI-002 — decodes the caller's token but does not verify its signature, issuer or audience. ClusterIP-only and reached only by Products.",
+      "documentation" : { },
+      "group" : "Cluster",
+      "id" : "7",
+      "name" : "Discount (gRPC)",
+      "properties" : {
+        "structurizr.dsl.identifier" : "discount"
+      },
+      "tags" : "Element,Software System,Issue"
+    }, {
+      "description" : "The cluster's own identity. Pulls images; holds no registry password.",
+      "documentation" : { },
+      "group" : "Cluster",
+      "id" : "8",
+      "name" : "Kubelet identity",
+      "properties" : {
+        "structurizr.dsl.identifier" : "kubelet"
+      },
+      "relationships" : [ {
+        "description" : "AcrPull",
+        "destinationId" : "12",
+        "id" : "26",
+        "sourceId" : "8",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,Identity"
+    }, {
+      "description" : "One user-assigned identity per service, each with a federated credential naming the cluster issuer and that service's ServiceAccount.",
+      "documentation" : { },
+      "group" : "Azure",
+      "id" : "9",
+      "name" : "Managed identities",
+      "properties" : {
+        "structurizr.dsl.identifier" : "uami"
+      },
+      "relationships" : [ {
+        "description" : "Key Vault Secrets User",
+        "destinationId" : "10",
+        "id" : "23",
+        "sourceId" : "9",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Scoped data-plane roles",
+        "destinationId" : "11",
+        "id" : "24",
+        "sourceId" : "9",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,Identity"
+    }, {
+      "description" : "Holds every connection string and API key. Read at startup; nothing is stored in the cluster.",
+      "documentation" : { },
+      "group" : "Azure",
+      "id" : "10",
+      "name" : "Key Vault",
+      "properties" : {
+        "structurizr.dsl.identifier" : "keyvault"
+      },
+      "tags" : "Element,Software System,Managed"
+    }, {
+      "description" : "Reached with the identity's token. Roles are scoped per resource, not per subscription.",
+      "documentation" : { },
+      "group" : "Azure",
+      "id" : "11",
+      "name" : "Service Bus, Event Grid, data stores",
+      "properties" : {
+        "structurizr.dsl.identifier" : "azure"
+      },
+      "tags" : "Element,Software System,Managed"
+    }, {
+      "description" : "Images pushed by CI/CD, pulled by the kubelet.",
+      "documentation" : { },
+      "group" : "Azure",
+      "id" : "12",
+      "name" : "Container Registry",
+      "properties" : {
+        "structurizr.dsl.identifier" : "acr"
+      },
+      "tags" : "Element,Software System,Managed"
+    }, {
+      "description" : "Authenticates with a federated credential naming the repository and environment. No cloud secret is stored in GitHub.",
+      "documentation" : { },
+      "group" : "Azure",
+      "id" : "13",
+      "name" : "GitHub Actions",
+      "properties" : {
+        "structurizr.dsl.identifier" : "cicd"
+      },
+      "relationships" : [ {
+        "description" : "AcrPush",
+        "destinationId" : "12",
+        "id" : "25",
+        "sourceId" : "13",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,CICD"
+    } ]
+  },
+  "name" : "AntKart — security",
+  "properties" : {
+    "structurizr.inspection.error" : "14",
+    "structurizr.dsl" : "LyoKICogQW50S2FydCDigJQgU2VjdXJpdHkgKGhlcm8gZGlhZ3JhbSkKICoKICogUXVlc3Rpb246IGhvdyBpcyBpdCBzZWN1cmVkLCBlbmQgdG8gZW5kPwogKgogKiBUd28gY2hhaW5zLCBubyBzdG9yZWQgc2VjcmV0cyBpbiBlaXRoZXIuCiAqCiAqICAgQ0FMTEVSICAgVGhlIGNsaWVudCBzaWducyBpbiB3aXRoIEVudHJhIGFuZCByZWNlaXZlcyBhbiBhY2Nlc3MgdG9rZW4uIFRoZSByZXF1ZXN0CiAqICAgICAgICAgICAgYXJyaXZlcyBvdmVyIFRMUyB0ZXJtaW5hdGVkIGF0IHRoZSBlZGdlLiBUaGUgZ2F0ZXdheSB2YWxpZGF0ZXMgdGhlIHRva2VuCiAqICAgICAgICAgICAgYWdhaW5zdCBFbnRyYSdzIHB1Ymxpc2hlZCBzaWduaW5nIGtleXMsIHRoZW4gcm91dGVzIGlud2FyZDsgZXZlcnkgc2VydmljZQogKiAgICAgICAgICAgIHZhbGlkYXRlcyBpdCBhZ2FpbiByYXRoZXIgdGhhbiB0cnVzdGluZyB0aGUgZ2F0ZXdheS4KICoKICogICBXT1JLTE9BRCBUaGUgY2x1c3RlciBwcm9qZWN0cyBhIFNlcnZpY2VBY2NvdW50IHRva2VuIGludG8gZWFjaCBwb2QsIHNpZ25lZCBieSB0aGUKICogICAgICAgICAgICBjbHVzdGVyJ3Mgb3duIE9JREMgaXNzdWVyLiBUaGUgc2VydmljZSBwcmVzZW50cyB0aGF0IHRva2VuIHRvIEVudHJhLCB3aGljaAogKiAgICAgICAgICAgIG1hdGNoZXMgdGhlIGlzc3VlciBhbmQgc3ViamVjdCBhZ2FpbnN0IGEgZmVkZXJhdGVkIGNyZWRlbnRpYWwgYW5kIGdyYW50cyB0aGUKICogICAgICAgICAgICBzZXJ2aWNlJ3MgbWFuYWdlZCBpZGVudGl0eS4gVGhhdCBpZGVudGl0eSBob2xkcyBzY29wZWQgZGF0YS1wbGFuZSByb2xlcy4KICogICAgICAgICAgICBOb3RoaW5nIGluIHRoZSBjbHVzdGVyIHN0b3JlcyBhIGNyZWRlbnRpYWwuCiAqCiAqIFR3byByZWdpc3RyeSBwYXRocyBzaXQgb3V0c2lkZSBib3RoIGNoYWluczogQ0kvQ0QgcHVzaGVzIHdpdGggQWNyUHVzaCwgdGhlIGt1YmVsZXQKICogcHVsbHMgd2l0aCBBY3JQdWxsLiBOZWl0aGVyIHVzZXMgYSByZWdpc3RyeSBwYXNzd29yZC4KICoKICogS0ktMDAyIGlzIGRyYXduIGFzIGEga25vd24gZ2FwOiBEaXNjb3VudCBkZWNvZGVzIHRoZSBKV1Qgd2l0aG91dCB2ZXJpZnlpbmcgaXRzCiAqIHNpZ25hdHVyZSwgaXNzdWVyIG9yIGF1ZGllbmNlLiBJdCBpcyBDbHVzdGVySVAtb25seSBhbmQgcmVhY2hlZCBvbmx5IGJ5IFByb2R1Y3RzLgogKgogKiBSRU5ERVIKICogICBkb2NrZXIgcnVuIC1pdCAtLXJtIC1wIDgwODA6ODA4MCBcCiAqICAgICAtdiAiQzpcVXNlcnNcc2Vlc2FcT25lRHJpdmVcRGVza3RvcFxBbnRDYXJ0XEFudEthcnQtU3JjM1xkb2NzXEM0UmVuZGVyc1xoZXJvLXNlY3VyaXR5Oi91c3IvbG9jYWwvc3RydWN0dXJpenIiIFwKICogICAgIHN0cnVjdHVyaXpyL3N0cnVjdHVyaXpyIGxvY2FsCiAqICAgT3BlbiBodHRwOi8vbG9jYWxob3N0OjgwODAuIEVkaXQsIHNhdmUsIHByZXNzIEY1LiBOZXZlciByZXN0YXJ0IHRoZSBjb250YWluZXIuCiAqCiAqIFRXTy1QSEFTRSBXT1JLRkxPVwogKiAgIFBoYXNlIG9uZTogYXV0b0xheW91dCBpcyBPTiB0byBnZXQgcm91Z2ggcGxhY2VtZW50LgogKiAgIFBoYXNlIHR3bzogQ09NTUVOVCBPVVQgdGhlIGF1dG9MYXlvdXQgbGluZSwgcmVmcmVzaCwgdGhlbiBoYW5kLWFycmFuZ2UuCiAqICAgICAgICAgICAgICBMQVlPVVQgSElOVCDigJQgRW50cmEgaXMgcmVmZXJlbmNlZCBmcm9tIHRocmVlIHBsYWNlcyAodGhlIGNsaWVudCBzaWduaW5nCiAqICAgICAgICAgICAgICBpbiwgdGhlIGdhdGV3YXkgdmFsaWRhdGluZywgdGhlIHNlcnZpY2VzIGV4Y2hhbmdpbmcpLiBQbGFjZSBpdCB0b3AtY2VudHJlCiAqICAgICAgICAgICAgICByYXRoZXIgdGhhbiBhdCB0aGUgZmFyIGxlZnQsIG9yIHRob3NlIGFycm93cyB3aWxsIGRvdWJsZSBiYWNrIGFjcm9zcyB0aGUKICogICAgICAgICAgICAgIGRpYWdyYW0uIENhbGxlciBjaGFpbiBhbG9uZyB0aGUgdG9wLCB3b3JrbG9hZCBjaGFpbiBiZWxvdyBpdCwgdGhlIHR3bwogKiAgICAgICAgICAgICAgcmVnaXN0cnkgYXJyb3dzIG9mZiB0byBvbmUgc2lkZS4KICoKICogSU1QT1JUQU5UIOKAlCBhdXRvTGF5b3V0IFdBUk5JTkcKICogICBhdXRvTGF5b3V0IHJlY2FsY3VsYXRlcyBvbiBldmVyeSBsb2FkIGFuZCBESVNDQVJEUyBoYW5kIHBsYWNlbWVudC4gT25jZSB5b3Ugc3RhcnQKICogICBkcmFnZ2luZywgbGVhdmUgYXV0b0xheW91dCBjb21tZW50ZWQgb3V0IHBlcm1hbmVudGx5LiBQbGFjZW1lbnQgYXV0b3NhdmVzIGludG8KICogICB3b3Jrc3BhY2UuanNvbiAoZ2VuZXJhdGVkIOKAlCBkbyBub3QgaGFuZC1lZGl0OyAuc3RydWN0dXJpenIvIGlzIGdpdGlnbm9yZWQgY2FjaGUpLgogKi8KCndvcmtzcGFjZSAiQW50S2FydCDigJQgc2VjdXJpdHkiICJUd28gYXV0aGVudGljYXRpb24gY2hhaW5zLCBuZWl0aGVyIHN0b3JpbmcgYSBzZWNyZXQ6IHRoZSBjYWxsZXIncyB0b2tlbiBhbmQgdGhlIHdvcmtsb2FkJ3MgZmVkZXJhdGVkIGlkZW50aXR5IiB7CgogICAgIWlkZW50aWZpZXJzIGhpZXJhcmNoaWNhbAoKICAgIG1vZGVsIHsKCiAgICAgICAgY2xpZW50ID0gcGVyc29uICJDbGllbnQiICJTaWducyBpbiB3aXRoIEVudHJhIHVzaW5nIE9BdXRoMiBhdXRob3JpemF0aW9uIGNvZGUgd2l0aCBQS0NFLiIgewogICAgICAgICAgICB0YWdzICJQZXJzb24iCiAgICAgICAgfQoKICAgICAgICBlbnRyYSA9IHNvZnR3YXJlU3lzdGVtICJNaWNyb3NvZnQgRW50cmEgSUQiICJJc3N1ZXMgYWNjZXNzIHRva2VucyB0byBjYWxsZXJzLCBwdWJsaXNoZXMgdGhlIGtleXMgdGhvc2UgdG9rZW5zIGFyZSB2YWxpZGF0ZWQgYWdhaW5zdCwgYW5kIGdyYW50cyBtYW5hZ2VkIGlkZW50aXRpZXMgdG8gd29ya2xvYWRzIHByZXNlbnRpbmcgYSB0cnVzdGVkIGZlZGVyYXRlZCB0b2tlbi4iIHsKICAgICAgICAgICAgdGFncyAiSWRlbnRpdHkiCiAgICAgICAgfQoKICAgICAgICBncm91cCAiRWRnZSIgewogICAgICAgICAgICBpbmdyZXNzID0gc29mdHdhcmVTeXN0ZW0gImluZ3Jlc3MtbmdpbnggKyBjZXJ0LW1hbmFnZXIiICJUZXJtaW5hdGVzIFRMUy4gY2VydC1tYW5hZ2VyIGhvbGRzIGEgTGV0J3MgRW5jcnlwdCBjZXJ0aWZpY2F0ZSBhbmQgcmVuZXdzIGl0LiIgewogICAgICAgICAgICAgICAgdGFncyAiRWRnZSIKICAgICAgICAgICAgfQogICAgICAgICAgICBnYXRld2F5ID0gc29mdHdhcmVTeXN0ZW0gIkFQSSBnYXRld2F5IiAiVGhlIG9ubHkgc2VydmljZSByZWFjaGFibGUgZnJvbSBvdXRzaWRlLiBWYWxpZGF0ZXMgdGhlIGNhbGxlcidzIHRva2VuIGFnYWluc3QgRW50cmEncyBwdWJsaXNoZWQgc2lnbmluZyBrZXlzIGJlZm9yZSByb3V0aW5nLiIgewogICAgICAgICAgICAgICAgdGFncyAiRWRnZSIKICAgICAgICAgICAgfQogICAgICAgIH0KCiAgICAgICAgZ3JvdXAgIkNsdXN0ZXIiIHsKICAgICAgICAgICAgb2lkY0lzc3VlciA9IHNvZnR3YXJlU3lzdGVtICJBS1MgT0lEQyBpc3N1ZXIiICJTaWducyBhIHNob3J0LWxpdmVkIFNlcnZpY2VBY2NvdW50IHRva2VuIGFuZCBwcm9qZWN0cyBpdCBpbnRvIGVhY2ggcG9kLiBFbnRyYSBpcyBjb25maWd1cmVkIHRvIHRydXN0IHRoaXMgaXNzdWVyLiIgewogICAgICAgICAgICAgICAgdGFncyAiSWRlbnRpdHkiCiAgICAgICAgICAgIH0KICAgICAgICAgICAgcmVzdCA9IHNvZnR3YXJlU3lzdGVtICJTZXJ2aWNlcyIgIlByb2R1Y3RzLCBDYXJ0LCBPcmRlciwgUGF5bWVudHMuIENsdXN0ZXJJUC1vbmx5LiBFYWNoIHZhbGlkYXRlcyB0aGUgY2FsbGVyJ3MgdG9rZW4gYWdhaW4gcmF0aGVyIHRoYW4gdHJ1c3RpbmcgdGhlIGdhdGV3YXkuIiB7CiAgICAgICAgICAgICAgICB0YWdzICJTZXJ2aWNlIgogICAgICAgICAgICB9CiAgICAgICAgICAgIGRpc2NvdW50ID0gc29mdHdhcmVTeXN0ZW0gIkRpc2NvdW50IChnUlBDKSIgIktJLTAwMiDigJQgZGVjb2RlcyB0aGUgY2FsbGVyJ3MgdG9rZW4gYnV0IGRvZXMgbm90IHZlcmlmeSBpdHMgc2lnbmF0dXJlLCBpc3N1ZXIgb3IgYXVkaWVuY2UuIENsdXN0ZXJJUC1vbmx5IGFuZCByZWFjaGVkIG9ubHkgYnkgUHJvZHVjdHMuIiB7CiAgICAgICAgICAgICAgICB0YWdzICJJc3N1ZSIKICAgICAgICAgICAgfQogICAgICAgICAgICBrdWJlbGV0ID0gc29mdHdhcmVTeXN0ZW0gIkt1YmVsZXQgaWRlbnRpdHkiICJUaGUgY2x1c3RlcidzIG93biBpZGVudGl0eS4gUHVsbHMgaW1hZ2VzOyBob2xkcyBubyByZWdpc3RyeSBwYXNzd29yZC4iIHsKICAgICAgICAgICAgICAgIHRhZ3MgIklkZW50aXR5IgogICAgICAgICAgICB9CiAgICAgICAgfQoKICAgICAgICBncm91cCAiQXp1cmUiIHsKICAgICAgICAgICAgdWFtaSA9IHNvZnR3YXJlU3lzdGVtICJNYW5hZ2VkIGlkZW50aXRpZXMiICJPbmUgdXNlci1hc3NpZ25lZCBpZGVudGl0eSBwZXIgc2VydmljZSwgZWFjaCB3aXRoIGEgZmVkZXJhdGVkIGNyZWRlbnRpYWwgbmFtaW5nIHRoZSBjbHVzdGVyIGlzc3VlciBhbmQgdGhhdCBzZXJ2aWNlJ3MgU2VydmljZUFjY291bnQuIiB7CiAgICAgICAgICAgICAgICB0YWdzICJJZGVudGl0eSIKICAgICAgICAgICAgfQogICAgICAgICAgICBrZXl2YXVsdCA9IHNvZnR3YXJlU3lzdGVtICJLZXkgVmF1bHQiICJIb2xkcyBldmVyeSBjb25uZWN0aW9uIHN0cmluZyBhbmQgQVBJIGtleS4gUmVhZCBhdCBzdGFydHVwOyBub3RoaW5nIGlzIHN0b3JlZCBpbiB0aGUgY2x1c3Rlci4iIHsKICAgICAgICAgICAgICAgIHRhZ3MgIk1hbmFnZWQiCiAgICAgICAgICAgIH0KICAgICAgICAgICAgYXp1cmUgPSBzb2Z0d2FyZVN5c3RlbSAiU2VydmljZSBCdXMsIEV2ZW50IEdyaWQsIGRhdGEgc3RvcmVzIiAiUmVhY2hlZCB3aXRoIHRoZSBpZGVudGl0eSdzIHRva2VuLiBSb2xlcyBhcmUgc2NvcGVkIHBlciByZXNvdXJjZSwgbm90IHBlciBzdWJzY3JpcHRpb24uIiB7CiAgICAgICAgICAgICAgICB0YWdzICJNYW5hZ2VkIgogICAgICAgICAgICB9CiAgICAgICAgICAgIGFjciA9IHNvZnR3YXJlU3lzdGVtICJDb250YWluZXIgUmVnaXN0cnkiICJJbWFnZXMgcHVzaGVkIGJ5IENJL0NELCBwdWxsZWQgYnkgdGhlIGt1YmVsZXQuIiB7CiAgICAgICAgICAgICAgICB0YWdzICJNYW5hZ2VkIgogICAgICAgICAgICB9CiAgICAgICAgICAgIGNpY2QgPSBzb2Z0d2FyZVN5c3RlbSAiR2l0SHViIEFjdGlvbnMiICJBdXRoZW50aWNhdGVzIHdpdGggYSBmZWRlcmF0ZWQgY3JlZGVudGlhbCBuYW1pbmcgdGhlIHJlcG9zaXRvcnkgYW5kIGVudmlyb25tZW50LiBObyBjbG91ZCBzZWNyZXQgaXMgc3RvcmVkIGluIEdpdEh1Yi4iIHsKICAgICAgICAgICAgICAgIHRhZ3MgIkNJQ0QiCiAgICAgICAgICAgIH0KICAgICAgICB9CgogICAgICAgIC8vIENhbGxlciBjaGFpbi4KICAgICAgICBjbGllbnQgLT4gZW50cmEgIlNpZ25zIGluOyByZWNlaXZlcyBhbiBhY2Nlc3MgdG9rZW4iCiAgICAgICAgY2xpZW50IC0+IGluZ3Jlc3MgIkhUVFBTLCBiZWFyZXIgdG9rZW4iCiAgICAgICAgaW5ncmVzcyAtPiBnYXRld2F5ICJGb3J3YXJkcyBhZnRlciBUTFMgdGVybWluYXRpb24iCiAgICAgICAgZ2F0ZXdheSAtPiBlbnRyYSAiRmV0Y2hlcyB0aGUgc2lnbmluZyBrZXlzIgogICAgICAgIGdhdGV3YXkgLT4gcmVzdCAiUm91dGVzOyB0aGUgdG9rZW4gaXMgdmFsaWRhdGVkIGFnYWluIgogICAgICAgIHJlc3QgLT4gZGlzY291bnQgImdSUEMiCgogICAgICAgIC8vIFdvcmtsb2FkIGNoYWluLgogICAgICAgIG9pZGNJc3N1ZXIgLT4gcmVzdCAiUHJvamVjdHMgYSBzaWduZWQgU2VydmljZUFjY291bnQgdG9rZW4iCiAgICAgICAgcmVzdCAtPiBlbnRyYSAiUHJlc2VudHMgaXQg4oCUIG5vIHN0b3JlZCBzZWNyZXQiCiAgICAgICAgZW50cmEgLT4gdWFtaSAiTWF0Y2hlcyBpc3N1ZXIgYW5kIHN1YmplY3QgdG8gYSBmZWRlcmF0ZWQgY3JlZGVudGlhbCIKICAgICAgICB1YW1pIC0+IGtleXZhdWx0ICJLZXkgVmF1bHQgU2VjcmV0cyBVc2VyIgogICAgICAgIHVhbWkgLT4gYXp1cmUgIlNjb3BlZCBkYXRhLXBsYW5lIHJvbGVzIgoKICAgICAgICAvLyBSZWdpc3RyeS4KICAgICAgICBjaWNkIC0+IGFjciAiQWNyUHVzaCIKICAgICAgICBrdWJlbGV0IC0+IGFjciAiQWNyUHVsbCIKICAgIH0KCiAgICB2aWV3cyB7CgogICAgICAgIHRoZW1lcyBodHRwczovL3N0YXRpYy5zdHJ1Y3R1cml6ci5jb20vdGhlbWVzL21pY3Jvc29mdC1henVyZS0yMDIxLjAxLjI2L3RoZW1lLmpzb24KCiAgICAgICAgc3lzdGVtTGFuZHNjYXBlICJTZWN1cml0eSIgIlRoZSBjYWxsZXIncyB0b2tlbiBpcyB2YWxpZGF0ZWQgYXQgdGhlIGVkZ2UgYW5kIGFnYWluIGluc2lkZS4gVGhlIHdvcmtsb2FkJ3MgaWRlbnRpdHkgaXMgZmVkZXJhdGVkIHRvIHRoZSBjbHVzdGVyLCBzbyBubyBjcmVkZW50aWFsIGlzIHN0b3JlZCBhbnl3aGVyZS4iIHsKICAgICAgICAgICAgaW5jbHVkZSAqCiAgICAgICAgICAgIC8vIFBIQVNFIE9ORTogYXV0b0xheW91dCBpcyBPTi4gQmVmb3JlIGhhbmQtYXJyYW5naW5nLCBDT01NRU5UIE9VVCB0aGUgbmV4dAogICAgICAgICAgICAvLyBsaW5lLCByZWZyZXNoLCB0aGVuIGRyYWcuIExlYXZlIGl0IGNvbW1lbnRlZCBvbmNlIHlvdSBzdGFydCBkcmFnZ2luZy4KICAgICAgICAgICAgLy9hdXRvTGF5b3V0IGxyIDE1MCAxMjAKICAgICAgICB9CgogICAgICAgIHN0eWxlcyB7CiAgICAgICAgICAgIC8vIEhpZGUgZGVzY3JpcHRpb25zLiBLZWVwIG1ldGFkYXRhIOKAlCB0aGF0IGlzIHRoZSB0ZWNobm9sb2d5IGxpbmUuCiAgICAgICAgICAgIGVsZW1lbnQgIkVsZW1lbnQiIHsKICAgICAgICAgICAgICAgIGRlc2NyaXB0aW9uIHRydWUKICAgICAgICAgICAgICAgIG1ldGFkYXRhIHRydWUKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJHcm91cCIgewogICAgICAgICAgICAgICAgc3Ryb2tlV2lkdGggNAogICAgICAgICAgICAgICAgY29sb3IgIzVGNUU1QQogICAgICAgICAgICAgICAgZm9udFNpemUgMjQKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJQZXJzb24iIHsKICAgICAgICAgICAgICAgIHNoYXBlIFBlcnNvbgogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjNUY1RTVBCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgICAgICBmb250U2l6ZSAyNgogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIlNvZnR3YXJlIFN5c3RlbSIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjODg4NzgwCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiRXh0ZXJuYWwiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzg4ODc4MAogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIklkZW50aXR5IiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICNCQTc1MTcKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJNYW5hZ2VkIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICMzNzhBREQKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJTZXJ2aWNlIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICMxRDlFNzUKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgICAgIHNoYXBlIFJvdW5kZWRCb3gKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJTZXJ2ZXJsZXNzIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICMwRjZFNTYKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgICAgIHNoYXBlIFJvdW5kZWRCb3gKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJEYXRhc3RvcmUiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzE4NUZBNQogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgc2hhcGUgQ3lsaW5kZXIKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJFZGdlIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM3Rjc3REQKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgICAgIHNoYXBlIFJvdW5kZWRCb3gKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJDSUNEIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM2Mzk5MjIKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgICAgIHNoYXBlIFJvdW5kZWRCb3gKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJJbmZyYSIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjODg4NzgwCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiUGxhbm5lZCIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjNUY1RTVBCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgICAgICBib3JkZXIgZGFzaGVkCiAgICAgICAgICAgICAgICBzdHJva2VXaWR0aCAzCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiSXNzdWUiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgI0UyNEI0QQogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgYm9yZGVyIGRhc2hlZAogICAgICAgICAgICAgICAgc3Ryb2tlV2lkdGggMwogICAgICAgICAgICB9CiAgICAgICAgICAgIHJlbGF0aW9uc2hpcCAiUmVsYXRpb25zaGlwIiB7CiAgICAgICAgICAgICAgICBkYXNoZWQgZmFsc2UKICAgICAgICAgICAgICAgIHRoaWNrbmVzcyAyCiAgICAgICAgICAgICAgICBmb250U2l6ZSAyMgogICAgICAgICAgICAgICAgcm91dGluZyBPcnRob2dvbmFsCiAgICAgICAgICAgIH0KICAgICAgICAgICAgcmVsYXRpb25zaGlwICJQbGFubmVkIiB7CiAgICAgICAgICAgICAgICBkYXNoZWQgdHJ1ZQogICAgICAgICAgICAgICAgdGhpY2tuZXNzIDIKICAgICAgICAgICAgICAgIGZvbnRTaXplIDIyCiAgICAgICAgICAgICAgICByb3V0aW5nIE9ydGhvZ29uYWwKICAgICAgICAgICAgfQogICAgICAgIH0KICAgIH0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "lastSavedView" : "Security",
+      "styles" : {
+        "elements" : [ {
+          "background" : "#639922",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "CICD"
+        }, {
+          "background" : "#185fa5",
+          "color" : "#ffffff",
+          "shape" : "Cylinder",
+          "tag" : "Datastore"
+        }, {
+          "background" : "#7f77dd",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Edge"
+        }, {
+          "description" : true,
+          "metadata" : true,
+          "tag" : "Element"
+        }, {
+          "background" : "#888780",
+          "color" : "#ffffff",
+          "tag" : "External"
+        }, {
+          "color" : "#5f5e5a",
+          "fontSize" : 24,
+          "strokeWidth" : 4,
+          "tag" : "Group"
+        }, {
+          "background" : "#ba7517",
+          "color" : "#ffffff",
+          "tag" : "Identity"
+        }, {
+          "background" : "#888780",
+          "color" : "#ffffff",
+          "tag" : "Infra"
+        }, {
+          "background" : "#e24b4a",
+          "border" : "Dashed",
+          "color" : "#ffffff",
+          "strokeWidth" : 3,
+          "tag" : "Issue"
+        }, {
+          "background" : "#378add",
+          "color" : "#ffffff",
+          "tag" : "Managed"
+        }, {
+          "background" : "#5f5e5a",
+          "color" : "#ffffff",
+          "fontSize" : 26,
+          "shape" : "Person",
+          "tag" : "Person"
+        }, {
+          "background" : "#5f5e5a",
+          "border" : "Dashed",
+          "color" : "#ffffff",
+          "strokeWidth" : 3,
+          "tag" : "Planned"
+        }, {
+          "background" : "#0f6e56",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Serverless"
+        }, {
+          "background" : "#1d9e75",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Service"
+        }, {
+          "background" : "#888780",
+          "color" : "#ffffff",
+          "tag" : "Software System"
+        } ],
+        "relationships" : [ {
+          "dashed" : true,
+          "fontSize" : 22,
+          "routing" : "Orthogonal",
+          "tag" : "Planned",
+          "thickness" : 2
+        }, {
+          "dashed" : false,
+          "fontSize" : 22,
+          "routing" : "Orthogonal",
+          "tag" : "Relationship",
+          "thickness" : 2
+        } ]
+      },
+      "terminology" : { },
+      "themes" : [ "https://static.structurizr.com/themes/microsoft-azure-2021.01.26/theme.json" ]
+    },
+    "systemLandscapeViews" : [ {
+      "description" : "The caller's token is validated at the edge and again inside. The workload's identity is federated to the cluster, so no credential is stored anywhere.",
+      "dimensions" : {
+        "height" : 2043,
+        "width" : 5840
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 1010,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 3459,
+        "y" : 466
+      }, {
+        "id" : "3",
+        "x" : 989,
+        "y" : 530
+      }, {
+        "id" : "4",
+        "x" : 1829,
+        "y" : 530
+      }, {
+        "id" : "5",
+        "x" : 1835,
+        "y" : 1235
+      }, {
+        "id" : "6",
+        "x" : 2675,
+        "y" : 1018
+      }, {
+        "id" : "7",
+        "x" : 3465,
+        "y" : 1060
+      }, {
+        "id" : "8",
+        "x" : 3465,
+        "y" : 1410
+      }, {
+        "id" : "9",
+        "x" : 4145,
+        "y" : 594
+      }, {
+        "id" : "10",
+        "x" : 4935,
+        "y" : 321
+      }, {
+        "id" : "11",
+        "x" : 4935,
+        "y" : 795
+      }, {
+        "id" : "12",
+        "x" : 4935,
+        "y" : 1408
+      }, {
+        "id" : "13",
+        "x" : 4145,
+        "y" : 1145
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "key" : "Security",
+      "name" : "System Landscape View",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "14",
+        "vertices" : [ {
+          "x" : 3265,
+          "y" : 355
+        }, {
+          "x" : 3289,
+          "y" : 405
+        } ]
+      }, {
+        "id" : "15",
+        "vertices" : [ {
+          "x" : 1210,
+          "y" : 470
+        } ]
+      }, {
+        "id" : "16"
+      }, {
+        "id" : "17",
+        "vertices" : [ {
+          "x" : 2329,
+          "y" : 655
+        }, {
+          "x" : 3289,
+          "y" : 655
+        } ]
+      }, {
+        "id" : "18",
+        "vertices" : [ {
+          "x" : 2329,
+          "y" : 755
+        }, {
+          "x" : 2499,
+          "y" : 1067
+        } ]
+      }, {
+        "id" : "19",
+        "vertices" : [ {
+          "x" : 3295,
+          "y" : 1210
+        } ]
+      }, {
+        "id" : "20",
+        "vertices" : [ {
+          "x" : 2505,
+          "y" : 1385
+        } ]
+      }, {
+        "id" : "21",
+        "vertices" : [ {
+          "x" : 3289,
+          "y" : 1067
+        } ]
+      }, {
+        "id" : "22"
+      }, {
+        "id" : "23",
+        "vertices" : [ {
+          "x" : 4765,
+          "y" : 471
+        } ]
+      }, {
+        "id" : "24",
+        "vertices" : [ {
+          "x" : 4765,
+          "y" : 945
+        } ]
+      }, {
+        "id" : "25",
+        "vertices" : [ {
+          "x" : 4765,
+          "y" : 1295
+        } ]
+      }, {
+        "id" : "26",
+        "vertices" : [ {
+          "x" : 4830,
+          "y" : 1560
+        } ]
+      } ]
+    } ]
+  }
+}

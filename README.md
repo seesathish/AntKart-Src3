@@ -107,10 +107,20 @@ Every service emits two kinds of telemetry by two routes. Serilog writes one JSO
 
 ## Security
 
-> **Diagram: Security** — _not yet drawn_
-> **Must show:** the secret-less chain end to end - Entra ID tokens validated at the edge, per-service workload identity with federated credentials, Key Vault, data-plane RBAC scoped to individual resources, OIDC federated credentials for CI/CD with no stored secrets, TLS termination, the trust boundary between public and ClusterIP-only services, and known gaps including KI-002. Answers "how is it secured".
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/C4Renders/renders/Security-dark.svg">
+  <img alt="AntKart security: a client signs in with Entra ID and calls over TLS terminated by ingress-nginx; the gateway validates the token against Entra's published signing keys and each service validates it again; separately, the AKS OIDC issuer projects a signed ServiceAccount token into every pod, which Entra exchanges for the service's managed identity, granting scoped access to Key Vault, Service Bus, Event Grid and the data stores; CI/CD pushes images with AcrPush and the kubelet pulls with AcrPull, neither holding a registry password" src="docs/C4Renders/renders/Security.svg">
+</picture>
 
-Security rests on no stored secrets anywhere and defence in depth on tokens: every identity authenticates through federation with least-privilege RBAC, and the Entra bearer token is validated at the edge and again inside each service. One tracked gap remains (KI-002), and the managed edge is a planned addition.
+Two authentication chains run through the platform, and neither stores a credential anywhere.
+
+The **caller's chain** starts outside: a client signs in with Entra ID and receives an access token. The request arrives over TLS terminated at the edge, where cert-manager holds a Let's Encrypt certificate and renews it. The gateway — the only service reachable from outside the cluster — validates the token against Entra's published signing keys rather than calling Entra per request, then routes inward. Each service validates the token again instead of trusting the gateway, so a request that somehow bypassed the edge still meets a closed door.
+
+The **workload's chain** starts inside. The cluster's own OIDC issuer signs a short-lived ServiceAccount token and projects it into each pod. The service presents that token to Entra, which matches the issuer and the subject — `system:serviceaccount:antkart:ak-order`, for example — against a federated credential, and grants the service's managed identity. That identity carries data-plane roles scoped to individual resources: Secrets User on Key Vault, sender and receiver roles on the message topics it actually uses. No connection string or client secret exists in the cluster to be leaked.
+
+The registry sits outside both chains and follows the same principle. CI/CD authenticates to Azure with a federated credential naming the repository and environment, then pushes with AcrPush; the cluster's kubelet identity pulls with AcrPull. GitHub stores no cloud secret and the cluster holds no registry password.
+
+One gap is tracked rather than hidden: Discount decodes the caller's token but does not verify its signature, issuer or audience (KI-002). It is ClusterIP-only and reached only by Products over gRPC, which limits the exposure but does not close it.
 
 → [Security](docs/development/6-security.md)
 

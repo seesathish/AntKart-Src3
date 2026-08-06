@@ -2,11 +2,25 @@
  * AntKart — Security (hero diagram)
  *
  * Question: how is it secured, end to end?
- * Sourced from ADR-016, ADR-022, docs/guides/identity-concepts.md,
- * docs/development/6-security.md and docs/KNOWN_ISSUES.md. Shows the secret-less chain
- * grouped by trust boundary: Public, Cluster (ClusterIP-only), and the Azure control
- * plane. KI-002 (Discount decodes the JWT without cryptographic validation) is included
- * as a clearly marked known gap with its own tag.
+ *
+ * Two chains, no stored secrets in either.
+ *
+ *   CALLER   The client signs in with Entra and receives an access token. The request
+ *            arrives over TLS terminated at the edge. The gateway validates the token
+ *            against Entra's published signing keys, then routes inward; every service
+ *            validates it again rather than trusting the gateway.
+ *
+ *   WORKLOAD The cluster projects a ServiceAccount token into each pod, signed by the
+ *            cluster's own OIDC issuer. The service presents that token to Entra, which
+ *            matches the issuer and subject against a federated credential and grants the
+ *            service's managed identity. That identity holds scoped data-plane roles.
+ *            Nothing in the cluster stores a credential.
+ *
+ * Two registry paths sit outside both chains: CI/CD pushes with AcrPush, the kubelet
+ * pulls with AcrPull. Neither uses a registry password.
+ *
+ * KI-002 is drawn as a known gap: Discount decodes the JWT without verifying its
+ * signature, issuer or audience. It is ClusterIP-only and reached only by Products.
  *
  * RENDER
  *   docker run -it --rm -p 8080:8080 \
@@ -16,8 +30,12 @@
  *
  * TWO-PHASE WORKFLOW
  *   Phase one: autoLayout is ON to get rough placement.
- *   Phase two: COMMENT OUT the autoLayout line, refresh, then hand-arrange the three
- *              trust boundaries left to right: Public → Cluster → Azure control plane.
+ *   Phase two: COMMENT OUT the autoLayout line, refresh, then hand-arrange.
+ *              LAYOUT HINT — Entra is referenced from three places (the client signing
+ *              in, the gateway validating, the services exchanging). Place it top-centre
+ *              rather than at the far left, or those arrows will double back across the
+ *              diagram. Caller chain along the top, workload chain below it, the two
+ *              registry arrows off to one side.
  *
  * IMPORTANT — autoLayout WARNING
  *   autoLayout recalculates on every load and DISCARDS hand placement. Once you start
@@ -25,77 +43,91 @@
  *   workspace.json (generated — do not hand-edit; .structurizr/ is gitignored cache).
  */
 
-workspace "AntKart — security" "How it is secured end to end: no stored secrets, defence in depth on tokens, trust boundaries" {
+workspace "AntKart — security" "Two authentication chains, neither storing a secret: the caller's token and the workload's federated identity" {
 
     !identifiers hierarchical
 
     model {
 
-        client = person "Client" "Signs in with Entra (OAuth2 auth-code + PKCE), then calls the API with a bearer token." {
+        client = person "Client" "Signs in with Entra using OAuth2 authorization code with PKCE." {
             tags "Person"
         }
 
-        group "Public — internet-facing" {
-            entra = softwareSystem "Microsoft Entra ID" "Issues delegated access tokens the platform validates. Replaced Keycloak." {
-                tags "Identity"
-            }
-            ingress = softwareSystem "ingress-nginx + cert-manager" "TLS termination at the edge — Let's Encrypt production certificate for api.antkart.in." {
+        entra = softwareSystem "Microsoft Entra ID" "Issues access tokens to callers, publishes the keys those tokens are validated against, and grants managed identities to workloads presenting a trusted federated token." {
+            tags "Identity"
+        }
+
+        group "Edge" {
+            ingress = softwareSystem "ingress-nginx + cert-manager" "Terminates TLS. cert-manager holds a Let's Encrypt certificate and renews it." {
                 tags "Edge"
             }
-            gateway = softwareSystem "API gateway" "Validates the Entra JWT at the edge, then routes to the internal services." {
+            gateway = softwareSystem "API gateway" "The only service reachable from outside. Validates the caller's token against Entra's published signing keys before routing." {
                 tags "Edge"
             }
         }
 
-        group "Cluster — ClusterIP-only" {
-            rest = softwareSystem "REST services" "Products, Order, Payments, Cart. Each RE-validates the JWT — defence in depth, not trusting the gateway." {
+        group "Cluster" {
+            oidcIssuer = softwareSystem "AKS OIDC issuer" "Signs a short-lived ServiceAccount token and projects it into each pod. Entra is configured to trust this issuer." {
+                tags "Identity"
+            }
+            rest = softwareSystem "Services" "Products, Cart, Order, Payments. ClusterIP-only. Each validates the caller's token again rather than trusting the gateway." {
                 tags "Service"
             }
-            discount = softwareSystem "Discount (gRPC)" "KI-002: decodes the JWT but does NOT verify signature / issuer / audience. Mitigated — ClusterIP-only, reached only by Products." {
+            discount = softwareSystem "Discount (gRPC)" "KI-002 — decodes the caller's token but does not verify its signature, issuer or audience. ClusterIP-only and reached only by Products." {
                 tags "Issue"
             }
+            kubelet = softwareSystem "Kubelet identity" "The cluster's own identity. Pulls images; holds no registry password." {
+                tags "Identity"
+            }
         }
 
-        group "Azure control plane — secret-less identity" {
-            uami = softwareSystem "Per-service workload identities" "Six user-assigned managed identities, each federated to the AKS OIDC issuer for its ServiceAccount. No stored secret." {
+        group "Azure" {
+            uami = softwareSystem "Managed identities" "One user-assigned identity per service, each with a federated credential naming the cluster issuer and that service's ServiceAccount." {
                 tags "Identity"
             }
-            keyvault = softwareSystem "Key Vault" "Secrets read at runtime via managed identity (Key Vault Secrets User)." {
+            keyvault = softwareSystem "Key Vault" "Holds every connection string and API key. Read at startup; nothing is stored in the cluster." {
                 tags "Managed"
             }
-            rbac = softwareSystem "Data-plane RBAC" "Least-privilege role assignments scoped per resource — Service Bus / Event Grid / Key Vault data roles." {
-                tags "Identity"
+            azure = softwareSystem "Service Bus, Event Grid, data stores" "Reached with the identity's token. Roles are scoped per resource, not per subscription." {
+                tags "Managed"
             }
-            cicd = softwareSystem "GitHub OIDC (CI/CD)" "id-ak-cicd-dev federated credential, AcrPush only. No stored cloud secret." {
+            acr = softwareSystem "Container Registry" "Images pushed by CI/CD, pulled by the kubelet." {
+                tags "Managed"
+            }
+            cicd = softwareSystem "GitHub Actions" "Authenticates with a federated credential naming the repository and environment. No cloud secret is stored in GitHub." {
                 tags "CICD"
             }
-            acr = softwareSystem "Container Registry" "acrantkartdev. Images pushed by CI/CD, pulled by the kubelet." {
-                tags "Managed"
-            }
         }
 
-        // ── The chain ─────────────────────────────────────────────────────────
-        client -> ingress "HTTPS · api.antkart.in"
+        // Caller chain.
+        client -> entra "Signs in; receives an access token"
+        client -> ingress "HTTPS, bearer token"
         ingress -> gateway "Forwards after TLS termination"
-        gateway -> entra "validate-jwt" "OpenID Connect"
-        gateway -> rest "Routes (token re-validated)"
-        rest -> discount "gRPC — KI-002: no cryptographic validation"
-        rest -> uami "Runs as"
-        uami -> keyvault "Reads secrets (RBAC)"
-        uami -> rbac "Least-privilege scoped by"
-        cicd -> acr "AcrPush (no stored secret)"
-        rest -> acr "Image pulled (kubelet AcrPull)"
+        gateway -> entra "Fetches the signing keys"
+        gateway -> rest "Routes; the token is validated again"
+        rest -> discount "gRPC"
+
+        // Workload chain.
+        oidcIssuer -> rest "Projects a signed ServiceAccount token"
+        rest -> entra "Presents it — no stored secret"
+        entra -> uami "Matches issuer and subject to a federated credential"
+        uami -> keyvault "Key Vault Secrets User"
+        uami -> azure "Scoped data-plane roles"
+
+        // Registry.
+        cicd -> acr "AcrPush"
+        kubelet -> acr "AcrPull"
     }
 
     views {
 
         themes https://static.structurizr.com/themes/microsoft-azure-2021.01.26/theme.json
 
-        systemLandscape "Security" "How is it secured end to end? Trust boundaries: Public, Cluster, Azure control plane — with KI-002 marked." {
+        systemLandscape "Security" "The caller's token is validated at the edge and again inside. The workload's identity is federated to the cluster, so no credential is stored anywhere." {
             include *
             // PHASE ONE: autoLayout is ON. Before hand-arranging, COMMENT OUT the next
             // line, refresh, then drag. Leave it commented once you start dragging.
-            autoLayout lr 300 150
+            //autoLayout lr 150 120
         }
 
         styles {
