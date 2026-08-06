@@ -3230,8 +3230,6 @@ is ClusterIP-only services + subnet NSGs; the networking primer is
 
 **To reach 🟢** — Without notes, explain why the enabled policy engine isn't isolation and what actually protects the services today. Then state what you'd author to stop east-west lateral movement.
 
-**To reach 🟢** — _To be written._
-
 ---
 
 # 6. Observability
@@ -3246,24 +3244,39 @@ the three — logs and traces — and **deliberately does not collect metrics** 
 "where did this request spend its time across services" (traces), "what's the p99 latency trend" (metrics).
 Knowing which pillar answers which question — and which ones a platform actually has — is the point.
 
-**How it works** — _To be written._
+**How it works** — Three signal types, each answering a different question:
 
-**How AntKart uses it** — _To be written._
+| Pillar | Answers | Shape | AntKart |
+|---|---|---|---|
+| **Logs** | *what happened in this request?* | discrete timestamped events | ✅ Serilog → `ContainerLog` |
+| **Traces** | *where did the time go across services?* | spans linked by a trace id | ✅ OpenTelemetry → `AppRequests`/`AppDependencies` |
+| **Metrics** | *what's the trend — p99, error rate?* | aggregated numbers over time | ❌ not collected (Prometheus stack removed) |
 
-**Alternatives and the trade-off** — _To be written._
+The power comes from correlation: all of it lands in one Log Analytics workspace, and a log's `TraceId` equals a span's `OperationId`, so one query joins "what happened" to "where the time went."
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — Two of the three are delivered. Serilog writes structured JSON to stdout, collected into `ContainerLog`; OpenTelemetry exports spans through App Insights into `AppRequests`/`AppDependencies`. **Metrics are deliberately not collected** — a self-hosted Prometheus/Grafana stack was built then removed ([ADR-025](adr/ADR-025-observability-architecture.md), Observability §6). Everything co-queries in the one workspace. Decision: [ADR-025](adr/ADR-025-observability-architecture.md).
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — Alternatives: run all three yourself (self-hosted logs + traces + Prometheus/Grafana — AntKart removed the metrics half as disproportionate to a two-node cluster), buy a managed APM that does all three (Datadog is under evaluation), or skip traces (cheaper, but you can't answer "where did the time go" across services). Delivering logs + traces via Azure Monitor buys cross-signal correlation with no infra to run, at the cost of no metrics *for now* — an honest scope, not a hidden gap.
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **Metrics are genuinely absent.** Say "we deliver logs and traces"; claiming metrics you don't collect is exactly the overreach ADR-025 avoids.
+- **No metrics means no metric-based autoscaling.** A custom-metrics HPA would have no data source (Kubernetes §9).
+- **The join is the value, not the volume.** Two well-correlated signals beat three siloed ones.
+
+**Interview traps** —
+- *"What are the three pillars, and which does this platform actually have?"* — Logs, traces, metrics; AntKart has logs and traces, not metrics. Testing honesty over recitation.
+- *"Which pillar answers 'why was this one request slow across six services'?"* — Traces (distributed). Logs tell you *what happened*, not *where the time went*.
+- *"Why not collect metrics?"* — Operating a self-hosted metrics stack was disproportionate to a two-node dev cluster; it was removed (ADR-025). The maturity answer.
+- *"How do logs and traces relate here?"* — They co-query in one workspace, joined by `TraceId == OperationId`. The correlation payoff.
+
+**The 60-second answer** — "The three pillars are logs, traces, and metrics — what happened, where the time went, and the trends. We deliver two of them: Serilog logs land in the ContainerLog table, and OpenTelemetry traces land in AppRequests and AppDependencies, all in one Log Analytics workspace, and because a log's TraceId equals a span's OperationId, one query joins them. We deliberately don't collect metrics — we built a self-hosted Prometheus and Grafana stack and then removed it, because operating it was disproportionate to a two-node dev cluster, and a managed APM is under evaluation instead. So I'd describe it honestly as logs and traces with tight correlation, not all three — which is the point ADR-025 makes about not claiming depth you don't operate."
 
 **Read the code** — Logs and traces both land in Log Analytics (see concepts 2–4);
 [docs/development/5-observability.md](development/5-observability.md) states the platform is delivered for two
 signals and that **metrics are not collected** (a self-hosted Prometheus/Grafana stack was built then removed —
 see concept 6). Decision: [ADR-025](adr/ADR-025-observability-architecture.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, name the three pillars, which question each answers, and which two AntKart delivers. Then explain why metrics are absent and what that costs (metric-based autoscaling).
 
 ---
 
@@ -3278,17 +3291,24 @@ JSON with enriched properties (ServiceName, TraceId, CorrelationId) makes logs q
 traces. Writing to stdout (not a file or a sink with credentials) means the platform collects logs without the
 app holding any logging secret.
 
-**How it works** — _To be written._
+**How it works** — Each log event is an object — a message template plus named properties — not a formatted string, so you can later query "all events where `OrderId = X`." **Enrichers** attach ambient context to every event (`ServiceName`, `Environment`, `TraceId`/`SpanId`, `CorrelationId`). In the cloud, Serilog writes one **compact-JSON** line per event to **stdout**; the AKS Azure Monitor agent scrapes stdout from every node into the `ContainerLog` table. Writing to stdout (not a file or a credentialed sink) is what makes log collection secret-less.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — `SerilogExtensions.AddSerilogLogging` (BuildingBlocks): the cloud branch is `WriteTo.Console(new RenderedCompactJsonFormatter())` (one JSON object per event); the dev branch is a human-readable template plus a rolling file for local convenience. Enrichers add `ServiceName`, `Environment`, `FromLogContext` (CorrelationId), and an `ActivityEnricher` that stamps `TraceId`/`SpanId` (the join to traces — Observability §4). There is **no Elasticsearch/Kibana sink** — ELK was replaced by Azure Monitor. Decision: [ADR-025](adr/ADR-025-observability-architecture.md).
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Alternatives: the default `ILogger` text formatter (flat strings — not queryable by field), an ELK/Kibana stack (self-hosted, removed here), or a direct sink to a logging service (needs a credential in the app). Structured JSON to stdout + agent collection buys queryable logs joinable to traces with **no logging secret in the app**, at the cost of relying on the platform's log agent and the `ContainerLog` schema.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **A prior real bug (ADR-025 context):** the default text formatter was discarding the enriched properties, and the correlation middleware was wired into only 1 of 6 services — so logs looked fine but weren't correlatable. The fix was the compact-JSON formatter everywhere + the shared enrichers.
+- **stdout, not a file, is the secret-less bit.** A file sink or a direct service sink would need credentials; stdout + agent needs none.
+- **`ContainerLog` is the legacy table** (not `ContainerLogV2`) — the log field is `LogEntry`, parsed with `parse_json`.
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"Structured vs plain-text logging — why does it matter?"* — Structured events are queryable by field (`OrderId`, `TraceId`); flat strings aren't. Testing whether you know the query payoff.
+- *"How are logs collected without the app holding a credential?"* — Serilog writes to stdout; the node's Azure Monitor agent collects it into `ContainerLog`. Secret-less by design.
+- *"How does a log line get linked to its trace?"* — An enricher stamps `TraceId`/`SpanId` from the ambient Activity onto every event. The correlation setup.
+- *"What replaced ELK here and why no sink in the app?"* — Azure Monitor; logs go to stdout and the agent ships them, so there's no Elasticsearch sink or credential.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "We log with Serilog, and every event is structured — a template plus named properties — so we can query by field later, like all events for an order id. Enrichers stamp ambient context on every line: service name, environment, correlation id, and crucially the TraceId and SpanId, which is how a log joins to its trace. In the cloud we write one compact-JSON line per event to stdout, and the node's Azure Monitor agent collects it into the ContainerLog table — writing to stdout instead of a file or a sink is what keeps it secret-less, no logging credential in the app. There's no Elasticsearch sink; Azure Monitor replaced ELK. A past bug worth knowing: the default text formatter was dropping the enriched properties and the correlation middleware was in only one service, which the JSON formatter and shared enrichers fixed."
 
 **Read the code** — `AK.BuildingBlocks/AK.BuildingBlocks/Logging/SerilogExtensions.cs` (`AddSerilogLogging`;
 cloud branch `WriteTo.Console(new RenderedCompactJsonFormatter())`; enrichers ServiceName/Environment/
@@ -3296,7 +3316,7 @@ FromLogContext + `ActivityEnricher`). The stdout stream is collected by the AKS 
 **no Elasticsearch/Kibana sink** (ELK was replaced by Azure Monitor). Decision:
 [ADR-025](adr/ADR-025-observability-architecture.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain structured-vs-text logging, why stdout collection is secret-less, and how the TraceId gets onto a log line. Then open `SerilogExtensions` and predict the cloud vs dev formatter before you read it.
 
 ---
 
@@ -3495,17 +3515,32 @@ through OTel. Then write the KQL join from memory and predict its shape before r
 **The problem it solves** — The two schemas name the same data differently, and mixing them produces a confusing
 error that looks like a KQL bug but is really the wrong API. Knowing which schema you're on saves hours.
 
-**How it works** — _To be written._
+**How it works** — KQL queries Log Analytics with a pipe-forward syntax (`Table | where … | summarize … by …`). The same telemetry has **two schemas** depending on how you reach it:
 
-**How AntKart uses it** — _To be written._
+| | Workspace schema | Classic schema |
+|---|---|---|
+| Tables | `AppRequests`, `AppDependencies`, `TimeGenerated` | `requests`, `dependencies`, `timestamp` |
+| Query API | `az monitor log-analytics query` | `az monitor app-insights query` |
+| AntKart uses | ✅ this (workspace-based App Insights) | — |
 
-**Alternatives and the trade-off** — _To be written._
+Pass workspace table names to the classic API and you get `BadArgumentError` — which reads like a KQL syntax bug but is really the wrong API/schema pairing.
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — Because App Insights is workspace-based, all queries use the **workspace** schema via `az monitor log-analytics query`. The runbook's Phase 6.6 telemetry check is real KQL: `union AppRequests, AppDependencies | where TimeGenerated > ago(60m) | summarize roles=make_set(AppRoleName), spans=count() by OperationId | where array_length(roles) > 1` — a multi-role `OperationId` proves a request was traced across services. Logs are `ContainerLog | extend L = parse_json(LogEntry)`. Examples in [docs/development/5-observability.md](development/5-observability.md).
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — There isn't a real "alternative" so much as a correct pairing: you must match the schema to the API. The portal query blade is an alternative surface (no CLI), and Azure Monitor Workbooks/dashboards sit on top of the same KQL. The trade is simply that KQL has a learning curve; the payoff is one query language across logs and traces in one workspace.
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **The `BadArgumentError` trap.** Workspace tables (`AppRequests`) through the classic `app-insights query` API fail with an error that *looks* like bad KQL but is the wrong API. Use `log-analytics query` for the workspace schema.
+- **Windows quoting:** the Azure CLI strips inner double quotes, so KQL string literals in `--analytics-query` must use **single quotes**.
+- **`TimeGenerated`, not `timestamp`.** Workspace schema uses `TimeGenerated`; using the classic column name fails.
+
+**Interview traps** —
+- *"Your KQL against `AppRequests` returns `BadArgumentError` — what's wrong?"* — Wrong API for the schema: workspace tables need `log-analytics query`, not `app-insights query`. The signature ran-it trap.
+- *"Workspace vs classic schema — how do you tell which you're on?"* — Workspace uses `AppRequests`/`TimeGenerated`; classic uses `requests`/`timestamp`. AntKart is workspace-based.
+- *"Why single quotes in your KQL on Windows?"* — The CLI strips inner double quotes; single quotes survive. The environment detail.
+- *"Write a query that proves a request crossed multiple services."* — `union AppRequests, AppDependencies | summarize roles=make_set(AppRoleName) by OperationId | where array_length(roles) > 1`. Testing hands-on KQL.
+
+**The 60-second answer** — "KQL is how you query Log Analytics, pipe-forward style. The thing that trips people is that the same telemetry has two schemas: the workspace schema — AppRequests, AppDependencies, TimeGenerated, queried with `az monitor log-analytics query` — and the classic Application Insights schema — requests, dependencies, timestamp, queried with `az monitor app-insights query`. We're workspace-based, so we use the former. If you pass workspace table names to the classic API you get a BadArgumentError that looks like a KQL syntax bug but is really the wrong API. Two more Windows-isms: use single quotes for KQL string literals because the CLI strips double quotes, and it's TimeGenerated, not timestamp. A useful query is a union of AppRequests and AppDependencies summarised by OperationId to prove a request crossed multiple services."
 
 **Read the code** — Runbook §6.6 schema note
 ([environment-provisioning-runbook.md](guides/environment-provisioning-runbook.md)): passing workspace table
@@ -3513,7 +3548,7 @@ names to `az monitor app-insights query` returns `BadArgumentError: The request 
 "looks like a KQL problem and is not one." Working KQL examples:
 [docs/development/5-observability.md](development/5-observability.md) (single-quote string literals on Windows).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, name both schemas, their query APIs, and the `BadArgumentError` cause. Then write the multi-role `OperationId` query from memory and predict its result on live telemetry.
 
 ---
 
@@ -3529,17 +3564,33 @@ itself the lesson.
 operational complexity out of proportion to the value, and pretending to depth you don't operate is worse than
 being honest. Removing it — and saying so — is a maturity signal, not a gap.
 
-**How it works** — _To be written._
+**How it works** — This concept *is* the record of a scope decision. The platform built a full self-hosted metrics stack and then removed it:
 
-**How AntKart uses it** — _To be written._
+| Built, then removed | Kept |
+|---|---|
+| kube-prometheus-stack (Prometheus + Grafana via Argo CD) | Serilog → Log Analytics (logs) |
+| per-service ServiceMonitors + `/metrics` endpoints | OpenTelemetry tracing + Azure Monitor exporter |
+| BuildingBlocks OTel **metrics** pipeline (`AddPrometheusExporter`, runtime-metrics) | `ActivityEnricher` (log↔trace join) |
+| Discount's 2nd HTTP/1.1 Kestrel listener (for scraping) | OTel pinned to the 1.13.x line |
 
-**Alternatives and the trade-off** — _To be written._
+Earlier, ELK/Kibana was also removed in favour of Azure Monitor. The removals are the point: knowing what a platform *left out* and why is interview-grade.
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — Concretely removed ([ADR-025](adr/ADR-025-observability-architecture.md)): the `deploy/argocd/monitoring/` Application + `monitoring` AppProject, the chart's `servicemonitor.yaml` template and `serviceMonitor`/`metricsPort` values, the BuildingBlocks metrics pipeline, and Discount's second Kestrel listener (reverting it to a single HTTP/2-only gRPC endpoint). What remains is logs + traces, untouched. A managed platform (Datadog) is under evaluation as the metrics answer. [ADR-025](adr/ADR-025-observability-architecture.md) is Accepted with the metrics portion **superseded**.
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — The alternatives were: **keep the self-hosted stack** (real dashboards, but Prometheus + Grafana + ServiceMonitors is a lot of operational surface on a two-node cluster), **Azure Managed Grafana** (rejected — standing cost, Azure lock-in, less demonstrable), or a **managed APM** (Datadog — under evaluation). Removing the self-hosted metrics traded away metric dashboards *for now* in exchange for not operating — and not overclaiming — infrastructure disproportionate to the platform's size.
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **KI-008 is Withdrawn.** Discount's `/metrics` was unreachable by a standard Prometheus scrape (its single listener is h2c/HTTP-2-only), which was solved with a second HTTP/1.1 listener and then made **moot** when the whole stack was removed. Source: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-008.
+- **Removing depth you don't operate is a maturity signal, not a gap.** The honest framing beats a half-run Grafana.
+- **Don't reintroduce metrics without a plan to operate them** — the reason it was removed in the first place.
+
+**Interview traps** —
+- *"You have no metrics — isn't that a hole?"* — It's a deliberate scope choice: a self-hosted Prometheus/Grafana stack was disproportionate to a two-node dev cluster, so it was removed rather than half-operated; a managed APM is under evaluation. The maturity answer.
+- *"What did removing the Prometheus stack take out, concretely?"* — The monitoring Argo app, the ServiceMonitor template/values, the BuildingBlocks metrics pipeline, and Discount's second listener. Testing whether you know the real scope.
+- *"Why was there a second Kestrel listener on Discount, and where did it go?"* — To expose `/metrics` over HTTP/1.1 for scraping (its gRPC listener is h2c); removed with the stack (KI-008 Withdrawn).
+- *"Why not Azure Managed Grafana?"* — Standing cost, Azure lock-in, less demonstrable; a full managed-APM evaluation reopened instead. The decision reasoning.
+
+**The 60-second answer** — "This one's about scope honesty. We built a full self-hosted metrics stack — kube-prometheus-stack with Prometheus and Grafana via Argo, per-service ServiceMonitors and metrics endpoints, a metrics pipeline in BuildingBlocks, even a second HTTP/1.1 listener on the gRPC Discount service so it could be scraped — and then we deliberately removed all of it, because operating that was disproportionate to a two-node dev cluster and half-running Grafana is worse than being honest. Logs and traces stayed. Earlier we'd also moved off ELK to Azure Monitor. A managed APM like Datadog is under evaluation as the metrics answer. The related known issue, KI-008, about Discount's metrics endpoint being unreachable by a scrape, is Withdrawn because it's moot after the removal. Knowing what a platform left out, and why, is the point."
 
 **Read the code** — [ADR-025](adr/ADR-025-observability-architecture.md) records the metrics removal (the
 `deploy/argocd/monitoring/` Application, the chart `servicemonitor.yaml`, the BuildingBlocks metrics pipeline,
@@ -3548,7 +3599,7 @@ and Discount's second Kestrel listener were all removed) and the direction towar
 **Withdrawn**, moot after the stack was removed). ELK→Azure Monitor noted in
 [docs/development/2-azure-services.md](development/2-azure-services.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, list what the metrics removal took out and the reason, and explain why KI-008 is Withdrawn. Then articulate the "don't claim depth you don't operate" principle in your own words.
 
 ---
 
