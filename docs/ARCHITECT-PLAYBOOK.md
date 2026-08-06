@@ -101,6 +101,22 @@ isolation and lets the outer, volatile layers be swapped without touching the bu
 
 The inward rule means the Domain is a pure library you can unit-test with no database or broker, and the volatile outer layers can be swapped without touching it. Dependencies are inverted at the boundary: the Application *declares* `IOrderRepository`; Infrastructure *implements* it.
 
+```mermaid
+flowchart TD
+    subgraph L4["API / Grpc — thin host (outermost ring)"]
+        subgraph L3["Infrastructure — EF Core · Mongo · MassTransit"]
+            subgraph L2["Application — CQRS handlers · DTOs · interfaces"]
+                L1["Domain core<br/>entities · value objects · rules<br/>zero framework dependencies"]:::datastore
+            end
+        end
+    end
+    DIR["THE RULE: dependencies point INWARD only<br/>API → Infrastructure → Application → Domain"]:::issue
+    DIR -.-> L1
+
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — Every service repeats the same four projects (`AK.<Service>.Domain/.Application/.Infrastructure/.API`). The direction is enforced by `ProjectReference`, not discipline: `AK.Order.Application` references only `AK.Order.Domain` + `AK.BuildingBlocks`; `AK.Order.Infrastructure` references Application. `MongoDB.Driver` is confined to `AK.Products.Infrastructure`; the Products Domain has zero infrastructure dependencies. Tests reference Domain/Application/Infrastructure but never the API/Grpc host, so the whole platform is unit-tested without a running host.
 
 **Alternatives and the trade-off** — The alternative is classic **n-tier** (the business layer depends *downward* on the data layer, so rules are coupled to the database) or a **transaction-script / "big ball of mud"** where everything sits in the controller. Clean Architecture inverts the data dependency so the core is dependency-free, at the cost of more projects and a little ceremony (an interface in Application, an implementation in Infrastructure). For a six-service platform meant to be testable and independently evolvable, that ceremony pays for itself. Decision: [ADR-002](adr/ADR-002-clean-architecture-and-ddd.md).
@@ -308,6 +324,26 @@ the unit of work ensures a set of changes commits atomically rather than pieceme
 
 A handler asks the repository for data (optionally passing a specification), mutates aggregates, then calls `uow.SaveChangesAsync()` once — so multiple changes land in a single transaction, and the handler never touches `DbContext`.
 
+```mermaid
+flowchart TD
+    H["command / query handler"]:::service
+    SPEC["Specification<br/>OrdersByUserSpecification"]:::service
+    REPO["IOrderRepository → OrderRepository"]:::service
+    UOW["IUnitOfWork.SaveChangesAsync<br/>one transaction"]:::service
+    CTX["OrderDbContext (EF Core)"]:::service
+    DB[("PostgreSQL")]:::datastore
+    H -->|query with| SPEC
+    SPEC --> REPO
+    H -->|mutate| REPO
+    H -->|commit| UOW
+    REPO --> CTX
+    UOW --> CTX
+    CTX --> DB
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+```
+
 **How AntKart uses it** — `IOrderRepository` (Application) exposes `GetByIdAsync`, `ListAsync(ISpecification<Order>)`, `AddAsync`, `CountAsync`, etc.; `OrderRepository` (Infrastructure) implements it over `OrderDbContext`. Specifications live in `AK.Order.Domain/Specifications/` (`OrderByIdSpecification`, `OrdersByUserSpecification`, `OrdersByStatusSpecification`, `OrdersPagedSpecification`) on a shared `BaseSpecification`. `IUnitOfWork` exposes `Orders` + `SaveChangesAsync`. The same trio appears in Products (over Mongo) and ShoppingCart, so the pattern is uniform across stores.
 
 **Alternatives and the trade-off** — The alternative is injecting `DbContext` straight into handlers (couples Application to EF Core and scatters LINQ) or a single generic `Repository<T>` (less abstraction but leaks IQueryable). The known critique — **"EF Core's `DbContext` is already a Unit of Work and its `DbSet`s are already repositories"** — is real: this adds a layer on top of one. AntKart accepts that indirection deliberately, for a testable Application layer that mocks `IOrderRepository`/`IUnitOfWork` and for query reuse via specifications. Decision: [ADR-011](adr/ADR-011-Repository-Specification-and-Unit-of-Work.md).
@@ -358,6 +394,23 @@ denormalised integration event crosses the service boundary.
 | **Dependency** | none (Domain has no messaging) | the messaging contract both sides reference |
 
 An aggregate raises a domain event as a fact ("order created"); it's dispatched in-process after the save. When that fact must leave the service, a handler publishes a *separate* integration event — a stable, denormalised contract — so other services never see the internal domain model.
+
+```mermaid
+flowchart TD
+    AGG["Order aggregate"]:::service
+    DE["domain event<br/>OrderCreatedEvent<br/>in-process, same transaction"]:::service
+    DISP["in-process dispatcher"]:::service
+    IE["integration event<br/>OrderCreatedIntegrationEvent<br/>BuildingBlocks contract, enriched"]:::edge
+    SB["Service Bus → other services"]:::paas
+    AGG -->|raises| DE
+    DE -->|handled inside the service| DISP
+    DISP -->|publishes a SEPARATE, denormalised event| IE
+    IE --> SB
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+```
 
 **How AntKart uses it** — Domain events (`OrderCreatedEvent`, `OrderStatusChangedEvent`, `OrderCancelledEvent`) are raised inside `Order.cs` and cleared after commit (`order.ClearDomainEvents()`). The cross-service contracts live once in `AK.BuildingBlocks/Messaging/IntegrationEvents/` (`OrderCreatedIntegrationEvent`, `StockReservedIntegrationEvent`, `PaymentSucceededIntegrationEvent`, …) and are *enriched* — they carry `CustomerEmail`/`CustomerName`/`OrderNumber` so consumers needn't call back. One definition, referenced by both publisher and consumer, so the shape can't drift. Decision: [ADR-009](adr/ADR-009-domain-events-vs-integration-events.md); shared-contracts rationale: [ADR-008](adr/ADR-008-shared-ddd-contracts-in-buildingblocks.md).
 
@@ -682,6 +735,24 @@ scale to zero and cost nothing when idle — while the saga stays durable and ex
 
 The order/payment is committed durably first; **only then** does the handler emit an Event Grid notification as a side-effect. `TryPublishAsync` never throws, so a failed publish can't roll back or fail the business operation. Event Grid pushes to a Functions app that dispatches the email through ACS and scales back to zero.
 
+```mermaid
+flowchart TD
+    H["Order / Payments handler"]:::service
+    TX[("durable commit — outbox<br/>the money-and-stock transaction")]:::datastore
+    SBUS["Service Bus SAGA<br/>durable · tracked · retried"]:::paas
+    EG["Event Grid<br/>fire-and-forget, best-effort"]:::edge
+    FN["Azure Functions<br/>scale-to-zero"]:::service
+    MAIL["ACS email"]:::paas
+    H --> TX --> SBUS
+    H -->|AFTER commit — TryPublishAsync never throws| EG
+    EG --> FN --> MAIL
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
+
 **How AntKart uses it** — `IEventGridSideEffectPublisher.TryPublishAsync` is called after commit in `CreateOrderCommandHandler`, `VerifyPaymentCommandHandler`, and the `OrderConfirmed`/`OrderCancelled` consumers. The five event contracts live once in `AK.BuildingBlocks/Messaging/Notifications/` (`NotificationEventTypes` + the payload records), published to the `evgt-antkart-dev` topic. `AK.Notification.Functions` has one `[EventGridTrigger]` per event (`OnOrderCreated`, `OnPaymentSucceeded`, …); each is thin — deserialize, build a `NotificationRequest`, call `INotificationDispatcher` in `AK.Notification.Core`, which resolves a template and sends via the ACS email channel. Decision: [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
 **Alternatives and the trade-off** — Alternatives: put notifications on the Service Bus saga (durable, but couples a non-critical email into the money-and-stock transaction and needs an always-on consumer) or send the email synchronously in the handler (a slow SMTP call blocks the request and a failure fails the order). The two-mechanism split trades delivery *guarantee* on notifications (they're best-effort) for the guarantee that **notifications can never affect the business transaction** — plus scale-to-zero cost. The durable saga keeps its guarantees; only the disposable side-effect is fire-and-forget.
@@ -732,6 +803,23 @@ degrades gracefully instead of dragging the caller down with it.
 | **Data store** | `AddDataStoreResiliencePipeline` | honours a server `Retry-After` verbatim, else exp+jitter | Products → Cosmos (429 throttling) |
 | **DB / cache** | `AddNpgsqlResilience` / `AddRedisResilience` | retry with exp backoff + jitter (avoid thundering herd) | Postgres / Redis |
 
+```mermaid
+flowchart TD
+    CALL["outbound call — pick tier by criticality"]:::service
+    CRIT["CRITICAL (Order → Products price)<br/>patient: retry+jitter → circuit breaker → timeout<br/>fail CLOSED"]:::service
+    OPT["OPTIONAL (Products → Discount gRPC)<br/>fail-fast: NO retry · quick breaker · 2s"]:::edge
+    DS["DATA STORE (Cosmos 429)<br/>honour server Retry-After, else backoff+jitter"]:::datastore
+    DB["DB / cache (Npgsql, Redis)<br/>retry with backoff + jitter"]:::datastore
+    CALL --> CRIT
+    CALL --> OPT
+    CALL --> DS
+    CALL --> DB
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+```
+
 **How AntKart uses it** — All policies are centralised in `ResilienceExtensions` (BuildingBlocks). The Order→Products catalogue client uses the *patient* pipeline because pricing is critical and fails closed. The Products→Discount gRPC client uses `AddOptionalDependencyResilience` — **no retry** + a quick circuit-break + 2s timeout — so a down Discount degrades silently and never slows the catalogue. Products runs Cosmos calls through `AddDataStoreResiliencePipeline`, which **honours the 429 `RetryAfterMs`** rather than guessing. Npgsql uses exponential backoff + jitter so a DB reconnect doesn't stampede.
 
 **Alternatives and the trade-off** — Alternatives: no resilience (every transient blip becomes a user error), a single blunt "retry everything" policy (amplifies outages, hammers a dead dependency), or per-caller ad-hoc `try/catch`. The tiered library trades a little upfront design (deciding each dependency's criticality) for graceful degradation that matches intent — patient for critical, fail-fast for optional. Decision: [ADR-003](adr/ADR-003-fault-tolerance-with-polly.md).
@@ -771,6 +859,23 @@ the platform demonstrate a second transport style alongside the REST services.
 
 **How it works** — gRPC defines the service contract in a `.proto` file (messages + RPC methods); a build step generates a strongly-typed server base and client from it. Calls travel as **Protobuf** (compact binary) over **HTTP/2** (multiplexed, long-lived connections). The client is generated, so there's no hand-written JSON serialization; both sides share the exact contract. In AntKart the call is treated as an *optional* dependency, so the client is tuned to fail fast and never throw.
 
+```mermaid
+flowchart TD
+    P["AK.Products (rendering catalogue)"]:::service
+    C["DiscountGrpcClient<br/>2s timeout · no retry · NEVER throws"]:::service
+    D["AK.Discount — gRPC h2c<br/>ak-discount:8080 (HTTP/2)"]:::service
+    CAT["catalogue renders<br/>with OR without a discount price"]:::service
+    P --> C
+    C -->|GetDiscount over HTTP/2 Protobuf| D
+    D -->|null on failure → one warning| C
+    C --> CAT
+    KI["KI-002 — decodes JWT but does NOT verify it<br/>safe only because ClusterIP-only"]:::issue
+    KI -.-> D
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — The contract `discount.proto` defines `GetDiscount`, `CreateDiscount`, `UpdateDiscount`, `DeleteDiscount`, `GetAllDiscounts`. `DiscountGrpcClient` (in Products Infrastructure) calls `GetDiscount` while rendering the catalogue, over a named `discount-grpc` client with a 2s timeout and `AddOptionalDependencyResilience` (no retry, quick breaker). It **never throws**: an `RpcException/NotFound` returns null, any other failure logs *one* concise warning (message only, no stack, guarded so it's once per request) and returns null — so the catalogue always renders, with or without a discount price. In-cluster it's reached at `http://ak-discount:8080` over h2c (HTTP/2 cleartext).
 
 **Alternatives and the trade-off** — REST/JSON (universal, human-readable, but larger payloads and no shared contract) or a message/event for pricing (decoupled, but pricing is a synchronous read here). gRPC buys a compact, strongly-typed, low-latency internal call and a generated client, at the cost of being binary (not curl-friendly) and needing HTTP/2 end to end — which is why Discount's Kubernetes probes are **TCP**, not HTTP (an HTTP/1.1 httpGet probe would be rejected by the h2c-only listener). Decision: [ADR-006](adr/ADR-006-ocelot-api-gateway.md) context; gRPC choice is per-service.
@@ -809,6 +914,27 @@ enforce auth and rate limits, and clients coupled to internal topology. One gate
 front door and one place for cross-cutting edge concerns, with everything behind it kept ClusterIP-only.
 
 **How it works** — Ocelot reads a JSON route table: each route maps an **upstream** public path (what the client calls) to a **downstream** service host+path (the in-cluster service). Per route it can apply rate limiting, a QoS/circuit-breaker, and — here — passes the JWT straight through to the downstream service (which re-validates it). It's an *in-process* .NET app, so it runs as just another service in the cluster, in front of the others.
+
+```mermaid
+flowchart TD
+    CLIENT["client"]:::external
+    ING["ingress-nginx<br/>api.antkart.in (TLS)"]:::edge
+    GW["AK.Gateway — Ocelot<br/>route · rate-limit (10-30 RPS) · QoS · JWT passthrough"]:::service
+    S1["ak-products:8080"]:::service
+    S2["ak-order:8080"]:::service
+    S3["ak-payments / cart / discount<br/>(ClusterIP-only)"]:::service
+    CLIENT --> ING --> GW
+    GW --> S1
+    GW --> S2
+    GW --> S3
+    APIM["planned APIM edge sits IN FRONT (ADR-020)"]:::issue
+    APIM -.-> ING
+
+    classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — `AK.Gateway` runs Ocelot 23.4.2, configured by `ocelot.json` (with `ocelot.Development.json` overrides). Its downstream routes point at the in-cluster DNS names `ak-<service>:8080`; it applies per-route rate limiting (10–30 RPS) and a QoS circuit breaker, and passes the Entra JWT through. It is the **only** service exposed (via Ingress at `api.antkart.in`); the other five are ClusterIP-only. In the target state, Azure API Management sits *in front of* Ocelot as the managed edge ([ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md)) — a two-gateway model, not a replacement.
 
@@ -857,6 +983,21 @@ document DB, transactional orders in Postgres, an ephemeral cart in Redis.
 
 Because no service touches another's data, any field one service needs from another is **denormalised** (copied) — e.g. the order carries the customer email rather than joining to an identity store.
 
+```mermaid
+flowchart TD
+    PR["Products"]:::service --> COS[("Cosmos DB — Mongo API<br/>read-heavy document catalogue")]:::datastore
+    OR["Order / Payments / Discount"]:::service --> PG[("PostgreSQL<br/>transactional, ACID, EF migrations")]:::datastore
+    CA["ShoppingCart"]:::service --> RD[("Redis<br/>ephemeral key-value, 30-day TTL")]:::datastore
+    NOTE["no service reads another's DB → copy needed fields (denormalise)"]:::issue
+    NOTE -.-> PR
+    NOTE -.-> OR
+    NOTE -.-> CA
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — Store registration lives in each service's Infrastructure: Products wires `MongoDbContext` (Cosmos over the Mongo driver), Order/Payments/Discount call `UseNpgsql`, ShoppingCart uses StackExchange.Redis with key `AKCart:cart:{userId}`. Each store is hidden behind that service's repository, and each has its own resilience posture (Cosmos honours 429 Retry-After; Npgsql/Redis use jittered backoff). Decision: [ADR-004](adr/ADR-004-polyglot-persistence.md).
 
 **Alternatives and the trade-off** — Alternatives: one shared relational database for everything (simplest ops, but couples services, forces one model, and breaks independent deployability) or forcing a single store type everywhere (a document DB for transactions, or SQL for a cart, both poor fits). Polyglot trades a larger operational surface (three store technologies to run and secure) for each workload using the store that fits and for true service independence. Decision: [ADR-004](adr/ADR-004-polyglot-persistence.md).
@@ -896,6 +1037,23 @@ local transactions, there is a window where the order is created but stock isn't
 that assumes instantaneous global consistency will misread that window as a bug.
 
 **How it works** — Message brokers deliver **at-least-once**, so a consumer *will* occasionally see the same message twice; **idempotency** makes the second delivery a no-op. Three techniques do it here: an **inbox** table that records processed message ids (once-only), **deterministic ids** (derive the key from stable input so a re-write hits the same row), and **optimistic concurrency** (a version column rejects a stale write). **Eventual consistency** is the accepted consequence of replacing one ACID transaction with a saga of local transactions: for a short window the order exists but stock isn't reserved yet — the system converges, it isn't inconsistent forever.
+
+```mermaid
+flowchart TD
+    MSG["message (broker = at-least-once)"]:::paas
+    INBOX[("InboxState — records processed ids")]:::datastore
+    RUN["consumer runs ONCE"]:::service
+    SKIP["duplicate → already processed → no-op"]:::issue
+    MSG -->|first delivery| INBOX --> RUN
+    MSG -->|redelivery| INBOX --> SKIP
+    EC["eventual consistency: created → stock-pending → confirmed/cancelled<br/>(separate local transactions that converge)"]:::edge
+
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
 
 **How AntKart uses it** — MassTransit's `InboxState` (added in `OrderDbContext`) deduplicates redelivered messages so a consumer runs once. The saga's `OrderSagaState.Version` gives optimistic concurrency, so two messages for the same order can't both win. The `ProductsSeedLoader` derives each Cosmos `_id` from the SKU (MD5→hex), so re-running the loader is a set of single-partition point *upserts* that never duplicate; `DiscountSeedLoader` clears-then-seeds so every run converges to the same set. The saga itself is the eventual-consistency engine — created → stock-pending → confirmed/cancelled, each a separate committed step.
 
@@ -945,6 +1103,25 @@ Separating liveness (is the process alive?) from readiness (should it receive tr
 
 Tags are namespaced (`ak:live` / `ak:ready` / `ak:deep`) so a third-party check — like MassTransit's own `"ready"`-tagged bus check — can't accidentally land on the readiness probe. A **startup** probe gates liveness/readiness so a slow boot (loading Key Vault) doesn't trip a restart.
 
+```mermaid
+flowchart TD
+    STARTUP["startup probe<br/>gates the two below until booted<br/>(covers Key-Vault-at-boot)"]:::edge
+    LIVE["/health/live — shallow self, NO external calls"]:::service
+    READY["/health/ready — tolerant, Degraded ⇒ 200"]:::service
+    DEEP["/health/deps — deep JSON (diagnostics, not a probe)"]:::datastore
+    RESTART["fail → restart the pod"]:::issue
+    OUT["fail → out of Service endpoints (no traffic)"]:::issue
+    STARTUP --> LIVE
+    STARTUP --> READY
+    LIVE --> RESTART
+    READY --> OUT
+
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — Every service calls `AddDefaultHealthChecks()` + `MapDefaultHealthChecks()` from BuildingBlocks. Liveness is deliberately shallow — no DB call — so a transient database blip can't cause a restart storm; readiness is tolerant (Degraded returns 200) so one degraded dependency doesn't blackout the whole fleet. Deep checks (real Cosmos `ping`, Key Vault metadata list) are tagged `ak:deep` and appear only on `/health/deps`. The startup probe covers the Key-Vault-at-boot delay.
 
 **Alternatives and the trade-off** — Alternative: a single `/health` endpoint that touches the database — which fails liveness on any DB hiccup (restart storm) or lets a not-ready pod serve traffic. The three-surface split, with liveness shallow and readiness tolerant, prevents both. The cost is a bit more wiring (three endpoints, tags) — packaged once in BuildingBlocks so every service gets it for free.
@@ -993,6 +1170,26 @@ step turns "hope it works" into "read the diff first."
 | write | declare resources in modules/units | idempotent — re-declaring the same thing is a no-op |
 | `plan` | show the create/update/destroy diff | **always read it first** |
 | `apply` | make the change, update state | one wave at a time on a first build |
+
+```mermaid
+flowchart TD
+    CODE["declared desired state<br/>(modules + units)"]:::cicd
+    PLAN["terragrunt plan<br/>diff: create / update / destroy"]:::cicd
+    READ["human READS the diff"]:::edge
+    APPLY["terragrunt apply<br/>(one wave at a time)"]:::cicd
+    AZ["real Azure resources"]:::paas
+    STATE[("state — updated")]:::datastore
+    CODE --> PLAN --> READ --> APPLY --> AZ
+    APPLY --> STATE
+    DRIFT["portal change → next plan shows DRIFT → apply reconciles"]:::issue
+    DRIFT -.-> PLAN
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — Every resource is a declaration in `infrastructure/modules/` instantiated per environment under `infrastructure/environments/dev/`. The runbook's standing rules are literally "**plan before apply, every time**" and "**one wave at a time** — do not `run-all apply` across the whole tree on a first build." So a build is: `terragrunt plan` a unit, read the diff, `apply`, verify, move to the next wave. Decision: [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md); guide: [docs/guides/iac-concepts.md](guides/iac-concepts.md).
 
@@ -1219,6 +1416,26 @@ another. Terragrunt's `generate` and `include` blocks put that config in exactly
 and its `dependency` blocks wire units together — keeping the tree DRY.
 
 **How it works** — Terragrunt sits on top of Terraform and adds three things plain Terraform lacks a DRY answer for: **`generate` blocks** that write the backend/provider/versions config into every unit from one place; an **`include` block** that pulls a shared `root.hcl` into each unit; and **`dependency` blocks** that pass one unit's outputs into another. You run `terragrunt` instead of `terraform`; it generates the boilerplate, resolves dependencies, then calls Terraform underneath.
+
+```mermaid
+flowchart TD
+    ROOT["root.hcl (ONE file)"]:::cicd
+    GEN["generate blocks →<br/>backend.tf · provider.tf · versions.tf"]:::cicd
+    subgraph UNITS["each of the 18 units"]
+        U1["aks/terragrunt.hcl<br/>include root + inputs + dependency"]:::paas
+        U2["postgresql/terragrunt.hcl"]:::paas
+    end
+    TF["Terraform (runs underneath)"]:::edge
+    ROOT --> GEN
+    GEN -->|written into| U1
+    GEN -->|written into| U2
+    U1 --> TF
+    U2 --> TF
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
 
 **How AntKart uses it** — `infrastructure/environments/dev/root.hcl` has `generate` blocks that emit `backend.tf`, `provider.tf`, and `versions.tf` into every unit at init — so the backend, the azurerm provider, and the version pins live in **exactly one file**. Each unit's `terragrunt.hcl` starts with `include "root" { path = find_in_parent_folders("root.hcl") }` to inherit all of it. The 18 units therefore share one backend/provider/versions definition instead of copy-pasting it 18 times. Decision: [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md); guide: [docs/guides/iac-concepts.md](guides/iac-concepts.md) §2.
 
@@ -1466,6 +1683,23 @@ same code. Pinning plus a lock file make provider resolution reproducible.
 | Where | `versions.tf` (generated from `root.hcl`) | one per unit, **committed** |
 | Written by | you | `terraform init` |
 
+```mermaid
+flowchart TD
+    PIN["required_providers CONSTRAINT<br/>azurerm ~> 4.76 (allowed versions)"]:::cicd
+    INIT["terraform init<br/>resolves within the constraint"]:::edge
+    LOCK[("committed .terraform.lock.hcl<br/>EXACT version + checksums")]:::datastore
+    ALL["every machine + CI installs identical providers"]:::paas
+    PIN --> INIT --> LOCK --> ALL
+    KI["KI-012: some dev locks predate the shared pins<br/>→ only azurerm recorded (azuread/random unpinned there)"]:::issue
+    KI -.-> LOCK
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — The pins are central: `root.hcl` generates the `versions.tf` for every unit with azurerm `~> 4.76`, azuread `~> 3.0`, random `~> 3.6` — one source of truth. Each of the 18 dev units (and 18 qa units) commits its own `.terraform.lock.hcl` so provider resolution is reproducible. Decision: [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md).
 
 **Alternatives and the trade-off** — Alternatives: no constraint (a `terraform init` months later silently pulls a new major provider and breaks), or pinning an *exact* version everywhere (reproducible but you never get patch fixes without editing every unit). The `~>` pessimistic constraint + committed lock is the balance — patch flexibility bounded by a constraint, exact resolution frozen by the lock. The cost is remembering to refresh and commit the lock after a constraint change.
@@ -1577,6 +1811,20 @@ workload identity (secret-less pod auth) possible.
 | networking | CNI Overlay, `network_policy = "azure"` | overlay IPs; policy engine on |
 | identity | OIDC issuer + workload identity | secret-less pod auth |
 
+```mermaid
+flowchart TD
+    AZURE["Azure — MANAGED control plane<br/>API server · etcd · scheduler · upgrades"]:::paas
+    POOL["node pool: 2 × Standard_D2s_v3 (fixed, Free tier)"]:::service
+    OIDC["OIDC issuer + workload identity<br/>enabled AT CREATION"]:::identity
+    PODS["6 services · namespace antkart · CNI Overlay"]:::service
+    AZURE --> POOL --> PODS
+    OIDC -->|secret-less pod auth (federation)| PODS
+
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+```
+
 **How AntKart uses it** — `aks-antkart-dev` is defined by `infrastructure/modules/aks/main.tf` with dev values in `infrastructure/environments/dev/aks/terragrunt.hcl`. The kubelet identity is granted **AcrPull** (in the AKS module) so nodes can pull images; the OMS agent ships logs to the Log Analytics workspace; `azure_rbac_enabled` ties cluster access to Entra. The six services all run on this one cluster in the `antkart` namespace. Decision: [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md).
 
 **Alternatives and the trade-off** — Alternatives: self-managed Kubernetes (you operate etcd/API/upgrades — huge toil), a simpler PaaS like Azure Container Apps or App Service (less to run, but no full Kubernetes and, decisively, no OIDC-issuer workload identity story), or another cloud's managed k8s. AKS trades real Kubernetes complexity for managed control-plane + the OIDC issuer that makes secret-less pod auth possible — the feature the whole security model leans on. Decision: [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md).
@@ -1613,6 +1861,21 @@ can push to — without a stored registry password. ACR provides that with Entra
 (`admin_enabled = false`), so both push and pull authenticate by identity.
 
 **How it works** — A private OCI/Docker registry. Images are named `acrantkartdev.azurecr.io/antkart/<service>:<tag>`. Access is identity-based: with `admin_enabled = false` there is **no username/password**, so both the pusher (CD) and the puller (the cluster) authenticate with an Entra identity holding an RBAC role — **AcrPush** to push, **AcrPull** to pull.
+
+```mermaid
+flowchart TD
+    CD["CI/CD identity id-ak-cicd<br/>role: AcrPush ONLY (no cluster access)"]:::cicd
+    ACR["acrantkartdev<br/>admin disabled → identity-based, no password"]:::paas
+    KUBELET["AKS kubelet identity<br/>role: AcrPull"]:::identity
+    NODE["node pulls antkart/service:sha"]:::service
+    CD -->|push image :commit-sha| ACR
+    ACR -->|pull| KUBELET --> NODE
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+```
 
 **How AntKart uses it** — `acrantkartdev` (SKU Basic) is defined in `infrastructure/modules/container-registry/main.tf` with `admin_enabled = false`. The AKS **kubelet identity** is granted AcrPull (in the AKS module) so nodes pull images with no secret; the CI/CD identity `id-ak-cicd-dev` is granted **AcrPush only** (github-oidc) so the pipeline can push but touch nothing else. Images carry immutable commit-SHA tags. Decision: [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md).
 
@@ -1662,6 +1925,21 @@ is the core of using it well.
 
 AntKart runs Cosmos **serverless** (pay per RU consumed, no provisioned throughput, near-zero idle cost) via the **MongoDB API**, so `MongoDB.Driver` talks to it unchanged. The shard key is a **hashed `_id`**, so a write keyed by `_id` is a single-partition point operation.
 
+```mermaid
+flowchart TD
+    APP["Products — MongoDB.Driver unchanged"]:::service
+    COS["Cosmos DB SERVERLESS · Mongo API<br/>Session consistency · pay per RU"]:::datastore
+    PART["hashed _id shard key<br/>→ single-partition point ops (cheap, idempotent)"]:::datastore
+    T429["429 = throttle → honour server Retry-After"]:::issue
+    APP -->|every op costs Request Units| COS
+    COS --> PART
+    COS -.-> T429
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — `cosmos-antkart-dev` / database `antkart-products` is defined in `infrastructure/modules/cosmosdb/main.tf` (kind `MongoDB`, `EnableServerless`, `consistency_level = "Session"`). The `{ "_id": "hashed" }` shard key and the `products` collection are created by the **app/seeder at runtime, not Terraform** (which only provisions the account + database). The seed loader derives `_id` from the SKU so its upserts are single-partition point writes (idempotent). Cosmos calls run through the resilience pipeline that **honours a 429 `Retry-After`**. Decisions: [ADR-004](adr/ADR-004-polyglot-persistence.md), [ADR-014](adr/ADR-014-cosmosdb-and-servicebus.md); guide: [docs/guides/cosmosdb-concepts.md](guides/cosmosdb-concepts.md).
 
 **Alternatives and the trade-off** — Alternatives: Cosmos's native **Core (SQL) API** (rejected in [ADR-014](adr/ADR-014-cosmosdb-and-servicebus.md) so the app keeps the familiar Mongo driver), **provisioned throughput** (predictable RU/s but you pay even when idle — serverless was chosen for a bursty dev catalogue), or a relational catalogue (poor fit for flexible product documents). Serverless + Mongo API trades a per-container burst ceiling (5,000 RU/s) for near-zero idle cost and a drop-in driver.
@@ -1701,6 +1979,24 @@ yourself.
 
 **How it works** — A managed PostgreSQL server: Azure runs the engine, backups, and patching; you get an ACID relational database with EF Core migrations. **One flexible server hosts several databases**, one per relational service. The admin password is generated by Terraform (into state, then copied to Key Vault), and access is gated by firewall rules; runtime services reach it via a vaulted connection string.
 
+```mermaid
+flowchart TD
+    SRV["psql-antkart-dev-eus2 · ONE Flexible Server<br/>region eastus2 (eastus offer-restricted)"]:::datastore
+    D1[("AKOrdersDb")]:::datastore
+    D2[("AKPaymentsDb")]:::datastore
+    D3[("AKDiscountDb")]:::datastore
+    D4[("AKNotificationsDb")]:::datastore
+    KV["conn string in Key Vault (Npgsql, jittered backoff)"]:::identity
+    SRV --> D1
+    SRV --> D2
+    SRV --> D3
+    SRV --> D4
+    KV -.-> SRV
+
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+```
+
 **How AntKart uses it** — `psql-antkart-dev-eus2` (`infrastructure/modules/postgresql/main.tf`) hosts `AKOrdersDb`, `AKPaymentsDb`, `AKDiscountDb`, `AKNotificationsDb`. It lives in **`eastus2`** (not the platform's `eastus`) because Postgres is offer-restricted in eastus on this subscription. Connection strings are Key Vault secrets; Npgsql calls use exponential backoff + jitter (avoid thundering herd on reconnect); the transactional **outbox tables** live in the Order/Payments databases here. Decision: [ADR-004](adr/ADR-004-polyglot-persistence.md).
 
 **Alternatives and the trade-off** — Alternatives: Azure SQL (a fine managed relational store, but the platform standardises on Postgres + Npgsql + EF migrations), self-managed Postgres (you run backups/patching), or forcing these workloads onto Cosmos (no true relational ACID for orders/payments). Managed Flexible Server trades some control for ACID transactions, migrations, and no server operations — the right fit for the transactional services. One flexible server for several databases trades a shared blast radius for lower cost.
@@ -1736,6 +2032,23 @@ offer-restricted; the four database names). Decision: [ADR-004](adr/ADR-004-poly
 perfect Redis fit, and far cheaper and faster than putting it in a relational store.
 
 **How it works** — An in-memory key-value store, managed by Azure. AntKart uses the newer `azurerm_managed_redis` resource (not the retired classic `azurerm_redis_cache`), reached over **TLS on port 10000** (classic used 6380). The cart is serialised to a single key with a natural expiry (TTL), so abandoned carts clean themselves up.
+
+```mermaid
+flowchart TD
+    CART["ShoppingCart"]:::service
+    RD["Azure Managed Redis (TLS port 10000)<br/>redis-antkart-dev"]:::datastore
+    KEY["one key per user · 30-day TTL<br/>→ abandoned carts auto-expire"]:::datastore
+    KV["conn string in Key Vault"]:::identity
+    CART -->|snapshot DTO ↔ JSON| RD --> KEY
+    KV -.-> RD
+    NOTE["non-durable by design (a cart is ephemeral)"]:::issue
+    NOTE -.-> RD
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — `redis-antkart-dev` (SKU `Balanced_B0`, `infrastructure/modules/redis/main.tf`) in `eastus2`. ShoppingCart stores each cart at key `AKCart:cart:{userId}` with a **30-day TTL**, serialising the domain to a `CartSnapshot` DTO (System.Text.Json) and back. It's reached via `StackExchange.Redis` with a Key-Vault-stored connection string, wrapped in `AddRedisResilience` (retry + timeout). Decision: [ADR-004](adr/ADR-004-polyglot-persistence.md).
 
@@ -1784,6 +2097,28 @@ hold only data-plane rights, and that gap is a live defect (KI-014).
 
 AntKart's identities hold **only the data plane** — topology is provisioned by IaC, not at runtime. Standard tier is required (Basic has queues but no topics).
 
+```mermaid
+flowchart TD
+    PUB["Order / Payments publish"]:::service
+    TOPIC["sb-antkart-dev · topic integration-events<br/>Standard tier · Entra-only (no SAS)"]:::paas
+    S1["sub: order"]:::datastore
+    S2["sub: products"]:::datastore
+    S3["sub: payments"]:::datastore
+    S4["sub: cart"]:::datastore
+    PUB --> TOPIC
+    TOPIC --> S1
+    TOPIC --> S2
+    TOPIC --> S3
+    TOPIC --> S4
+    KI["KI-014: identities hold DATA plane, not MANAGEMENT<br/>→ topology must be IaC-provisioned"]:::issue
+    KI -.-> TOPIC
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — `sb-antkart-dev` (Standard, `local_auth_enabled = false` → Entra-only, **no SAS/connection string**) hosts the `integration-events` topic with subscriptions `products`, `order`, `payments`, `cart`. Messages dead-letter after 10 delivery attempts. MassTransit consumes these subscriptions; the topology is owned by `infrastructure/modules/servicebus/main.tf`, not created by the app. Decisions: [ADR-014](adr/ADR-014-cosmosdb-and-servicebus.md), [ADR-015](adr/ADR-015-messaging-migration-to-service-bus.md).
 
 **Alternatives and the trade-off** — Alternatives: self-managed RabbitMQ (the earlier build — [ADR-007](adr/ADR-007-masstransit-over-raw-rabbitmq.md)/[ADR-015](adr/ADR-015-messaging-migration-to-service-bus.md) migrated to managed Service Bus), Azure Storage Queues (simpler, but no topics/subscriptions fan-out or rich dead-lettering), or Event Grid for everything (push, no durable work queue). Service Bus buys durable, ordered, dead-letter-capable topic/subscription messaging with Entra auth, at the cost of a Standard-tier spend and the management-vs-data-plane subtlety that trips MassTransit (KI-014).
@@ -1824,6 +2159,20 @@ fits notifications far better than a durable work queue.
 
 **How it works** — Event Grid is a **push** router: a publisher sends an event to a custom topic, and Event Grid *pushes* it to subscribers (here, an Azure Function) — the consumer doesn't poll. It's built for discrete, reactive, high-fan-out notifications, scales to zero on the consumer side, and retries delivery. It is deliberately *not* a durable work queue — that's Service Bus's job.
 
+```mermaid
+flowchart TD
+    PUB["Order / Payments (AFTER commit)"]:::service
+    EG["evgt-antkart-dev · PUSH router<br/>Entra auth (no key) · best-effort"]:::edge
+    FN["Notification Functions [EventGridTrigger]<br/>scale-to-zero"]:::service
+    PUB -->|fire-and-forget| EG -->|pushes on arrival| FN
+    NOTE["deliberately SEPARATE from the Service Bus saga"]:::issue
+    NOTE -.-> EG
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — `evgt-antkart-dev` (`infrastructure/modules/eventgrid/main.tf`, `local_auth_enabled = false` → Entra publish, no topic key, `EventGridSchema`) carries the five customer-notification events (`AntKart.Order.Created`, `AntKart.Payment.Succeeded`, …). Order and Payments publish to it fire-and-forget after commit; the notification Functions `[EventGridTrigger]` on it. This is the push, scale-to-zero half of the two-mechanism eventing model (Platform §9). Decisions: [ADR-017](adr/ADR-017-entra-id-functions-eventgrid.md), [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
 **Alternatives and the trade-off** — Alternatives: put notifications on Service Bus (durable and tracked, but needs an always-on consumer and couples a non-critical email into the business bus), webhooks/polling (the consumer must run and poll), or Storage Queues. Event Grid buys push delivery to a scale-to-zero consumer and clean separation from the saga, at the cost of best-effort semantics — it fits *notifications*, not the money-and-stock flow.
@@ -1863,6 +2212,22 @@ always-on host to run or pay for.
 
 **How it works** — Serverless compute: you deploy functions bound to triggers (here an Event Grid trigger), and the platform runs them on demand, scaling out under load and **to zero** when idle — you pay per execution (Consumption plan, `Y1`). AntKart uses the **.NET 9 isolated worker** — the function code runs in its own process, decoupled from the Functions host runtime.
 
+```mermaid
+flowchart TD
+    EG["Event Grid"]:::edge
+    FN["func-antkart-notifications-dev<br/>.NET 9 isolated · Consumption (scale-to-zero, pay per run)"]:::service
+    CORE["INotificationDispatcher — AK.Notification.Core<br/>(templates, channel, history)"]:::service
+    ACS["ACS email"]:::paas
+    MI["managed identity → Key Vault + ACS (no secret)"]:::identity
+    EG -->|trigger| FN --> CORE --> ACS
+    MI -.-> FN
+
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+```
+
 **How AntKart uses it** — `func-antkart-notifications-dev` (`infrastructure/modules/function-app/main.tf`, Consumption `Y1`, `dotnet_version = "9.0"`, `use_dotnet_isolated_runtime = true`, `SystemAssigned` identity). Each function is a thin `[EventGridTrigger]` (`OnOrderCreated`, `OnPaymentSucceeded`, …) that deserializes the shared event contract, builds a `NotificationRequest`, and calls `INotificationDispatcher` in `AK.Notification.Core` — all real logic (templates, ACS email, history) lives in the Core library. It reaches Key Vault and ACS by its **managed identity** (no secrets). Decision: [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
 **Alternatives and the trade-off** — Alternatives: an always-on host (App Service / a container in AKS) that runs a Service Bus consumer (predictable latency, but you pay 24/7 for a bursty, mostly-idle workload), or the in-process Functions model (simpler, but couples your dependencies to the host's). Consumption + isolated worker buys scale-to-zero cost and dependency isolation, at the cost of **cold starts** (the first request after idle is slower). For notifications — bursty, latency-tolerant — that trade is right.
@@ -1900,6 +2265,23 @@ centralises them behind identity-based access (RBAC authorization mode), so a se
 secrets its identity is granted, and rotation happens in one place.
 
 **How it works** — A managed secret store with two access models — legacy **access policies** and **RBAC authorization**; AntKart uses RBAC mode, so access is Azure role assignments (e.g. *Key Vault Secrets User*) rather than per-vault policies. At startup each service reads `KeyVault:Uri`, and the config provider folds **all** secrets it's allowed to read into .NET configuration via `DefaultAzureCredential` — so a connection string is never committed or set as a plain value.
+
+```mermaid
+flowchart TD
+    START["service startup"]:::service
+    DAC["DefaultAzureCredential<br/>(identity holds Key Vault Secrets User)"]:::identity
+    KV["kv-antkart-dev · RBAC-authorization mode"]:::identity
+    CFG["ALL allowed secrets folded into .NET config<br/>(nothing committed)"]:::service
+    STORES["conn strings → Cosmos / Postgres / Redis (transitive access)"]:::datastore
+    START -->|read at boot| DAC --> KV --> CFG --> STORES
+    KI["KI-007 purge protection → blocks same-name rebuild"]:::issue
+    KI -.-> KV
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — `kv-antkart-dev` (`infrastructure/modules/key-vault/main.tf`, `rbac_authorization_enabled = true`, `purge_protection_enabled = true` in dev) holds every connection string and API key. Each service's identity is granted **Key Vault Secrets User**, so data-store access is transitive through the vault (the stores themselves need no data-plane role). `AddAzureKeyVaultConfiguration` wires it; `KeyVaultHealthCheck` lists secret metadata only, as a deep check. Decision: [ADR-013](adr/ADR-013-key-vault-rbac-and-observability-foundation.md).
 
@@ -1940,6 +2322,21 @@ and the span it belongs to can be joined by a shared id is what makes cross-serv
 
 **How it works** — **Log Analytics** is the store and query engine (KQL); **Application Insights** is the APM front-end. In the modern **workspace-based** model, App Insights writes its telemetry *into* the Log Analytics workspace rather than a separate store — so logs (`ContainerLog`) and traces (`AppRequests`/`AppDependencies`) all live in one workspace and one KQL query can join across them.
 
+```mermaid
+flowchart TD
+    LOGS["Serilog JSON → stdout<br/>→ ContainerLog"]:::service
+    TRACES["OpenTelemetry spans<br/>→ AppRequests / AppDependencies"]:::service
+    WS[("log-antkart-dev — ONE Log Analytics workspace<br/>App Insights is workspace-based")]:::datastore
+    JOIN["KQL join: TraceId (log) == OperationId (span)"]:::edge
+    LOGS --> WS
+    TRACES --> WS
+    WS --> JOIN
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
+
 **How AntKart uses it** — `log-antkart-dev` (`azurerm_log_analytics_workspace.this`, `PerGB2018`, 30-day retention) plus the **workspace-based** `appi-antkart-dev` (`azurerm_application_insights.this`, `workspace_id → log-antkart-dev`), both in `infrastructure/modules/observability/main.tf` — the workspace must exist before App Insights. The AKS OMS agent ships Serilog stdout into `ContainerLog`; the OpenTelemetry exporter ships spans through App Insights into `AppRequests`/`AppDependencies`. A log's `TraceId` equals a span's `OperationId`, so one KQL query stitches them. Decisions: [ADR-013](adr/ADR-013-key-vault-rbac-and-observability-foundation.md), [ADR-025](adr/ADR-025-observability-architecture.md).
 
 **Alternatives and the trade-off** — Alternatives: **classic (non-workspace) App Insights** (retired Feb 2024; separate store, can't co-query with logs), separate stores per signal (no cross-signal join — the whole point is lost), or self-hosted ELK + Prometheus/Grafana (AntKart built the Prometheus stack then **removed** it — [ADR-025](adr/ADR-025-observability-architecture.md) — as disproportionate to a two-node dev cluster). The workspace-based model buys one store, KQL across logs and traces, and no infra to run, at a per-GB ingest cost.
@@ -1978,6 +2375,21 @@ all of which ACS manages. The notification path reaches it by managed identity, 
 password to store.
 
 **How it works** — Azure Communication Services provides managed communication channels; AntKart uses **Email**. An *Email Communication Service* owns a sender **domain** (Azure-managed, so SPF/DKIM and a `*.azurecomm.net` sender are set up automatically), linked to a *Communication Service* resource. The app sends via the `Azure.Communication.Email` SDK, authenticating with a **managed identity** — no SMTP password.
+
+```mermaid
+flowchart TD
+    APP["notification path — AcsEmailSender (Entra-first)"]:::service
+    MI["managed identity (Contributor on ACS)<br/>no SMTP password"]:::identity
+    ACS["acs-antkart-dev + Email service<br/>Azure-managed domain → SPF/DKIM auto"]:::paas
+    CUST["customer inbox"]:::external
+    APP --> ACS --> CUST
+    MI -.-> APP
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
+```
 
 **How AntKart uses it** — `acs-antkart-dev` plus an Email service and an **Azure-managed domain** (`infrastructure/modules/communication-services/main.tf`). `AcsEmailSender` (BuildingBlocks) sends via the SDK, selecting auth **Entra-first**: managed identity by default; a Key-Vault connection string if present; and a **safe no-op** if neither is configured (so local dev doesn't error). The sender display name is applied as an RFC 5322 `"AntKart <DoNotReply@…>"`. `AddAcsEmailSender` wires it; it's used by the notification path. It replaced the earlier build's SMTP/Mailhog. Decisions: [ADR-017](adr/ADR-017-entra-id-functions-eventgrid.md), [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
@@ -2172,6 +2584,24 @@ gateway (via Ingress) is reachable from outside.
 
 **How it works** — A Service selects a set of pods (by label) and gives them one **stable ClusterIP + DNS name**, load-balancing across whichever pods currently match. Cluster DNS resolves the service name — fully `<svc>.<namespace>.svc.cluster.local`, or just `<svc>` within the namespace — so callers never chase ephemeral pod IPs. `type: ClusterIP` means the address is reachable **only inside the cluster**.
 
+```mermaid
+flowchart TD
+    O["Order pod"]:::service
+    DNS["cluster DNS resolves ak-products"]:::edge
+    SVC["Service ak-products · ClusterIP :8080<br/>load-balances across current pods"]:::service
+    P1["Products pod"]:::service
+    P2["Products pod"]:::service
+    O -->|http://ak-products:8080| DNS --> SVC
+    SVC --> P1
+    SVC --> P2
+    NOTE["ClusterIP = internal only · the name is ALSO the workload-identity subject"]:::issue
+    NOTE -.-> SVC
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — The chart's `service.yaml` is `type: ClusterIP`, port `8080`. In-cluster callers use `http://ak-<service>:8080`: `deploy/helm/values/order.yaml` sets `ProductsApi__BaseUrl: http://ak-products:8080/`, and `deploy/helm/values/products.yaml` sets `DiscountGrpc__Address: http://ak-discount:8080` (Discount's service marks `appProtocol: grpc` for h2c). All six services are ClusterIP; only the gateway is additionally exposed via Ingress. The service/DNS name `ak-<service>` must match the Kubernetes object name — which is *also* the workload-identity subject, so a rename breaks two things at once.
 
 **Alternatives and the trade-off** — Alternatives: `NodePort`/`LoadBalancer` per service (each gets a port or public IP — more exposure, more IPs, no L7 routing), a headless service (direct pod DNS, for stateful/peer discovery), or hard-coding pod IPs (they change — brittle). ClusterIP + cluster DNS gives a stable internal address with load-balancing and zero public exposure, so the single Ingress on the gateway is the only front door.
@@ -2208,6 +2638,24 @@ controller terminates TLS (cert from cert-manager) and routes to the gateway Ser
 ClusterIP-only.
 
 **How it works** — Two distinct things. An **Ingress** is a Kubernetes object — a rule set ("host `api.antkart.in`, path `/` → this Service"). An **ingress controller** (`ingress-nginx`) is a pod that watches Ingress objects and actually does the work: it holds a `LoadBalancer` Service with a public IP, terminates TLS (cert from cert-manager), and proxies matching requests to the target Service. The Ingress rule does nothing without a controller to enforce it.
+
+```mermaid
+flowchart TD
+    CLIENT["client"]:::external
+    CTRL["ingress-nginx CONTROLLER<br/>public IP · terminates TLS (cert-manager)"]:::edge
+    RULE["Ingress RULE: api.antkart.in → gateway Service"]:::edge
+    GW["ak-gateway Service"]:::service
+    REST["other 5 services — ClusterIP-only, NO Ingress"]:::service
+    RULE -.->|implemented by| CTRL
+    CLIENT --> CTRL --> GW
+    NOTE["controller installed OUT OF BAND (runbook 5.7) · host is an Argo param"]:::issue
+    NOTE -.-> CTRL
+
+    classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — The chart's `ingress.yaml` is gated on `.Values.ingress.enabled` (default **false**), `className: nginx`, with a `cert-manager.io/cluster-issuer` annotation for TLS. Only the **gateway** enables it — via the Argo Helm *parameter* on `deploy/argocd/applications/ak-gateway.yaml` (`ingress.host = api.antkart.in`), not the values file. The ingress-nginx controller is installed **out of band** (runbook 5.7), and its LoadBalancer public IP is pointed at by a GoDaddy A record for `api.antkart.in`. In the target state, APIM sits in front as the managed edge ([ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md)).
 
@@ -2345,6 +2793,21 @@ separate "alive" from "ready" from "still starting."
 
 **How it works** — Each probe is an `httpGet` or `tcpSocket` check on an interval. The **startup** probe runs first and *gates* liveness/readiness until it passes — so a slow boot doesn't trip liveness. A failing **liveness** probe restarts the container; a failing **readiness** probe removes the pod from its Service's endpoints (no traffic) without restarting it. The endpoints they hit are the app's own — `/health/live` and `/health/ready` (Kubernetes §... "Health probes as an application concern").
 
+```mermaid
+flowchart TD
+    STARTUP["startupProbe → /health/live<br/>GATES the two below until booted"]:::edge
+    LIVE["livenessProbe → /health/live (shallow)<br/>fail ⇒ RESTART container"]:::service
+    READY["readinessProbe → /health/ready (tolerant)<br/>fail ⇒ out of Service endpoints"]:::service
+    TCP["discount: tcpSocket probes (h2c — HTTP/1.1 httpGet rejected)"]:::issue
+    STARTUP --> LIVE
+    STARTUP --> READY
+    TCP -.-> LIVE
+
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — In `deployment.yaml`, the **startup + liveness** probes hit `/health/live` (shallow) and **readiness** hits `/health/ready` (tolerant). The startup probe covers the Key-Vault-at-boot delay (period 5s × 30 ≈ 150s) so a slow start never restart-loops. Discount switches to `tcpSocket` probes (`probes.type: tcp` in `deploy/helm/values/discount.yaml`) because its h2c/HTTP-2-only listener would reject an HTTP/1.1 `httpGet`. Endpoints come from `AK.BuildingBlocks/AK.BuildingBlocks/HealthChecks/HealthCheckExtensions.cs`.
 
 **Alternatives and the trade-off** — Alternatives: no probes (Kubernetes can't tell alive from ready — it routes traffic to a booting pod and never restarts a wedged one), `exec` probes (run a command in the container — heavier, and fine only for non-HTTP checks), or a single probe for both roles (causes the restart-storm/bad-traffic failures). Three purpose-built probes cost a little config for correct restart and traffic behaviour.
@@ -2387,6 +2850,23 @@ predictable and isolates blast radius.
 | CPU | `100m` | `500m` (throttle if exceeded) |
 | Memory | `192Mi` | `512Mi` (OOM-kill if exceeded) |
 
+```mermaid
+flowchart TD
+    NS["namespace: antkart"]:::edge
+    REQ["REQUESTS — reserved, scheduler bin-packs against these<br/>cpu 100m · mem 192Mi"]:::service
+    LIM["LIMITS — hard ceiling<br/>cpu 500m · mem 512Mi"]:::service
+    OOM["exceed MEMORY ⇒ OOMKill (hard — not compressible)"]:::issue
+    THR["exceed CPU ⇒ throttle (soft — compressible)"]:::issue
+    NS --> REQ
+    NS --> LIM
+    LIM --> OOM
+    LIM --> THR
+
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — Everything runs in the `antkart` namespace. The chart sets `resources` from `values.yaml`: requests `cpu 100m` / `memory 192Mi`, limits `cpu 500m` / `memory 512Mi`, applied via `resources: {{ toYaml .Values.resources }}` in `deployment.yaml`. The sizing is deliberate for the fixed 2-node pool: 6 services × 100m requested = 600m, which fits `2 × Standard_D2s_v3` with headroom. Decision context: [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md).
 
 **Alternatives and the trade-off** — Alternatives: no requests/limits (the scheduler can't reason about capacity — nodes overcommit and one greedy pod starves neighbours), a namespace `ResourceQuota`/`LimitRange` (enforce budgets/defaults at the namespace level — more governance, more config), or generous limits everywhere (fewer OOMs, worse bin-packing). Explicit per-pod requests+limits buy predictable placement and blast-radius isolation, at the cost of tuning the numbers to the node size.
@@ -2422,6 +2902,21 @@ provisioned. They let stateful pods keep data across restarts.
 give a pod durable storage that outlives it — *for stateful workloads*.
 
 **How it works** — A **StorageClass** describes how volumes are provisioned (e.g. Azure Disk); a pod (usually in a **StatefulSet**) declares a **PersistentVolumeClaim** for a size/class; Kubernetes dynamically provisions a **PersistentVolume** and mounts it, so the data survives pod restarts and rescheduling. This is how you'd run stateful workloads *inside* the cluster.
+
+```mermaid
+flowchart TD
+    SVC["every AntKart service = STATELESS"]:::service
+    NO["NO PV / PVC / StorageClass in deploy/"]:::issue
+    STORES["all state in MANAGED Azure stores<br/>Cosmos · PostgreSQL · Redis"]:::datastore
+    DISP["→ cluster is disposable (delete + rebuild, no data loss)"]:::edge
+    SVC --> NO
+    SVC --> STORES --> DISP
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
 
 **How AntKart uses it** — **It doesn't — deliberately.** There are no PV/PVC/StorageClass manifests in `deploy/`. Every service is **stateless**; all state lives in managed Azure stores (Cosmos, PostgreSQL, Redis) reached via vaulted connection strings. The only volume in the chart is the gateway's Ocelot config mounted from a ConfigMap — that's *configuration*, not persistent storage. Knowing what the platform deliberately *doesn't* put in the cluster is the point of this entry.
 
@@ -2462,6 +2957,23 @@ Autoscaling matches capacity to demand automatically.
 
 **How it works** — Two independent scalers. The **HorizontalPodAutoscaler** watches a metric (CPU, memory, or custom) and adds/removes *pod replicas* to hit a target — it needs a metrics source (metrics-server or a custom-metrics adapter). The **cluster autoscaler** watches for *unschedulable* pods and adds *nodes* (and removes idle ones). They compose: HPA wants more pods, the autoscaler provides nodes to fit them.
 
+```mermaid
+flowchart TD
+    FIXED["fixed 2-node pool · auto_scaling_enabled = false"]:::service
+    NOHPA["NO HorizontalPodAutoscaler in deploy/"]:::issue
+    SPIKE["load spike → MANUAL replica scaling (within node budget)"]:::edge
+    FUT["autoscaling = production Future Work (ADR-018)"]:::edge
+    NOMETRIC["+ metrics not collected → custom-metrics HPA has no data"]:::issue
+    FIXED --> NOHPA
+    NOHPA --> SPIKE
+    FIXED --> FUT
+    NOHPA -.-> NOMETRIC
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
+
 **How AntKart uses it** — **It doesn't — deliberately.** There is no `HorizontalPodAutoscaler` in `deploy/`, and the cluster autoscaler is off (`auto_scaling_enabled = false` in the AKS module) — a single fixed 2-node pool. [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md) records a two-pool autoscaling cluster as production **Future Work**; dev runs fixed capacity on purpose (predictable cost, simpler to reason about on a demo cluster).
 
 **Alternatives and the trade-off** — The choice is **fixed capacity** vs **autoscaling**. Fixed is cheaper and simpler for a two-node dev cluster and makes cost predictable; autoscaling matches capacity to demand (no waste at idle, survives spikes) but adds a metrics dependency, node churn, and cost variability. AntKart chose fixed for dev and names autoscaling as the production step — an honest "not yet," not a gap pretending to be a feature.
@@ -2500,6 +3012,22 @@ runs as. Azure RBAC ties cluster access to Entra identities (one less credential
 ServiceAccounts are the anchor for workload-identity federation.
 
 **How it works** — Native Kubernetes RBAC grants **verbs** (get/list/create…) on **resources** via a **Role** (namespaced) or **ClusterRole**, bound to a subject (user, group, ServiceAccount) by a **RoleBinding**. AntKart instead enables **Azure RBAC for Kubernetes**, so *who can `kubectl`* is decided by Entra role assignments (mapped to cluster roles) rather than hand-authored Roles + kubeconfig certs. Separately, each pod runs as a **ServiceAccount** — the anchor for workload identity, not for cluster permissions.
+
+```mermaid
+flowchart TD
+    KUBECTL["who can kubectl?"]:::edge
+    AZRBAC["Azure RBAC for AKS<br/>Entra identities → cluster roles (NOT hand-authored Roles)"]:::identity
+    SA["ServiceAccount ak-service (one per service)<br/>job = WORKLOAD IDENTITY, not k8s permissions"]:::service
+    NOROLE["chart defines NO Role / RoleBinding"]:::issue
+    KUBECTL --> AZRBAC
+    AZRBAC -.-> SA
+    SA --> NOROLE
+
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — The chart defines **one ServiceAccount per service** (`ak-<service>`) in `serviceaccount.yaml`, labelled `azure.workload.identity/use: "true"` and annotated with the identity's `azure.workload.identity/client-id` — its job is federation (Security §4), not granting Kubernetes verbs. The chart defines **no Role/RoleBinding**; cluster authorization is `azure_rbac_enabled` on the AKS cluster, so `kubectl` access uses Entra + the *Azure Kubernetes Service RBAC Cluster Admin* role. Decision: [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md).
 
@@ -2740,6 +3268,22 @@ makes authorization tamper-proof.
 
 The API reads roles from the **signed token** — set in Entra, not the request body — so authorization can't be spoofed. A `[RequireAuthorization("admin")]` endpoint checks the `roles` claim; the token had to pass audience/issuer validation first.
 
+```mermaid
+flowchart TD
+    TOKEN["signed Entra JWT (set in Entra, NOT the request body)"]:::identity
+    AUD["validate audience + issuer FIRST"]:::identity
+    ROLES["flat roles claim (RoleClaimType=roles, MapInboundClaims=false)"]:::identity
+    POL["policy admin → RequireRole(admin)"]:::service
+    EP["Order PUT /id/status → RequireAuthorization(admin)"]:::service
+    TOKEN --> AUD --> ROLES --> POL --> EP
+    NOTE["read roles, NOT groups → no Graph overage lookup"]:::issue
+    NOTE -.-> ROLES
+
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — `AddEntraAuthentication` reads the **flat top-level `roles` claim** (`RoleClaimType = "roles"`, `MapInboundClaims = false`) and registers named policies: `"admin"` → `RequireRole("admin")` and `"authenticated"` → `RequireAuthenticatedUser`. App roles and the `access_as_user` scope are declared in `infrastructure/modules/app-registration/main.tf` (roles are data-driven via `var.app_roles`; v2 tokens via `requested_access_token_version = 2`). Usage: Order's `PUT /{id}/status` is `.RequireAuthorization("admin")`; user-scoped data comes from `sub`, never a body field.
 
 **Alternatives and the trade-off** — Alternatives: authorize on the **groups** claim (but group membership can overflow into a Graph lookup — the "groups overage" problem — and couples app authz to directory groups), scopes-only (fine for delegated API access but no coarse role gate), or custom claims. App roles in the flat `roles` claim give tamper-proof, self-contained authorization with no Graph call, at the cost of managing roles in the app registration. That's why the platform reads `roles`, not `groups`.
@@ -2786,6 +3330,23 @@ where nothing else works.
 | Flavours | app registration + SP | *user-assigned* (standalone, reusable, **federatable**) or *system-assigned* (tied to one resource, not federatable) |
 
 The rule of thumb: on Azure (or federating into it) → managed identity, no secret; only where nothing else works → a service principal with a guarded secret.
+
+```mermaid
+flowchart TD
+    Q["identity for what?"]:::edge
+    RUN["runtime pods → user-assigned MANAGED identity id-ak-service<br/>(no secret, federated)"]:::identity
+    CI["CI/CD → user-assigned MANAGED identity id-ak-cicd<br/>(no secret, federated to GitHub OIDC)"]:::identity
+    TF["Terraform (runs OFF Azure) → SERVICE PRINCIPAL sp-antkart-terraform-dev<br/>(the ONLY stored secret)"]:::issue
+    Q --> RUN
+    Q --> CI
+    Q --> TF
+    NOTE["user-assigned because system-assigned CANNOT be federated"]:::issue
+    NOTE -.-> RUN
+
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — Runtime services use **user-assigned managed identities** `id-ak-<service>-<env>` (`infrastructure/modules/workload-identity/main.tf`), federated to Kubernetes ServiceAccounts. CI/CD uses a **user-assigned managed identity** `id-ak-cicd-<env>` (`infrastructure/modules/github-oidc/main.tf`), federated to GitHub's OIDC — **not** an app/SP. The **only** secret-bearing principal is the Terraform provisioning SP, `sp-antkart-terraform-dev` (its creds are the `ARM_*` env vars) — because Terraform runs from a pipeline/laptop, off Azure, where a managed identity can't reach. User-assigned is chosen everywhere because **system-assigned can't be federated**.
 
@@ -3125,6 +3686,21 @@ challenge proves control of the public hostname through the same ingress.
 
 **How it works** — cert-manager is an in-cluster operator. When an Ingress is annotated with a ClusterIssuer, cert-manager requests a certificate from that issuer (Let's Encrypt over **ACME**) and proves domain ownership with an **HTTP-01 challenge**: Let's Encrypt gives a token, cert-manager serves it at `http://<host>/.well-known/acme-challenge/<token>` *through the same ingress*, Let's Encrypt fetches it, and — if it matches — issues the cert into a Secret the ingress then serves. cert-manager renews automatically before expiry.
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CM as cert-manager (in-cluster)
+    participant LE as Let's Encrypt (ACME)
+    participant ING as ingress-nginx (api.antkart.in)
+    Note over CM: Ingress annotated with a ClusterIssuer
+    CM->>LE: request certificate
+    LE-->>CM: HTTP-01 challenge token
+    CM->>ING: serve token at /.well-known/acme-challenge/...
+    LE->>ING: fetch the token (proves domain control)
+    LE-->>CM: issue certificate → Secret
+    Note over CM,ING: cert-manager auto-renews before expiry<br/>USE letsencrypt-staging FIRST (prod: 5 dup certs/week)
+```
+
 **How AntKart uses it** — Two ClusterIssuers, `letsencrypt-staging` and `letsencrypt-prod` (`deploy/cert-manager/cluster-issuer-*.yaml`), each with an HTTP-01 solver over `ingressClassName: nginx`. The gateway's Ingress requests a cert via the `cert-manager.io/cluster-issuer` annotation. cert-manager and the issuers are installed **out of band** (runbook 5.7); the prod issuer's file carries the Let's Encrypt rate-limit warning (5 duplicate certs/week per hostname). Decision: [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md).
 
 **Alternatives and the trade-off** — Alternatives: manually buying and rotating a certificate (no automation, human error, expiry outages), a self-signed cert (untrusted by browsers), an ACME **DNS-01** challenge (works for wildcards and private hosts but needs DNS-provider API credentials), or a cloud-managed cert at APIM/App Gateway. HTTP-01 + cert-manager buys free, auto-renewing, browser-trusted certs with no stored DNS credential, at the cost of the hostname needing to be **publicly reachable over HTTP** during the challenge.
@@ -3163,6 +3739,24 @@ misconfiguration, an internal caller, a future APIM edge) would be unauthenticat
 service means no single layer's failure exposes the backends.
 
 **How it works** — Every layer authenticates independently; none trusts an outer one. The JWT is validated at the gateway *and* re-validated inside each service — issuer, audience, lifetime, signature — and then the service enforces its own authorization (roles, and **ownership/IDOR** checks like "is this your order?"). The guiding assumption is "never trust the network": a service must stay secure even if a request reaches it without passing the edge (a misconfiguration, an internal caller, a future edge).
+
+```mermaid
+flowchart TD
+    REQ["request + Bearer JWT"]:::external
+    GW["gateway validates JWT (layer 1)"]:::edge
+    SVC["service RE-validates JWT (layer 2)<br/>issuer · audience · lifetime · signature"]:::service
+    OWN["+ ownership / IDOR check from sub claim<br/>(never a body field)"]:::service
+    REQ --> GW --> SVC --> OWN
+    KI["KI-002: Discount decodes but does NOT verify<br/>(safe only because ClusterIP-only)"]:::issue
+    KI -.-> SVC
+    NOTE["never trust the network — gateway is NOT the trust boundary"]:::issue
+    NOTE -.-> SVC
+
+    classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — Each service calls `AddEntraAuthentication` in its `Program.cs` and re-validates the token; the gateway passes the JWT through but is **not** a trust boundary the services rely on ([docs/development/6-security.md](development/6-security.md)). Ownership is derived from `sub` via `GetUserId()`, never a request field — so a user can't fetch another's order by changing an id. Only the gateway is public; the five backends are ClusterIP-only. The planned APIM edge ([ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md)) adds an *outer* validation layer **without** removing the in-service checks.
 
@@ -3205,6 +3799,22 @@ AntKart relies on *instead* is coarser: only the gateway is exposed (everything 
 subnet-level NSGs — infrastructure isolation, not pod-level.
 
 **How it works** — A `NetworkPolicy` is an allow-list for pod traffic: it selects pods and declares which ingress/egress is permitted (by pod label, namespace, or CIDR), enforced by the CNI. The standard pattern is **default-deny** for a namespace, then explicit allows for intended flows — pod-level micro-segmentation, so a compromised pod can't freely reach every other pod (east-west lateral movement).
+
+```mermaid
+flowchart TD
+    ENGINE["CNI policy ENGINE enabled (network_policy = azure)"]:::edge
+    ZERO["...but ZERO NetworkPolicy objects authored"]:::issue
+    RESULT["→ pod-to-pod traffic UNRESTRICTED (east-west)"]:::issue
+    REAL["actual isolation = only gateway exposed (ClusterIP) + subnet NSGs<br/>(perimeter / north-south only)"]:::service
+    FIX["to stop lateral movement: author default-deny + allow policies (future work)"]:::edge
+    ENGINE --> ZERO --> RESULT
+    RESULT --> REAL
+    RESULT -.-> FIX
+
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+```
 
 **How AntKart uses it** — **It doesn't — a named-but-absent syllabus item.** The CNI policy *engine* is enabled (`network_policy = "azure"` in the AKS module), but **zero NetworkPolicy objects are authored**, so pod-to-pod traffic is unrestricted by default. The isolation AntKart actually relies on is coarser and at the infrastructure layer: only the gateway is exposed (the five backends are ClusterIP-only) plus subnet-level NSGs. `deploy/helm/README.md` notes NetworkPolicy as future work.
 
@@ -3255,6 +3865,23 @@ Knowing which pillar answers which question — and which ones a platform actual
 
 The power comes from correlation: all of it lands in one Log Analytics workspace, and a log's `TraceId` equals a span's `OperationId`, so one query joins "what happened" to "where the time went."
 
+```mermaid
+flowchart TD
+    LOGS["LOGS — what happened<br/>Serilog → ContainerLog ✅"]:::service
+    TRACES["TRACES — where the time went<br/>OTel → AppRequests / AppDependencies ✅"]:::service
+    METRICS["METRICS — trends (p99, error rate)<br/>NOT collected (stack removed) ❌"]:::issue
+    WS[("ONE Log Analytics workspace")]:::datastore
+    JOIN["TraceId == OperationId → correlate"]:::edge
+    LOGS --> WS
+    TRACES --> WS
+    WS --> JOIN
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
+
 **How AntKart uses it** — Two of the three are delivered. Serilog writes structured JSON to stdout, collected into `ContainerLog`; OpenTelemetry exports spans through App Insights into `AppRequests`/`AppDependencies`. **Metrics are deliberately not collected** — a self-hosted Prometheus/Grafana stack was built then removed ([ADR-025](adr/ADR-025-observability-architecture.md), Observability §6). Everything co-queries in the one workspace. Decision: [ADR-025](adr/ADR-025-observability-architecture.md).
 
 **Alternatives and the trade-off** — Alternatives: run all three yourself (self-hosted logs + traces + Prometheus/Grafana — AntKart removed the metrics half as disproportionate to a two-node cluster), buy a managed APM that does all three (Datadog is under evaluation), or skip traces (cheaper, but you can't answer "where did the time go" across services). Delivering logs + traces via Azure Monitor buys cross-signal correlation with no infra to run, at the cost of no metrics *for now* — an honest scope, not a hidden gap.
@@ -3293,6 +3920,23 @@ traces. Writing to stdout (not a file or a sink with credentials) means the plat
 app holding any logging secret.
 
 **How it works** — Each log event is an object — a message template plus named properties — not a formatted string, so you can later query "all events where `OrderId = X`." **Enrichers** attach ambient context to every event (`ServiceName`, `Environment`, `TraceId`/`SpanId`, `CorrelationId`). In the cloud, Serilog writes one **compact-JSON** line per event to **stdout**; the AKS Azure Monitor agent scrapes stdout from every node into the `ContainerLog` table. Writing to stdout (not a file or a credentialed sink) is what makes log collection secret-less.
+
+```mermaid
+flowchart TD
+    EV["event = message template + named properties"]:::service
+    ENR["enrichers: ServiceName · TraceId · SpanId · CorrelationId"]:::service
+    JSON["cloud: compact JSON → stdout"]:::service
+    AGENT["Azure Monitor agent scrapes stdout"]:::edge
+    CL[("ContainerLog — queryable by field")]:::datastore
+    EV --> ENR --> JSON --> AGENT --> CL
+    NOTE["stdout (no file / no sink) = NO logging credential · no ELK"]:::issue
+    NOTE -.-> JSON
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — `SerilogExtensions.AddSerilogLogging` (BuildingBlocks): the cloud branch is `WriteTo.Console(new RenderedCompactJsonFormatter())` (one JSON object per event); the dev branch is a human-readable template plus a rolling file for local convenience. Enrichers add `ServiceName`, `Environment`, `FromLogContext` (CorrelationId), and an `ActivityEnricher` that stamps `TraceId`/`SpanId` (the join to traces — Observability §4). There is **no Elasticsearch/Kibana sink** — ELK was replaced by Azure Monitor. Decision: [ADR-025](adr/ADR-025-observability-architecture.md).
 
@@ -3526,6 +4170,21 @@ error that looks like a KQL bug but is really the wrong API. Knowing which schem
 
 Pass workspace table names to the classic API and you get `BadArgumentError` — which reads like a KQL syntax bug but is really the wrong API/schema pairing.
 
+```mermaid
+flowchart TD
+    WSAPI["az monitor log-analytics query → WORKSPACE schema ✅<br/>AppRequests · AppDependencies · TimeGenerated"]:::service
+    CLASSIC["az monitor app-insights query → CLASSIC schema<br/>requests · dependencies · timestamp"]:::edge
+    ERR["workspace tables via the CLASSIC api → BadArgumentError<br/>(looks like a KQL bug — it's the wrong API)"]:::issue
+    WIN["Windows: single-quote KQL literals (CLI strips double quotes)"]:::issue
+    WSAPI -.-> ERR
+    CLASSIC -.-> ERR
+    WSAPI --> WIN
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — Because App Insights is workspace-based, all queries use the **workspace** schema via `az monitor log-analytics query`. The runbook's Phase 6.6 telemetry check is real KQL: `union AppRequests, AppDependencies | where TimeGenerated > ago(60m) | summarize roles=make_set(AppRoleName), spans=count() by OperationId | where array_length(roles) > 1` — a multi-role `OperationId` proves a request was traced across services. Logs are `ContainerLog | extend L = parse_json(LogEntry)`. Examples in [docs/development/5-observability.md](development/5-observability.md).
 
 **Alternatives and the trade-off** — There isn't a real "alternative" so much as a correct pairing: you must match the schema to the API. The portal query blade is an alternative surface (no CLI), and Azure Monitor Workbooks/dashboards sit on top of the same KQL. The trade is simply that KQL has a learning curve; the payoff is one query language across logs and traces in one workspace.
@@ -3575,6 +4234,23 @@ being honest. Removing it — and saying so — is a maturity signal, not a gap.
 | Discount's 2nd HTTP/1.1 Kestrel listener (for scraping) | OTel pinned to the 1.13.x line |
 
 Earlier, ELK/Kibana was also removed in favour of Azure Monitor. The removals are the point: knowing what a platform *left out* and why is interview-grade.
+
+```mermaid
+flowchart TD
+    BUILT["BUILT: kube-prometheus-stack (Prometheus + Grafana)<br/>ServiceMonitors · /metrics · Discount 2nd listener"]:::issue
+    REMOVED["→ REMOVED (disproportionate to a 2-node dev cluster)"]:::issue
+    KEPT["KEPT: Serilog logs + OTel traces"]:::service
+    DATADOG["managed APM (Datadog) under evaluation"]:::edge
+    KI["KI-008 (Discount /metrics scrape) → Withdrawn (moot)"]:::issue
+    BUILT --> REMOVED
+    REMOVED --> KEPT
+    REMOVED --> DATADOG
+    REMOVED -.-> KI
+
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
 
 **How AntKart uses it** — Concretely removed ([ADR-025](adr/ADR-025-observability-architecture.md)): the `deploy/argocd/monitoring/` Application + `monitoring` AppProject, the chart's `servicemonitor.yaml` template and `serviceMonitor`/`metricsPort` values, the BuildingBlocks metrics pipeline, and Discount's second Kestrel listener (reverting it to a single HTTP/2-only gRPC endpoint). What remains is logs + traces, untouched. A managed platform (Datadog) is under evaluation as the metrics answer. [ADR-025](adr/ADR-025-observability-architecture.md) is Accepted with the metrics portion **superseded**.
 
@@ -3626,6 +4302,23 @@ cluster (nothing external can push), makes Git the audit log of every change, an
 | Source of truth | wherever the pipeline ran | Git — also the audit log |
 
 Argo reports two statuses: **Sync** (`Synced`/`OutOfSync` — does live match Git?) and **Health** (`Healthy`/`Progressing`/`Degraded` — are the resources actually working?).
+
+```mermaid
+flowchart TD
+    PUSH["PUSH (classic CI) — pipeline holds cluster admin, kubectl inward<br/>rejected"]:::issue
+    CD["CD only bumps a tag in Git (never touches cluster)"]:::cicd
+    GIT["Git = source of truth + audit log"]:::cicd
+    ARGO["Argo CD IN-cluster reads Git → reconciles (pull)"]:::edge
+    CLUSTER["cluster matches Git (drift self-healed)"]:::service
+    CD --> GIT --> ARGO --> CLUSTER
+    NOTE["public repo → Argo clones ANONYMOUSLY (zero credential custody)"]:::service
+    NOTE -.-> ARGO
+
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+```
 
 **How AntKart uses it** — Argo CD runs *inside* the cluster and reconciles it to `master`. CD (GitHub Actions) never touches the cluster — it builds an image and **bumps a tag in Git**; Argo picks that up and deploys. Because the repo is public, Argo clones it **anonymously** — there's no external credential custody at all. Decisions: [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md), [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md); guide: [docs/guides/gitops-guide.md](guides/gitops-guide.md).
 
@@ -3950,6 +4643,22 @@ duplicated config or fragile shared config.
 
 The model determines where a new environment's values go and whether Argo watches them where they change (ties to "what Argo does NOT watch").
 
+```mermaid
+flowchart TD
+    A["(a) values per environment — values/env/svc.yaml<br/>TODAY (simplest, duplicates common keys)"]:::service
+    B["(b) base + overlay — DRY, more indirection"]:::edge
+    C["(c) separate GitOps repo per environment<br/>TARGET (ADR-024)"]:::cicd
+    WHY["why (c): write-contention (one BuildingBlocks change trips all 6 CD jobs)<br/>+ Argo then watches its own objects"]:::issue
+    A --> C
+    B --> C
+    C --> WHY
+
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — Today it leans toward **(a)**: dev values under `deploy/helm/values/` plus parallel `deploy/helm/values/qa/` and `deploy/argocd/qa/`. The runbook §5.0 decision table lays out all three options for a new build. [ADR-024](adr/ADR-024-cd-gitops-write-contention.md) names a **separate GitOps repository (c)** as the long-term answer — driven by the CD write-contention problem where a shared repo makes six CD jobs race to push. Decision: [ADR-024](adr/ADR-024-cd-gitops-write-contention.md).
 
 **Alternatives and the trade-off** — The three models *are* the alternatives. (a) is the least ceremony and easiest to read, at the cost of duplicating shared keys across environments. (b) removes duplication but adds overlay indirection. (c) isolates each environment completely — and crucially moves the Argo objects and app config into a repo Argo actually watches, sidestepping the "Argo doesn't watch its own manifests" footgun and the multi-job write contention — at the cost of another repo and promotion path. AntKart runs (a) now and points at (c) as the destination.
@@ -3999,6 +4708,22 @@ commit, coupled only through Git — keeps the gate honest and the delivery pull
 | Deploys? | no — it's a gate | no — Argo does, from the Git bump |
 
 The two are **coupled only through Git**: the commit CI guarded is the same commit CD acts on, and CD's output is a Git commit that Argo reconciles. Neither pipeline holds cluster credentials.
+
+```mermaid
+flowchart TD
+    PR["pull request"]:::cicd
+    CI["CI: build-test → sonar → trivy<br/>(no image, no cluster) — the GATE"]:::cicd
+    MERGE["merge to master"]:::cicd
+    CD["CD: build + push SHA image (OIDC) → bump tag in Git<br/>(no helm / kubectl)"]:::cicd
+    ARGO["Argo CD deploys from the Git bump"]:::edge
+    PR --> CI --> MERGE --> CD --> ARGO
+    NOTE["coupled ONLY through Git · neither pipeline holds cluster credentials"]:::issue
+    NOTE -.-> CD
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — 12 workflows: 6 CI + 6 CD (a pair per service). CI (`products-ci.yml`) runs `build-test → sonar → trivy` on a PR — unit tests plus an in-memory MassTransit integration suite, no live infra. CD (`products-cd.yml`) runs `build-and-push → update-gitops`: build the image, push to ACR via OIDC, then `yq`-bump `.image.tag` in the values file. Argo deploys from that commit. One generic chart is reused per service. Decision: [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md).
 
@@ -4143,6 +4868,24 @@ to the pull request.
 | `sonar` / SonarCloud | code quality + coverage | the SonarCloud quality gate fails |
 | `trivy` | image/filesystem vuln + misconfig scan | a `HIGH`/`CRITICAL` finding (`exit-code: 1`) |
 
+```mermaid
+flowchart TD
+    PRQ["PR cannot merge until 4 REQUIRED checks pass"]:::cicd
+    BT["build-test (unit + in-memory integration)"]:::service
+    SN["SonarCloud quality gate"]:::service
+    TV["Trivy HIGH/CRITICAL · exit-code 1 → BLOCKS merge"]:::issue
+    ADMIN["repo admin BYPASS for infra/docs (gated by terraform plan)"]:::edge
+    PRQ --> BT
+    PRQ --> SN
+    PRQ --> TV
+    PRQ -.-> ADMIN
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
+
 **How AntKart uses it** — The `master-protection` ruleset requires **four** checks — `build-test`, `sonar`, `trivy`, and SonarCloud's own PR gate — before merge. Trivy runs with `TRIVY_SEVERITY: HIGH,CRITICAL` and `exit-code: 1` (a finding fails the job), scanning both the filesystem and the Dockerfile. **Repository admin is on the bypass list** for infrastructure/docs changes, which are gated differently (a `terraform plan` review), so application code goes through the PR gate while infra/docs can go direct. Decision: [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md); details in [docs/development/4-devops.md](development/4-devops.md).
 
 **Alternatives and the trade-off** — Alternatives: human review only (misses coverage regressions and CVEs), scanning *after* deploy (too late — the vulnerable image already shipped), or no enforced gates (anything merges). Required checks make "it passed" a *precondition* of merge rather than a hope, at the cost of gate latency on every PR and some false positives to triage. The admin bypass for infra/docs is a pragmatic split so a doc typo doesn't sit behind the full app gate.
@@ -4186,6 +4929,24 @@ half-completes a delivery (CD). The two keep the pipeline efficient and safe.
 | Concurrency group | `products-ci-${{ github.ref }}` | `products-cd` (per service) |
 | `cancel-in-progress` | `true` (a new push cancels the stale run) | `false` (never cancel a half-done deploy) |
 
+```mermaid
+flowchart TD
+    PUSH["push to master"]:::cicd
+    FILTER["on.push.paths: service + AK.BuildingBlocks + '!**/*.md' LAST<br/>(later patterns win)"]:::cicd
+    RUN["service CD runs only if relevant files changed"]:::service
+    CONC["concurrency: CI cancel-in-progress=true · CD=false<br/>(never cancel a half-done deploy)"]:::edge
+    LOOP["CD filter EXCLUDES deploy/helm/values → tag-bump can't retrigger CD"]:::issue
+    KI["KI-006: missing '!**/*.md' once fired 5 CD pipelines (resolved)"]:::issue
+    PUSH --> FILTER --> RUN --> CONC
+    FILTER -.-> LOOP
+    FILTER -.-> KI
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — CI/CD path filters include the service folder, `AK.BuildingBlocks/**`, and `- '!**/*.md'` **last**. CI cancels superseded runs (`cancel-in-progress: true`); CD does **not** (`false`) — a half-finished delivery is worse than waiting. The CD filter deliberately **excludes** `deploy/helm/values/**`, so CD's own tag-bump commit can't retrigger CD (the loop guard). Gap: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-006; related [ADR-024](adr/ADR-024-cd-gitops-write-contention.md).
 
 **Alternatives and the trade-off** — Alternatives: no path filters (every commit runs every service's pipeline — wasteful and, per KI-006, actively harmful), workflow-level rather than job-level concurrency (coarser), or `paths-ignore` instead of a trailing negation (equivalent but easy to misorder). Filters + per-workflow concurrency buy efficiency and safety — only relevant pipelines run, and deliveries don't collide — at the cost of getting the pattern order and the loop-guard exclusion exactly right.
@@ -4224,6 +4985,24 @@ cached image after a new push to the same tag, so a deploy silently doesn't take
 SHA tag makes every deploy reference distinct bytes — what you see in Git is what runs.
 
 **How it works** — Every build tags the image with the **short commit SHA** (`${GITHUB_SHA::7}`) — a tag that is *immutable*: it always names the exact bytes built from that commit, and it's never reused. CD then writes that tag into the Git values file, and Argo deploys it. The anti-pattern is a **mutable** tag (`dev`, `latest`) reused across builds: with `imagePullPolicy: IfNotPresent`, a node keeps serving the *old* cached image even after a new push to the same tag, so a deploy silently doesn't take.
+
+```mermaid
+flowchart TD
+    BUILD["CD build"]:::cicd
+    SHA["tag = short commit SHA — IMMUTABLE (never reused)"]:::cicd
+    PUSH["push antkart/service:sha (+ latest pointer for humans)"]:::paas
+    BUMP["yq bumps .image.tag in Git → Argo deploys"]:::edge
+    RUN["what's in Git = what runs (traces to a commit)"]:::service
+    BUILD --> SHA --> PUSH --> BUMP --> RUN
+    KI["KI-004: mutable tag (latest) + IfNotPresent → node serves STALE cached image<br/>fixed by immutable SHA tags"]:::issue
+    SHA -.-> KI
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — CD builds `acrantkartdev.azurecr.io/antkart/<service>:<sha>` (plus a `latest` convenience pointer) and `yq`-bumps `.image.tag` in the service's values file to that SHA. Argo syncs and deploys the SHA-tagged image. Because the tag is a commit SHA, **what's in Git is exactly what runs**, and any running image traces back to a precise commit. Decision: [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md).
 
