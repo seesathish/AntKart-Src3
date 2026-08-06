@@ -1171,6 +1171,26 @@ step turns "hope it works" into "read the diff first."
 | `plan` | show the create/update/destroy diff | **always read it first** |
 | `apply` | make the change, update state | one wave at a time on a first build |
 
+```mermaid
+flowchart TD
+    CODE["declared desired state<br/>(modules + units)"]:::cicd
+    PLAN["terragrunt plan<br/>diff: create / update / destroy"]:::cicd
+    READ["human READS the diff"]:::edge
+    APPLY["terragrunt apply<br/>(one wave at a time)"]:::cicd
+    AZ["real Azure resources"]:::paas
+    STATE[("state — updated")]:::datastore
+    CODE --> PLAN --> READ --> APPLY --> AZ
+    APPLY --> STATE
+    DRIFT["portal change → next plan shows DRIFT → apply reconciles"]:::issue
+    DRIFT -.-> PLAN
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
+
 **How AntKart uses it** — Every resource is a declaration in `infrastructure/modules/` instantiated per environment under `infrastructure/environments/dev/`. The runbook's standing rules are literally "**plan before apply, every time**" and "**one wave at a time** — do not `run-all apply` across the whole tree on a first build." So a build is: `terragrunt plan` a unit, read the diff, `apply`, verify, move to the next wave. Decision: [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md); guide: [docs/guides/iac-concepts.md](guides/iac-concepts.md).
 
 **Alternatives and the trade-off** — Alternatives: portal clicks or imperative scripts (no record, drifts, unreproducible), ARM/Bicep (Azure-only), or Pulumi (general-purpose languages). [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md) rejected Bicep/ARM (single-cloud, less portable) and Pulumi in favour of Terraform's mature declarative model + Terragrunt orchestration. Declarative IaC trades a learning curve and a state file to manage for reviewable, versioned, reproducible infrastructure with a mandatory "read the diff" gate.
@@ -1396,6 +1416,26 @@ another. Terragrunt's `generate` and `include` blocks put that config in exactly
 and its `dependency` blocks wire units together — keeping the tree DRY.
 
 **How it works** — Terragrunt sits on top of Terraform and adds three things plain Terraform lacks a DRY answer for: **`generate` blocks** that write the backend/provider/versions config into every unit from one place; an **`include` block** that pulls a shared `root.hcl` into each unit; and **`dependency` blocks** that pass one unit's outputs into another. You run `terragrunt` instead of `terraform`; it generates the boilerplate, resolves dependencies, then calls Terraform underneath.
+
+```mermaid
+flowchart TD
+    ROOT["root.hcl (ONE file)"]:::cicd
+    GEN["generate blocks →<br/>backend.tf · provider.tf · versions.tf"]:::cicd
+    subgraph UNITS["each of the 18 units"]
+        U1["aks/terragrunt.hcl<br/>include root + inputs + dependency"]:::paas
+        U2["postgresql/terragrunt.hcl"]:::paas
+    end
+    TF["Terraform (runs underneath)"]:::edge
+    ROOT --> GEN
+    GEN -->|written into| U1
+    GEN -->|written into| U2
+    U1 --> TF
+    U2 --> TF
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+```
 
 **How AntKart uses it** — `infrastructure/environments/dev/root.hcl` has `generate` blocks that emit `backend.tf`, `provider.tf`, and `versions.tf` into every unit at init — so the backend, the azurerm provider, and the version pins live in **exactly one file**. Each unit's `terragrunt.hcl` starts with `include "root" { path = find_in_parent_folders("root.hcl") }` to inherit all of it. The 18 units therefore share one backend/provider/versions definition instead of copy-pasting it 18 times. Decision: [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md); guide: [docs/guides/iac-concepts.md](guides/iac-concepts.md) §2.
 
@@ -1642,6 +1682,23 @@ same code. Pinning plus a lock file make provider resolution reproducible.
 | Says | which versions are *allowed* | which version was *chosen* + checksums |
 | Where | `versions.tf` (generated from `root.hcl`) | one per unit, **committed** |
 | Written by | you | `terraform init` |
+
+```mermaid
+flowchart TD
+    PIN["required_providers CONSTRAINT<br/>azurerm ~> 4.76 (allowed versions)"]:::cicd
+    INIT["terraform init<br/>resolves within the constraint"]:::edge
+    LOCK[("committed .terraform.lock.hcl<br/>EXACT version + checksums")]:::datastore
+    ALL["every machine + CI installs identical providers"]:::paas
+    PIN --> INIT --> LOCK --> ALL
+    KI["KI-012: some dev locks predate the shared pins<br/>→ only azurerm recorded (azuread/random unpinned there)"]:::issue
+    KI -.-> LOCK
+
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
 **How AntKart uses it** — The pins are central: `root.hcl` generates the `versions.tf` for every unit with azurerm `~> 4.76`, azuread `~> 3.0`, random `~> 3.6` — one source of truth. Each of the 18 dev units (and 18 qa units) commits its own `.terraform.lock.hcl` so provider resolution is reproducible. Decision: [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md).
 
