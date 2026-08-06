@@ -89,24 +89,39 @@ the web framework, so you cannot change one without breaking the other, and you 
 the rules without spinning up infrastructure. The dependency rule keeps the core testable in
 isolation and lets the outer, volatile layers be swapped without touching the business logic.
 
-**How it works** — _To be written._
+**How it works** — Four layers, dependencies pointing only inward:
 
-**How AntKart uses it** — _To be written._
+| Layer | Depends on | Holds | Never contains |
+|---|---|---|---|
+| **Domain** | nothing | entities, value objects, domain events, specifications, business rules | EF Core, Mongo, HTTP, MassTransit |
+| **Application** | Domain, BuildingBlocks | CQRS handlers, DTOs, validators, interfaces (`IOrderRepository`) | concrete DB/broker code |
+| **Infrastructure** | Application (+ Domain) | EF/Mongo, repositories, DbContext, messaging, the interface *implementations* | — |
+| **API / Grpc** | Application, Infrastructure | the thin host, endpoints, DI wiring | business logic |
 
-**Alternatives and the trade-off** — _To be written._
+The inward rule means the Domain is a pure library you can unit-test with no database or broker, and the volatile outer layers can be swapped without touching it. Dependencies are inverted at the boundary: the Application *declares* `IOrderRepository`; Infrastructure *implements* it.
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — Every service repeats the same four projects (`AK.<Service>.Domain/.Application/.Infrastructure/.API`). The direction is enforced by `ProjectReference`, not discipline: `AK.Order.Application` references only `AK.Order.Domain` + `AK.BuildingBlocks`; `AK.Order.Infrastructure` references Application. `MongoDB.Driver` is confined to `AK.Products.Infrastructure`; the Products Domain has zero infrastructure dependencies. Tests reference Domain/Application/Infrastructure but never the API/Grpc host, so the whole platform is unit-tested without a running host.
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — The alternative is classic **n-tier** (the business layer depends *downward* on the data layer, so rules are coupled to the database) or a **transaction-script / "big ball of mud"** where everything sits in the controller. Clean Architecture inverts the data dependency so the core is dependency-free, at the cost of more projects and a little ceremony (an interface in Application, an implementation in Infrastructure). For a six-service platform meant to be testable and independently evolvable, that ceremony pays for itself. Decision: [ADR-002](adr/ADR-002-clean-architecture-and-ddd.md).
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **A Domain type referencing a driver is the smell.** If `MongoDB.Driver` or `DbContext` appears in a Domain file, the rule is broken — the compiler won't catch it (the ProjectReference allows transitive types), so it's a review discipline.
+- **The ADRs misplace the saga.** [ADR-002](adr/ADR-002-clean-architecture-and-ddd.md)/[ADR-005](adr/ADR-005-saga-orchestration.md) say `OrderSaga` lives in Infrastructure; it's actually in `AK.Order.Application/Sagas/`. Trust the code. (No KI.)
+
+**Interview traps** —
+- *"Which way do dependencies point, and why inward?"* — Inward, toward the Domain, so the core has no framework dependencies and stays testable/swappable. "Layers on top of each other" without the direction is a read-about answer.
+- *"How is the rule actually enforced here?"* — By `ProjectReference` graphs, not convention — Application literally cannot see Infrastructure.
+- *"Where does `MongoDB.Driver` live and why does that matter?"* — Only in `AK.Products.Infrastructure`; keeping it out of Domain is the whole point of the rule.
+- *"Isn't this over-engineering for CRUD?"* — For one CRUD endpoint, maybe; for six coordinating services with different stores, the dependency-free core is what lets them share patterns and stay testable (ADR-002).
+
+**The 60-second answer** — "Every service is four layers — Domain, Application, Infrastructure, API — and dependencies only ever point inward toward the Domain. The Domain is pure: entities, value objects, business rules, no EF Core, no Mongo, no HTTP. Application sits on Domain and holds the CQRS handlers and the *interfaces* like `IOrderRepository`; Infrastructure implements those interfaces and owns the database and messaging; the API host is thin. We enforce it with ProjectReference graphs, not discipline — Application can't even see Infrastructure. The payoff is a dependency-free core we unit-test with no database and volatile outer layers we can swap without touching the rules."
 
 **Read the code** — The dependency direction is enforced by `ProjectReference`, not convention:
 `AK.Order/AK.Order.Application/AK.Order.Application.csproj` references only `AK.Order.Domain` and
 `AK.BuildingBlocks` (Application never sees Infrastructure); `AK.Order/AK.Order.Infrastructure/AK.Order.Infrastructure.csproj`
 references Domain + Application. Decision: [ADR-002](adr/ADR-002-clean-architecture-and-ddd.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Draw the four layers and the inward arrows from memory, and state which project each of (`Order` entity, `IOrderRepository`, `OrderRepository`, `OrderEndpoints`) lives in. Then open any service and confirm its `.Application.csproj` has no reference to `.Infrastructure`.
 
 ---
 
@@ -219,17 +234,45 @@ its own input, and validation logic drifts and duplicates. Centralising it means
 assume its request is already valid, and a validation failure produces one consistent HTTP 400
 across every service.
 
-**How it works** — _To be written._
+**How it works** — MediatR lets you wrap every `Send` in a chain of `IPipelineBehavior<TRequest,TResponse>`. `ValidationBehavior` receives all the `IValidator<TRequest>` registered for the incoming request, runs them, collects the failures, and — if any — throws `FluentValidation.ValidationException` *before* calling `next()` (the handler). If validation passes, it calls the handler. So the handler only ever runs against valid input, and the failure path is identical for every request type.
 
-**How AntKart uses it** — _To be written._
+```mermaid
+flowchart TD
+    REQ["IMediator.Send(request)"]:::service
+    VB["ValidationBehavior&lt;TRequest,TResponse&gt;"]:::service
+    VAL["run all IValidator&lt;TRequest&gt;"]:::service
+    H["handler (next)"]:::service
+    EX["throw ValidationException → 400"]:::issue
 
-**Alternatives and the trade-off** — _To be written._
+    REQ --> VB --> VAL
+    VAL -->|no failures| H
+    VAL -->|failures| EX
 
-**Gotchas** — _To be written._
+    classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
-**Interview traps** — _To be written._
+**How AntKart uses it** — There is **one** `ValidationBehavior` in `AK.BuildingBlocks/Behaviors`, shared by every service — no per-service copies. Each service's `AddApplication` registers it open-generic (`AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>))`) and scans the assembly for validators (`AddValidatorsFromAssembly`). The thrown `FluentValidation.ValidationException` is mapped to **HTTP 400** by the shared `ExceptionHandlerMiddleware` (or to gRPC `InvalidArgument` by the interceptor in Discount).
 
-**The 60-second answer** — _To be written._
+**Alternatives and the trade-off** — Alternatives: validate inside each handler (scattered, easy to forget), use `[ApiController]` + data annotations (limited expressiveness, and AntKart deliberately avoids `[ApiController]`), or call validators manually at the endpoint. The pipeline behaviour centralises it so a handler can *assume* validity and the 400 response is uniform, at the cost of a little MediatR indirection (validation happens "somewhere in the pipeline," not in the handler you're reading). Worth it for consistency across six services.
+
+**Gotchas** —
+- **No registered validator means no validation — silently.** The behaviour runs whatever `IValidator<TRequest>` exists; if you forget to register the validators assembly (or misname a validator), the request sails through with zero checks and no error. (No KI; a real footgun.)
+- **It throws, it doesn't return a `Result`.** Validation failures are exceptions mapped to 400 — distinct from the `Result<T>` pattern AntKart uses for *expected business* failures (not found, invalid transition). Don't conflate the two.
+
+**Interview traps** —
+- *"Where does request validation run and why there?"* — In a MediatR `IPipelineBehavior` before the handler, so every command/query is validated uniformly and handlers assume valid input.
+- *"How does a validation failure become an HTTP 400?"* — The behaviour throws `FluentValidation.ValidationException`; `ExceptionHandlerMiddleware` maps it to 400. Testing whether you know the end-to-end path.
+- *"You added a validator but it never runs — why?"* — Its assembly wasn't scanned/registered; the behaviour only invokes registered validators. The ran-it question.
+- *"Why not just use data annotations?"* — Less expressive, couples validation to DTO attributes, and the project avoids `[ApiController]`; FluentValidation in a pipeline is testable and centralised.
+
+**The 60-second answer** — "Validation is a single MediatR pipeline behaviour shared across every service. Before any handler runs, `ValidationBehavior` pulls all the FluentValidation validators registered for that request type, runs them, and if any fail it throws a `ValidationException` — which our shared exception middleware turns into a 400. If they pass, it calls the handler. So validation lives in exactly one place, handlers can assume valid input, and every service returns the same shape of 400. The subtle trap is that it only runs *registered* validators — forget to register them and requests pass unchecked with no error."
 
 **Read the code** — `AK.BuildingBlocks/AK.BuildingBlocks/Behaviors/ValidationBehavior.cs` (the
 shared behaviour; throws `FluentValidation.ValidationException`); wired open-generic in
@@ -237,7 +280,7 @@ shared behaviour; throws `FluentValidation.ValidationException`); wired open-gen
 (`AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>))`). The exception maps to
 HTTP 400 in `ExceptionHandlerMiddleware`.
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Explain, without notes, why the behaviour runs before the handler and what happens when no validator is registered. Then trace a bad `CreateOrderCommand` from `Send` → behaviour → exception → 400, predicting the status code before you check the endpoint.
 
 ---
 
@@ -254,17 +297,31 @@ EF Core and scatter query logic everywhere. Repositories invert that dependency 
 the interface, Infrastructure implements it); specifications make queries testable and reusable;
 the unit of work ensures a set of changes commits atomically rather than piecemeal.
 
-**How it works** — _To be written._
+**How it works** — Three patterns divide the persistence job:
 
-**How AntKart uses it** — _To be written._
+| Pattern | Where | Job |
+|---|---|---|
+| **Repository** | interface in Application, impl in Infrastructure | collection-like access (`GetByIdAsync`, `AddAsync`, `ListAsync(spec)`) that hides the store |
+| **Specification** | Domain | a reusable query object — criteria + includes + paging — so query logic is testable and named, not ad-hoc LINQ in handlers |
+| **Unit of Work** | interface in Application, impl over DbContext | groups changes and commits them atomically via one `SaveChangesAsync` |
 
-**Alternatives and the trade-off** — _To be written._
+A handler asks the repository for data (optionally passing a specification), mutates aggregates, then calls `uow.SaveChangesAsync()` once — so multiple changes land in a single transaction, and the handler never touches `DbContext`.
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — `IOrderRepository` (Application) exposes `GetByIdAsync`, `ListAsync(ISpecification<Order>)`, `AddAsync`, `CountAsync`, etc.; `OrderRepository` (Infrastructure) implements it over `OrderDbContext`. Specifications live in `AK.Order.Domain/Specifications/` (`OrderByIdSpecification`, `OrdersByUserSpecification`, `OrdersByStatusSpecification`, `OrdersPagedSpecification`) on a shared `BaseSpecification`. `IUnitOfWork` exposes `Orders` + `SaveChangesAsync`. The same trio appears in Products (over Mongo) and ShoppingCart, so the pattern is uniform across stores.
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — The alternative is injecting `DbContext` straight into handlers (couples Application to EF Core and scatters LINQ) or a single generic `Repository<T>` (less abstraction but leaks IQueryable). The known critique — **"EF Core's `DbContext` is already a Unit of Work and its `DbSet`s are already repositories"** — is real: this adds a layer on top of one. AntKart accepts that indirection deliberately, for a testable Application layer that mocks `IOrderRepository`/`IUnitOfWork` and for query reuse via specifications. Decision: [ADR-011](adr/ADR-011-Repository-Specification-and-Unit-of-Work.md).
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **You are wrapping something that is already a UoW+repo.** That's the standard objection; know it and know why the abstraction is still chosen (testability, store-agnostic handlers). (No KI.)
+- **A specification with the wrong `Includes` causes N+1 or over-fetching.** The query lives in the spec, so a performance bug hides there, not in the handler.
+
+**Interview traps** —
+- *"Isn't `DbContext` already a Unit of Work and repository? Why wrap it?"* — Yes it is; the wrapper buys a mockable Application boundary and store-agnostic handlers. Answering only "abstraction is good" is read-about; naming the objection is ran-it.
+- *"What does a Specification give you over a LINQ query in the handler?"* — Reuse, a name, testability, and it keeps query logic in the Domain rather than the Application layer.
+- *"How do two changes in one handler commit atomically?"* — One `IUnitOfWork.SaveChangesAsync()` — the DbContext transaction spans both. Testing whether you know where the transaction boundary is.
+- *"Where does the repository interface live vs its implementation, and why split them?"* — Interface in Application, implementation in Infrastructure — the dependency-inversion seam of Clean Architecture.
+
+**The 60-second answer** — "Persistence is three patterns. The Repository is an interface in the Application layer — `IOrderRepository` — implemented in Infrastructure over the DbContext, so handlers get collection-like access and never see EF Core. A Specification is a reusable query object in the Domain, so query logic is named and testable instead of ad-hoc LINQ in handlers. And the Unit of Work groups a handler's changes into one `SaveChangesAsync` so they commit atomically. The honest caveat is that EF's DbContext is already a unit of work and its DbSets are already repositories — we wrap them anyway, deliberately, to keep the Application layer mockable and store-agnostic, which matters across Postgres, Mongo, and Redis services."
 
 **Read the code** — `AK.Order/AK.Order.Application/Common/Interfaces/IOrderRepository.cs` and
 `IUnitOfWork.cs` (Application-layer interfaces); `AK.Order/AK.Order.Infrastructure/Persistence/Repositories/OrderRepository.cs`
@@ -272,7 +329,7 @@ and `UnitOfWork.cs` (implementations); `AK.Order/AK.Order.Domain/Specifications/
 `AK.Order/AK.Order.Domain/Common/BaseSpecification.cs` (the specification base + concrete specs).
 Decision: [ADR-011](adr/ADR-011-Repository-Specification-and-Unit-of-Work.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain the "DbContext is already a UoW" objection and AntKart's answer to it. Then open `OrdersByUserSpecification` and predict the SQL shape (filter + paging) before reading the repository call.
 
 ---
 
@@ -289,24 +346,40 @@ onto the wire, coupling other services to its domain model. Keeping them separat
 can raise rich in-process events without any messaging dependency, and only a deliberately-shaped,
 denormalised integration event crosses the service boundary.
 
-**How it works** — _To be written._
+**How it works** — Two events, two scopes, two lifetimes:
 
-**How AntKart uses it** — _To be written._
+| | Domain event | Integration event |
+|---|---|---|
+| **Scope** | in-process, one service | cross-service, over the bus |
+| **Raised by** | the aggregate (`order.AddDomainEvent(...)`) | a handler/consumer publishing to Service Bus |
+| **Shape** | rich, domain-shaped | denormalised, deliberately flat (enriched with e.g. `CustomerEmail`, `OrderNumber`) |
+| **Lives in** | `Domain/Events/` | `AK.BuildingBlocks/Messaging/IntegrationEvents/` (a shared contract) |
+| **Dependency** | none (Domain has no messaging) | the messaging contract both sides reference |
 
-**Alternatives and the trade-off** — _To be written._
+An aggregate raises a domain event as a fact ("order created"); it's dispatched in-process after the save. When that fact must leave the service, a handler publishes a *separate* integration event — a stable, denormalised contract — so other services never see the internal domain model.
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — Domain events (`OrderCreatedEvent`, `OrderStatusChangedEvent`, `OrderCancelledEvent`) are raised inside `Order.cs` and cleared after commit (`order.ClearDomainEvents()`). The cross-service contracts live once in `AK.BuildingBlocks/Messaging/IntegrationEvents/` (`OrderCreatedIntegrationEvent`, `StockReservedIntegrationEvent`, `PaymentSucceededIntegrationEvent`, …) and are *enriched* — they carry `CustomerEmail`/`CustomerName`/`OrderNumber` so consumers needn't call back. One definition, referenced by both publisher and consumer, so the shape can't drift. Decision: [ADR-009](adr/ADR-009-domain-events-vs-integration-events.md); shared-contracts rationale: [ADR-008](adr/ADR-008-shared-ddd-contracts-in-buildingblocks.md).
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — You could publish the domain event directly to the bus (simplest, but couples every consumer to your domain model and every internal change leaks onto the wire) or duplicate the integration contract in each service (drifts). AntKart keeps them separate and puts the integration contract in BuildingBlocks — one shared type — trading a little duplication of "shape" for a stable cross-service boundary. The enrichment (copying `CustomerEmail` into the event) is deliberate denormalisation so consumers avoid a callback.
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **Publishing the domain event across the bus is the classic mistake.** It couples consumers to your internals and forces a version dance on every domain change. Keep the wire contract separate.
+- **Enriched integration events denormalise on purpose.** Copying `CustomerEmail` into the event isn't sloppiness — it lets the consumer act without calling back (and matches the saga carrying context in its state). (No KI.)
+
+**Interview traps** —
+- *"What's the difference between a domain event and an integration event?"* — Scope and coupling: in-process vs cross-service; the domain event is domain-shaped, the integration event is a stable denormalised contract. If you say "they're the same, just a bus," you've missed it.
+- *"Why not publish the domain event straight to Service Bus?"* — It couples consumers to your domain model and versions badly. The design question.
+- *"Where does the integration-event type live and why there?"* — In BuildingBlocks, referenced by both publisher and consumer, so one definition can't drift (ADR-008).
+- *"Why does `OrderCreatedIntegrationEvent` carry the customer email when the order already has it?"* — Deliberate enrichment/denormalisation so the consumer needn't call back.
+
+**The 60-second answer** — "There are two kinds of event. A domain event is raised inside an aggregate and handled in-process, in the same service and transaction — it's domain-shaped and the Domain has no messaging dependency at all. An integration event is what crosses the service boundary over Service Bus, and it's a separate, stable, denormalised contract that lives once in BuildingBlocks so the publisher and consumer share one definition. We never publish the domain event onto the wire — that would couple every consumer to our internals. And the integration events are enriched — they carry things like the customer's email — so a consumer can act without calling back."
 
 **Read the code** — Domain events: `AK.Order/AK.Order.Domain/Events/` (`OrderCreatedEvent`,
 `OrderStatusChangedEvent`, `OrderCancelledEvent`), raised inside `AK.Order/AK.Order.Domain/Entities/Order.cs`.
 Integration events: `AK.BuildingBlocks/AK.BuildingBlocks/Messaging/IntegrationEvents/` (the shared
 cross-service contracts). Decision: [ADR-009](adr/ADR-009-domain-events-vs-integration-events.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, give two reasons never to publish a domain event across the bus, and explain why the integration events are enriched. Then list which `AK.BuildingBlocks/Messaging/IntegrationEvents/` type each of Order/Products/Payments publishes.
 
 ---
 
@@ -529,17 +602,49 @@ consumer registration, and topology per service, and threading a secret connecti
 A framework plus a shared helper standardises all of that and lets the platform authenticate to the
 broker with a managed identity instead of a stored key.
 
-**How it works** — _To be written._
+**How it works** — MassTransit is an abstraction over the broker: you write `IConsumer<T>` classes and call `Publish`/`Send`, and it handles serialization, retries, and endpoint wiring. Underneath, Azure Service Bus provides the topic + per-service subscriptions. One BuildingBlocks helper wires every service to the same namespace using `DefaultAzureCredential` (an Entra token, **no connection string**), binds each service to explicit subscription endpoints, and gives each a unique name prefix so subscriptions don't collide.
 
-**How AntKart uses it** — _To be written._
+```mermaid
+flowchart TD
+    PUB["publisher (Order/Payments)"]:::service
+    TOPIC["Service Bus topic<br/>integration-events"]:::paas
+    subgraph SUBS["explicit subscriptions (IaC-owned)"]
+        SO["order"]:::datastore
+        SP["products"]:::datastore
+        SPay["payments"]:::datastore
+        SC["cart"]:::datastore
+    end
+    CON["IConsumer&lt;T&gt; in each service"]:::service
+    PUB --> TOPIC --> SUBS --> CON
+    AUTH["DefaultAzureCredential — no connection string"]:::identity
+    AUTH -.-> TOPIC
 
-**Alternatives and the trade-off** — _To be written._
+    classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — `AddAzureServiceBusMassTransit(config, registerConsumers, configureEndpoints)` in BuildingBlocks connects to `ServiceBus:FullyQualifiedNamespace` with `DefaultAzureCredential`. All eight integration-event types share one topic, `integration-events`; each service binds **explicit `SubscriptionEndpoint`s** (there is no `ConfigureEndpoints`) with a unique prefix (`order`, `products`, `payments`, `cart`). Crucially, **topology is owned by infrastructure-as-code**, not created at runtime — the identity holds Data Sender/Receiver, not Manage. Message retry is `Incremental(3, 1s, 2s)`. Decisions: [ADR-007](adr/ADR-007-masstransit-over-raw-rabbitmq.md), [ADR-015](adr/ADR-015-messaging-migration-to-service-bus.md).
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — Alternatives: talk to Service Bus with the raw SDK (hand-roll serialization, retries, consumer wiring, connection strings) or stay on RabbitMQ (self-managed broker — [ADR-007](adr/ADR-007-masstransit-over-raw-rabbitmq.md) chose MassTransit's abstraction; [ADR-015](adr/ADR-015-messaging-migration-to-service-bus.md) migrated the transport to managed Service Bus with Entra auth). MassTransit + a shared helper buys standardised consumers, retries, the outbox, and *secret-less* broker auth, at the cost of an abstraction layer and MassTransit's own conventions (e.g. its topology reconciliation, which collides with least-privilege RBAC — see gotcha).
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **KI-014 (High):** MassTransit tries to reconcile subscriptions at startup — a **management-plane** call — but the identity holds only Data Sender/Receiver, so it faults `401 SubCode 40100`, **logged as a warning not thrown**; pods stay healthy while messaging is silently broken. Topology must be provisioned by IaC (or the identity granted Data Owner). Source: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-014.
+- **No connection string anywhere.** Auth is `DefaultAzureCredential`; if you go looking for a Service Bus connection string secret, there isn't one (and shouldn't be).
+- **Explicit endpoints, not `ConfigureEndpoints`.** Topology is IaC-owned; MassTransit is told exactly which subscriptions to consume.
+
+**Interview traps** —
+- *"How does the platform authenticate to Service Bus?"* — `DefaultAzureCredential` (Entra token), no SAS/connection string. The secret-less point.
+- *"Everything reports healthy but no messages flow — where do you look?"* — KI-014: MassTransit's management-plane topology call failing on a data-plane-only identity, logged as a warning. The diagnostic question.
+- *"Who owns the topic/subscription topology?"* — Infrastructure-as-code, not runtime — the identity can't Manage. Testing least-privilege awareness.
+- *"Why MassTransit instead of the raw Service Bus SDK?"* — Standardised consumers, retries, the EF outbox, and secret-less auth in one helper; the trade is an abstraction and its conventions.
+
+**The 60-second answer** — "MassTransit is our messaging abstraction over Azure Service Bus — you write `IConsumer<T>` classes and publish, and it handles serialization, retries, and endpoint wiring. One BuildingBlocks helper connects every service to the namespace with `DefaultAzureCredential` — an Entra token, no connection string — onto a single `integration-events` topic with a per-service subscription. Topology is owned by infrastructure-as-code, not created at runtime, because the identity holds Data Sender and Receiver, not Manage. That last point is also the gotcha, KI-014: MassTransit tries to reconcile subscriptions at startup, which is a management-plane call it isn't allowed to make, and it logs a warning instead of throwing — so pods look healthy while messaging is silently broken until the topology is provisioned by IaC."
 
 **Read the code** — `AK.BuildingBlocks/AK.BuildingBlocks/Messaging/MassTransitExtensions.cs`
 (`AddAzureServiceBusMassTransit`, `DefaultAzureCredential` host auth, shared `integration-events`
@@ -548,7 +653,7 @@ topic, explicit subscription endpoints — no runtime topology creation); per-se
 [ADR-007](adr/ADR-007-masstransit-over-raw-rabbitmq.md),
 [ADR-015](adr/ADR-015-messaging-migration-to-service-bus.md). Gap: KI-014.
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain secret-less broker auth and why topology is IaC-owned, then walk KI-014 as a management-vs-data-plane mismatch. Predict what `kubectl get pods` shows when messaging is silently broken (all Running/Healthy).
 
 ---
 
@@ -565,17 +670,33 @@ transaction and must never be able to roll it back or slow it down. Putting noti
 own fire-and-forget channel means a failed email can't fail an order, and the notification handler can
 scale to zero and cost nothing when idle — while the saga stays durable and exactly-tracked.
 
-**How it works** — _To be written._
+**How it works** — Two eventing mechanisms, chosen per job:
 
-**How AntKart uses it** — _To be written._
+| | Service Bus saga (durable) | Event Grid notifications (fire-and-forget) |
+|---|---|---|
+| **Carries** | the business transaction (order, stock, payment) | customer emails |
+| **Guarantee** | outbox + inbox, exactly-tracked, retried | best-effort; a failure is swallowed |
+| **Compute** | always-on services | scale-to-zero Azure Functions |
+| **Publish rule** | inside the saga | **after** the durable commit, `TryPublishAsync` (never throws) |
 
-**Alternatives and the trade-off** — _To be written._
+The order/payment is committed durably first; **only then** does the handler emit an Event Grid notification as a side-effect. `TryPublishAsync` never throws, so a failed publish can't roll back or fail the business operation. Event Grid pushes to a Functions app that dispatches the email through ACS and scales back to zero.
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — `IEventGridSideEffectPublisher.TryPublishAsync` is called after commit in `CreateOrderCommandHandler`, `VerifyPaymentCommandHandler`, and the `OrderConfirmed`/`OrderCancelled` consumers. The five event contracts live once in `AK.BuildingBlocks/Messaging/Notifications/` (`NotificationEventTypes` + the payload records), published to the `evgt-antkart-dev` topic. `AK.Notification.Functions` has one `[EventGridTrigger]` per event (`OnOrderCreated`, `OnPaymentSucceeded`, …); each is thin — deserialize, build a `NotificationRequest`, call `INotificationDispatcher` in `AK.Notification.Core`, which resolves a template and sends via the ACS email channel. Decision: [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — Alternatives: put notifications on the Service Bus saga (durable, but couples a non-critical email into the money-and-stock transaction and needs an always-on consumer) or send the email synchronously in the handler (a slow SMTP call blocks the request and a failure fails the order). The two-mechanism split trades delivery *guarantee* on notifications (they're best-effort) for the guarantee that **notifications can never affect the business transaction** — plus scale-to-zero cost. The durable saga keeps its guarantees; only the disposable side-effect is fire-and-forget.
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **A lost notification is silent by design.** `TryPublishAsync` swallows failures and returns `false`; there's no retry. That's deliberate — a notification must never fail an order — but it means email delivery is not guaranteed.
+- **A malformed Event Grid payload is logged and skipped, not crash-looped.** The Functions are defensive so a bad message doesn't wedge the trigger.
+- **Notifications are NOT the saga.** Don't reach for Event Grid when you need durable, tracked delivery — that's Service Bus.
+
+**Interview traps** —
+- *"Why two eventing systems instead of one bus?"* — Different guarantees: the saga must be durable and tracked; a notification must be unable to affect the transaction and should scale to zero. Using one bus for both couples them.
+- *"What order do the commit and the notification happen in, and why?"* — Commit first, notify after — commit-then-notify — so a publish failure can't roll back the business change.
+- *"What happens if the email publish fails?"* — Nothing to the order: `TryPublishAsync` never throws, returns false, no retry. The design question.
+- *"Why is the notification consumer serverless?"* — Bursty, idle-most-of-the-time workload; Consumption plan scales to zero and costs nothing when quiet.
+
+**The 60-second answer** — "We run two eventing mechanisms on purpose. The durable one is the Service Bus saga — orders, stock, payments — with an outbox and inbox so it's exactly-tracked and retried. The other is Event Grid for customer emails: after an order or payment is durably committed, the handler emits a fire-and-forget notification through `TryPublishAsync`, which never throws, so a failed email can't roll back or fail the transaction. Event Grid pushes to an Azure Functions app that sends the email through ACS and scales to zero when idle. The trade is that notifications are best-effort — a lost one is silent — but that's the point: a non-critical email must never be able to break the money-and-stock flow."
 
 **Read the code** — Publisher side: `AK.BuildingBlocks/AK.BuildingBlocks/Messaging/EventGrid/EventGridSideEffectPublisher.cs`
 (`TryPublishAsync`, never throws) and its use in
@@ -586,7 +707,7 @@ scale to zero and cost nothing when idle — while the saga stays durable and ex
 `AK.Notification/AK.Notification.Core/`. Decision:
 [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Explain commit-then-notify and why `TryPublishAsync` never throws, without notes. Then name which mechanism (Service Bus vs Event Grid) you'd use for a new "order shipped" email vs a new "reserve inventory" step, and why.
 
 ---
 
@@ -601,17 +722,31 @@ error, but blind infinite retries against a dead dependency make outages worse. 
 critical dependency be retried patiently while an optional one fails fast, so a slow or down service
 degrades gracefully instead of dragging the caller down with it.
 
-**How it works** — _To be written._
+**How it works** — A resilience policy wraps an outbound call with, typically, **retry** (re-try transient failures with backoff + jitter), a **circuit breaker** (stop calling a dependency that's failing so it can recover, and fail fast meanwhile), and a **timeout** (bound how long any attempt waits). The decisive idea in AntKart is **criticality tiering** — the policy differs by how important the dependency is:
 
-**How AntKart uses it** — _To be written._
+| Tier | Policy | Posture | Used for |
+|---|---|---|---|
+| **Critical** | `AddHttpResilienceWithCircuitBreaker` | patient: retry (exp+jitter) → circuit breaker → timeout | Order → Products price check (fail *closed*) |
+| **Optional** | `AddOptionalDependencyResilience` | fail-fast: **no retry**, quick-opening breaker, 2s timeout | Products → Discount gRPC |
+| **Data store** | `AddDataStoreResiliencePipeline` | honours a server `Retry-After` verbatim, else exp+jitter | Products → Cosmos (429 throttling) |
+| **DB / cache** | `AddNpgsqlResilience` / `AddRedisResilience` | retry with exp backoff + jitter (avoid thundering herd) | Postgres / Redis |
 
-**Alternatives and the trade-off** — _To be written._
+**How AntKart uses it** — All policies are centralised in `ResilienceExtensions` (BuildingBlocks). The Order→Products catalogue client uses the *patient* pipeline because pricing is critical and fails closed. The Products→Discount gRPC client uses `AddOptionalDependencyResilience` — **no retry** + a quick circuit-break + 2s timeout — so a down Discount degrades silently and never slows the catalogue. Products runs Cosmos calls through `AddDataStoreResiliencePipeline`, which **honours the 429 `RetryAfterMs`** rather than guessing. Npgsql uses exponential backoff + jitter so a DB reconnect doesn't stampede.
 
-**Gotchas** — _To be written._
+**Alternatives and the trade-off** — Alternatives: no resilience (every transient blip becomes a user error), a single blunt "retry everything" policy (amplifies outages, hammers a dead dependency), or per-caller ad-hoc `try/catch`. The tiered library trades a little upfront design (deciding each dependency's criticality) for graceful degradation that matches intent — patient for critical, fail-fast for optional. Decision: [ADR-003](adr/ADR-003-fault-tolerance-with-polly.md).
 
-**Interview traps** — _To be written._
+**Gotchas** —
+- **Retrying a non-idempotent write can double the effect.** Retry is safe for reads and idempotent operations; the platform applies patient retry to a *read* (price check), not to a payment charge.
+- **A circuit breaker turns a real outage into fast failures** — that's the point, but it means "it's suddenly returning instantly with errors" can be the breaker open, not the dependency healthy.
+- **Fail-fast is deliberate for optional deps.** Products→Discount has *no retry* on purpose; adding retry there would slow every catalogue render when Discount is down. (No KI.)
 
-**The 60-second answer** — _To be written._
+**Interview traps** —
+- *"Why does the Products→Discount call have no retry when everything else retries?"* — Criticality: Discount is optional, so it fails fast to protect the catalogue; retrying would slow the core request. The signature question.
+- *"How do you handle a Cosmos 429?"* — Honour the server's `Retry-After` verbatim (not a guessed backoff) via the data-store pipeline. Testing whether you know throttling etiquette.
+- *"When is retry unsafe?"* — Non-idempotent writes — you can double-apply. Testing distributed-systems care.
+- *"What does the circuit breaker actually buy you?"* — It stops hammering a failing dependency so it can recover, and fails fast meanwhile instead of piling up timeouts.
+
+**The 60-second answer** — "Resilience is Polly policies — retry, circuit breaker, timeout — but the real idea is criticality tiering. A critical dependency like the Order-to-Products price check gets patient retry with backoff, a circuit breaker, and a timeout, and it fails closed. An *optional* dependency like Products-to-Discount over gRPC gets the opposite: no retry, a quick-opening breaker, a two-second timeout — so if Discount is down the catalogue still renders instantly instead of waiting on retries. Data stores honour a server's Retry-After on a 429 rather than guessing, and DB reconnects use jittered backoff to avoid a thundering herd. All of it is one shared policy library, so each caller just picks the posture that matches how important the dependency is."
 
 **Read the code** — `AK.BuildingBlocks/AK.BuildingBlocks/Resilience/ResilienceExtensions.cs`:
 `AddHttpResilienceWithCircuitBreaker` (patient, for the critical Order→Products catalogue call),
@@ -619,7 +754,7 @@ degrades gracefully instead of dragging the caller down with it.
 `AddNpgsqlResilience`, `AddDataStoreResiliencePipeline` (honours a server 429 `Retry-After`, used by
 Products for Cosmos). Decision: [ADR-003](adr/ADR-003-fault-tolerance-with-polly.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, contrast the patient vs fail-fast tiers and say which dependency uses each and why. Then explain why retry is applied to the price check but never to a payment charge.
 
 ---
 
@@ -633,17 +768,24 @@ while rendering the catalogue.
 gRPC's compact binary framing and generated clients are a better fit than JSON-over-REST. It also lets
 the platform demonstrate a second transport style alongside the REST services.
 
-**How it works** — _To be written._
+**How it works** — gRPC defines the service contract in a `.proto` file (messages + RPC methods); a build step generates a strongly-typed server base and client from it. Calls travel as **Protobuf** (compact binary) over **HTTP/2** (multiplexed, long-lived connections). The client is generated, so there's no hand-written JSON serialization; both sides share the exact contract. In AntKart the call is treated as an *optional* dependency, so the client is tuned to fail fast and never throw.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — The contract `discount.proto` defines `GetDiscount`, `CreateDiscount`, `UpdateDiscount`, `DeleteDiscount`, `GetAllDiscounts`. `DiscountGrpcClient` (in Products Infrastructure) calls `GetDiscount` while rendering the catalogue, over a named `discount-grpc` client with a 2s timeout and `AddOptionalDependencyResilience` (no retry, quick breaker). It **never throws**: an `RpcException/NotFound` returns null, any other failure logs *one* concise warning (message only, no stack, guarded so it's once per request) and returns null — so the catalogue always renders, with or without a discount price. In-cluster it's reached at `http://ak-discount:8080` over h2c (HTTP/2 cleartext).
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — REST/JSON (universal, human-readable, but larger payloads and no shared contract) or a message/event for pricing (decoupled, but pricing is a synchronous read here). gRPC buys a compact, strongly-typed, low-latency internal call and a generated client, at the cost of being binary (not curl-friendly) and needing HTTP/2 end to end — which is why Discount's Kubernetes probes are **TCP**, not HTTP (an HTTP/1.1 httpGet probe would be rejected by the h2c-only listener). Decision: [ADR-006](adr/ADR-006-ocelot-api-gateway.md) context; gRPC choice is per-service.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **KI-002 (High):** `AK.Discount.Grpc` **decodes** the JWT but does not verify signature/issuer/audience/expiry, and registers no auth middleware — a forged unsigned `roles=admin` token would be accepted for write RPCs. Mitigated only by Discount being ClusterIP-only, reached solely by Products. Source: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-002.
+- **h2c means HTTP-probe pitfalls.** The single HTTP/2-only listener rejects HTTP/1.1, so health probes are TCP; exposing Discount through ingress (HTTP/1.1) would break it — it must stay ClusterIP.
+- **The client swallows failures on purpose.** One warning, returns null — because Discount is optional; don't "fix" it into throwing.
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"Why gRPC for Discount and REST for the rest?"* — A high-frequency, strongly-typed *internal* call suits gRPC's binary/HTTP2/generated-client model; the public-facing services stay REST. Testing whether you can justify the transport, not just name it.
+- *"Discount is down — what does the customer see?"* — The catalogue, without a discount price; the client fails fast and returns null. The graceful-degradation question.
+- *"Why are Discount's Kubernetes probes TCP instead of HTTP?"* — Its single listener is h2c (HTTP/2-only); an HTTP/1.1 probe would be rejected. The ran-it detail.
+- *"What's the security gap in Discount?"* — KI-002: it decodes the JWT without verifying it; safe today only because it's ClusterIP-only.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "Discount is our one gRPC service — contract-first in a `.proto`, Protobuf over HTTP/2, with a generated client — because Products calls it at high frequency for pricing and a strongly-typed binary call fits that better than JSON. Products treats it as an *optional* dependency: the client has a 2-second timeout, no retry, a quick circuit breaker, and it never throws — a failure just returns null and logs one warning, so the catalogue always renders. Two things to know: because it's h2c, HTTP/2-only, its Kubernetes probes are TCP not HTTP; and KI-002 — it decodes the JWT but doesn't verify it, which is only safe because it's ClusterIP-only and reached solely by Products."
 
 **Read the code** — Proto + RPCs: `AK.Discount/AK.Discount.Grpc/Protos/discount.proto`
 (`GetDiscount`, `CreateDiscount`, `UpdateDiscount`, `DeleteDiscount`, `GetAllDiscounts`). Client:
@@ -651,7 +793,7 @@ the platform demonstrate a second transport style alongside the REST services.
 warning per unavailability). Gap: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-002 (Discount decodes but does
 not verify the JWT).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain why Discount uses gRPC, why its probes are TCP, and what KI-002 is. Then predict what the catalogue returns when Discount is stopped, before you test it.
 
 ---
 
@@ -665,24 +807,31 @@ rate limiting and a QoS circuit breaker.
 enforce auth and rate limits, and clients coupled to internal topology. One gateway gives a single
 front door and one place for cross-cutting edge concerns, with everything behind it kept ClusterIP-only.
 
-**How it works** — _To be written._
+**How it works** — Ocelot reads a JSON route table: each route maps an **upstream** public path (what the client calls) to a **downstream** service host+path (the in-cluster service). Per route it can apply rate limiting, a QoS/circuit-breaker, and — here — passes the JWT straight through to the downstream service (which re-validates it). It's an *in-process* .NET app, so it runs as just another service in the cluster, in front of the others.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — `AK.Gateway` runs Ocelot 23.4.2, configured by `ocelot.json` (with `ocelot.Development.json` overrides). Its downstream routes point at the in-cluster DNS names `ak-<service>:8080`; it applies per-route rate limiting (10–30 RPS) and a QoS circuit breaker, and passes the Entra JWT through. It is the **only** service exposed (via Ingress at `api.antkart.in`); the other five are ClusterIP-only. In the target state, Azure API Management sits *in front of* Ocelot as the managed edge ([ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md)) — a two-gateway model, not a replacement.
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Alternatives: YARP (Microsoft's reverse proxy, chosen against in [ADR-006](adr/ADR-006-ocelot-api-gateway.md)), exposing services directly (no single front door, auth/rate-limit duplicated everywhere), or going straight to a managed edge like APIM (cost, and it doesn't do in-cluster routing). Ocelot buys a code-owned, in-cluster routing gateway with familiar config, at the cost of being one more always-on component the team runs — which is exactly why the *edge* concerns (TLS, quotas, keys) are planned to move to APIM while Ocelot keeps *routing*.
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **KI-003 (Medium):** the gateway's CORS policy is `AllowAll` (any origin/method/header) — too permissive for production; to be scoped when the APIM edge lands. Source: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-003.
+- **The gateway is not a trust boundary the services rely on.** It passes the JWT through, but each service re-validates it (defence in depth) — Ocelot validating is an optimization, not the guarantee.
+- **Two config files.** `ocelot.json` is the Docker/cluster config; `ocelot.Development.json` overrides for local — edit the right one.
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"What's the difference between the Ocelot gateway and the planned APIM edge?"* — Ocelot is in-cluster *routing* (code-owned); APIM is the managed *edge* (TLS, keys, quotas). Target state runs both, layered (ADR-020). Testing whether you conflate routing with edge.
+- *"Does the gateway validating the JWT mean the services can trust it?"* — No — each service re-validates; the gateway isn't a trust boundary. The defence-in-depth point.
+- *"What's over-permissive about the gateway today?"* — CORS `AllowAll` (KI-003). Testing whether you know the open issue.
+- *"Why is only the gateway exposed?"* — Single front door + smallest attack surface; the five backends are ClusterIP-only.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "Ocelot is our in-cluster API gateway — an in-process .NET app that reads a JSON route table mapping public paths to the internal `ak-<service>` DNS names, applies per-route rate limiting and a QoS circuit breaker, and passes the Entra JWT through. It's the only service exposed publicly, at api.antkart.in; the other five are ClusterIP-only. Crucially the gateway isn't a trust boundary — every service re-validates the token, defence in depth. Two things to flag: CORS is currently AllowAll, which is KI-003 and too open for prod; and in the target state Azure API Management sits in front of Ocelot as the managed edge for TLS, keys, and quotas, with Ocelot keeping the internal routing — a two-gateway model, not a swap."
 
 **Read the code** — `AK.Gateway/AK.Gateway.API/ocelot.json` (routes; Docker) and
 `ocelot.Development.json` (dev overrides). Decision: [ADR-006](adr/ADR-006-ocelot-api-gateway.md);
 target-state managed edge in front of it: [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md).
 Gap: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-003 (gateway CORS allows any origin).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain the two-gateway (Ocelot routing + APIM edge) model and why the gateway isn't a trust boundary. Then open `ocelot.json` and trace one public path to its `ak-<service>` downstream.
 
 ---
 
@@ -697,24 +846,39 @@ model onto every workload. Per-service ownership keeps services independently de
 document store, a relational store, and a key-value store each be used where it fits — a catalogue in a
 document DB, transactional orders in Postgres, an ephemeral cart in Redis.
 
-**How it works** — _To be written._
+**How it works** — Each service owns its store; no service reads another's database. The store is chosen by access pattern:
 
-**How AntKart uses it** — _To be written._
+| Service | Store | Why this store |
+|---|---|---|
+| Products | Cosmos DB (Mongo API) | read-heavy document catalogue; flexible schema, managed scale |
+| Order / Payments / Discount | PostgreSQL | transactional, relational, ACID, EF migrations |
+| ShoppingCart | Redis | ephemeral, high-churn key-value with a natural 30-day TTL |
 
-**Alternatives and the trade-off** — _To be written._
+Because no service touches another's data, any field one service needs from another is **denormalised** (copied) — e.g. the order carries the customer email rather than joining to an identity store.
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — Store registration lives in each service's Infrastructure: Products wires `MongoDbContext` (Cosmos over the Mongo driver), Order/Payments/Discount call `UseNpgsql`, ShoppingCart uses StackExchange.Redis with key `AKCart:cart:{userId}`. Each store is hidden behind that service's repository, and each has its own resilience posture (Cosmos honours 429 Retry-After; Npgsql/Redis use jittered backoff). Decision: [ADR-004](adr/ADR-004-polyglot-persistence.md).
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — Alternatives: one shared relational database for everything (simplest ops, but couples services, forces one model, and breaks independent deployability) or forcing a single store type everywhere (a document DB for transactions, or SQL for a cart, both poor fits). Polyglot trades a larger operational surface (three store technologies to run and secure) for each workload using the store that fits and for true service independence. Decision: [ADR-004](adr/ADR-004-polyglot-persistence.md).
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **No cross-service entity references — denormalise instead.** Copying a field (customer email onto the order) is the rule, not a smell; a shared table or cross-DB join would re-couple the services.
+- **Each store's failure mode differs.** Cosmos throttles with 429s (honour Retry-After), Postgres/Redis need jittered reconnect — one blanket policy is wrong.
+- **The outbox only fits the relational services.** Products (Cosmos) has no EF outbox — a direct consequence of polyglot persistence.
+
+**Interview traps** —
+- *"Why not one database for all six services?"* — Coupling, one-model-fits-none, and lost independent deployability; polyglot lets each workload use the right store. The design question.
+- *"How does the order know the customer's email if there's no identity DB to join?"* — Denormalisation — it's copied onto the order/event. Testing whether you understand the no-cross-service-reference rule.
+- *"Why does Products not have a transactional outbox when Order does?"* — Products is on Cosmos, not EF/Postgres; the EF outbox needs a relational DbContext. Ties persistence choice to a real consequence.
+- *"What's the cost of polyglot persistence?"* — A bigger operational surface: three store technologies to run, secure, and reason about.
+
+**The 60-second answer** — "Every service owns its own data in the store that fits its access pattern, and no service reads another's database. Products is a read-heavy document catalogue, so it's on Cosmos through the Mongo API; Order, Payments, and Discount are transactional and relational, so they're on Postgres with EF migrations; the cart is ephemeral key-value with a natural expiry, so it's Redis. Because there are no cross-service joins, anything one service needs from another is denormalised — the order carries the customer's email rather than joining an identity store. The trade is more operational surface — three store technologies — but each workload gets the right database and the services stay independently deployable. One consequence: the EF outbox only exists in the Postgres services; Products, on Cosmos, publishes directly."
 
 **Read the code** — Per-service store registration: `AK.Products/AK.Products.Infrastructure/Extensions/ServiceCollectionExtensions.cs`
 (Cosmos/Mongo), `AK.Order/AK.Order.Infrastructure/Extensions/ServiceCollectionExtensions.cs` (`UseNpgsql`),
 `AK.ShoppingCart/AK.ShoppingCart.Infrastructure/` (Redis, key `AKCart:cart:{userId}`). Decision:
 [ADR-004](adr/ADR-004-polyglot-persistence.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, name each service's store and one reason it fits, and explain the denormalisation rule. Then say why Products has no outbox before you check its Infrastructure wiring.
 
 ---
 
@@ -730,24 +894,31 @@ without idempotency that double-charges or double-decrements. And because the sa
 local transactions, there is a window where the order is created but stock isn't yet reserved — code
 that assumes instantaneous global consistency will misread that window as a bug.
 
-**How it works** — _To be written._
+**How it works** — Message brokers deliver **at-least-once**, so a consumer *will* occasionally see the same message twice; **idempotency** makes the second delivery a no-op. Three techniques do it here: an **inbox** table that records processed message ids (once-only), **deterministic ids** (derive the key from stable input so a re-write hits the same row), and **optimistic concurrency** (a version column rejects a stale write). **Eventual consistency** is the accepted consequence of replacing one ACID transaction with a saga of local transactions: for a short window the order exists but stock isn't reserved yet — the system converges, it isn't inconsistent forever.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — MassTransit's `InboxState` (added in `OrderDbContext`) deduplicates redelivered messages so a consumer runs once. The saga's `OrderSagaState.Version` gives optimistic concurrency, so two messages for the same order can't both win. The `ProductsSeedLoader` derives each Cosmos `_id` from the SKU (MD5→hex), so re-running the loader is a set of single-partition point *upserts* that never duplicate; `DiscountSeedLoader` clears-then-seeds so every run converges to the same set. The saga itself is the eventual-consistency engine — created → stock-pending → confirmed/cancelled, each a separate committed step.
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — The alternative to eventual consistency is a **distributed transaction (2PC)** for strong, immediate consistency — but it needs a blocking coordinator and cross-store transaction support these managed services don't offer, trading availability for consistency in the wrong direction for e-commerce. The alternative to idempotency is assuming exactly-once delivery — which brokers don't provide — leading to double-charges. AntKart accepts eventual consistency and engineers idempotency, which is the pragmatic distributed-systems posture. Decisions: [ADR-005](adr/ADR-005-saga-orchestration.md), [ADR-009](adr/ADR-009-domain-events-vs-integration-events.md).
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **Duplicates are not hypothetical.** At-least-once means you *will* reprocess a message; without the inbox that double-applies. Design for it.
+- **The created-but-not-yet-reserved window is normal, not a bug.** Code that reads the order immediately after creation and expects stock already decremented misreads eventual consistency.
+- **Retry only idempotent operations.** Re-driving a non-idempotent write (a charge) can double it — the reason retry is applied to reads, not payments.
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"Brokers are at-least-once — how do you avoid double-processing?"* — An inbox/dedup table (here MassTransit `InboxState`), deterministic ids, and optimistic concurrency. Naming the inbox is ran-it.
+- *"Why is it OK that the order exists before stock is reserved?"* — Eventual consistency: separate local transactions that converge; the window is expected. The distributed-systems maturity question.
+- *"Why not use a distributed transaction to make it strongly consistent?"* — 2PC needs a blocking coordinator and unsupported cross-store transactions; it trades availability away. The design trade-off.
+- *"How is re-running the seed loader safe?"* — Deterministic `_id` from the SKU makes each write an upsert to the same row — idempotent by construction.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "Once you replace one ACID database with services coordinating over a bus, two things are unavoidable: idempotency and eventual consistency. Brokers deliver at-least-once, so a consumer will sometimes see a message twice — we make that a no-op with an inbox table that records processed ids, plus optimistic concurrency on the saga's version column and deterministic ids in the seed loaders so a re-write hits the same row. Eventual consistency is the saga's nature: the order is created, then stock is reserved, then it's confirmed — separate committed steps, so there's a brief window where the order exists but stock isn't reserved yet. That's convergence, not a bug. We don't reach for a distributed transaction because 2PC needs a blocking coordinator and trades away availability, which is exactly wrong for checkout."
 
 **Read the code** — Inbox dedup: `AK.Order/AK.Order.Infrastructure/Persistence/OrderDbContext.cs:36`
 (`AddInboxStateEntity()`). Saga optimistic concurrency: `AK.Order/AK.Order.Application/Sagas/OrderSagaState.cs`
 (`Version`). Idempotent seed upsert: `AK.Tools/AK.Tools.ProductsSeedLoader/` (Cosmos `_id` derived from
 SKU, so re-runs are point writes that never duplicate).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, name the three idempotency techniques used here and explain the created-before-reserved window. Then explain why retry is safe on the price check but not on a payment charge.
 
 ---
 
@@ -763,17 +934,32 @@ during a transient DB blip and trigger a restart storm, or will let a not-yet-re
 Separating liveness (is the process alive?) from readiness (should it receive traffic?) from deep checks
 (are dependencies healthy?) prevents both failure modes.
 
-**How it works** — _To be written._
+**How it works** — Three probe surfaces, each answering one question, tagged so the right checks run on each:
 
-**How AntKart uses it** — _To be written._
+| Endpoint | Question | Behaviour | Kubernetes use |
+|---|---|---|---|
+| `/health/live` | Is the process alive? | shallow `self` only, **no external calls** | liveness — restarts the pod |
+| `/health/ready` | Should it take traffic? | tolerant — **Degraded ⇒ 200**, Unhealthy ⇒ 503 | readiness — pulls from the Service |
+| `/health/deps` | Are dependencies healthy? | **all** checks incl. deep, detailed JSON | diagnostics, **not** a probe |
 
-**Alternatives and the trade-off** — _To be written._
+Tags are namespaced (`ak:live` / `ak:ready` / `ak:deep`) so a third-party check — like MassTransit's own `"ready"`-tagged bus check — can't accidentally land on the readiness probe. A **startup** probe gates liveness/readiness so a slow boot (loading Key Vault) doesn't trip a restart.
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — Every service calls `AddDefaultHealthChecks()` + `MapDefaultHealthChecks()` from BuildingBlocks. Liveness is deliberately shallow — no DB call — so a transient database blip can't cause a restart storm; readiness is tolerant (Degraded returns 200) so one degraded dependency doesn't blackout the whole fleet. Deep checks (real Cosmos `ping`, Key Vault metadata list) are tagged `ak:deep` and appear only on `/health/deps`. The startup probe covers the Key-Vault-at-boot delay.
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — Alternative: a single `/health` endpoint that touches the database — which fails liveness on any DB hiccup (restart storm) or lets a not-ready pod serve traffic. The three-surface split, with liveness shallow and readiness tolerant, prevents both. The cost is a bit more wiring (three endpoints, tags) — packaged once in BuildingBlocks so every service gets it for free.
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **Liveness must never touch an external dependency.** A DB-touching liveness probe turns a transient blip into a cascade of restarts. Keep it shallow (`self`).
+- **Readiness is tolerant on purpose.** Degraded ⇒ 200 so a partially-degraded dependency doesn't pull every pod out of the Service at once (fleet blackout).
+- **KI-013:** health is a *deploy-layer* blind spot too — a ConfigMap change doesn't roll pods, so every probe reports healthy while pods run stale config. Source: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-013.
+
+**Interview traps** —
+- *"Liveness vs readiness — what's the difference and why separate them?"* — Liveness = restart if dead; readiness = take-out-of-rotation if not ready. Merging them causes restart storms or bad-traffic routing.
+- *"Why doesn't the liveness probe check the database?"* — A transient DB blip would restart every pod — a self-inflicted outage. The ran-it insight.
+- *"Why does readiness return 200 when Degraded?"* — To avoid pulling the whole fleet out of service over one degraded dependency (fleet blackout).
+- *"Why the `ak:` tag prefix?"* — So a library's own health check (MassTransit's `"ready"`) can't leak onto our readiness probe. The precise-wiring question.
+
+**The 60-second answer** — "We treat health as application code, with three purpose-built surfaces. `/health/live` is shallow — no external calls — because if liveness touched the database, a transient blip would restart every pod and cause the outage it's meant to prevent. `/health/ready` is tolerant: Degraded returns 200, so one degraded dependency doesn't yank the whole fleet out of the Service at once. `/health/deps` runs the deep checks — a real Cosmos ping, Key Vault — but it's a diagnostic, not a probe. The tags are namespaced with an `ak:` prefix so a library's own health check can't leak onto our readiness probe, and a startup probe covers the Key-Vault-at-boot delay. One honest gap, KI-013: a ConfigMap change doesn't roll the pods, so the probes can report healthy while the app runs stale config."
 
 **Read the code** — `AK.BuildingBlocks/AK.BuildingBlocks/HealthChecks/HealthCheckExtensions.cs`
 (`AddDefaultHealthChecks`, `MapDefaultHealthChecks`; `/health/live` liveness-only, `/health/ready`
@@ -781,7 +967,7 @@ Degraded⇒200, `/health/deps` detailed JSON) and `HealthCheckTags.cs` (`ak:live
 namespaced so MassTransit's `"ready"`-tagged bus check can't leak onto readiness). Related gap:
 [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-013 (config change reports healthy while pods run stale config).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain why liveness is shallow and readiness is tolerant, and what the `ak:` tag prefix prevents. Then predict the HTTP codes on `/health/live` vs `/health/ready` when the database is briefly down.
 
 ---
 
