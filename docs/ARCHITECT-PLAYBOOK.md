@@ -985,24 +985,37 @@ what was done, drifts over time, and cannot be reliably reproduced in a second e
 IaC makes the infrastructure reviewable, versioned, and repeatable, and the mandatory plan-before-apply
 step turns "hope it works" into "read the diff first."
 
-**How it works** — _To be written._
+**How it works** — You write the *desired* state; Terraform computes and executes the *actions*. `plan` reads state, refreshes it against the real cloud, diffs against your config, and prints exactly what it would **create / update / destroy** — you read that diff before anything changes. `apply` then performs it and records the result in state. You never script "create then configure then wire" — you declare the end state and Terraform reconciles.
 
-**How AntKart uses it** — _To be written._
+| Step | What it does | Rule |
+|---|---|---|
+| write | declare resources in modules/units | idempotent — re-declaring the same thing is a no-op |
+| `plan` | show the create/update/destroy diff | **always read it first** |
+| `apply` | make the change, update state | one wave at a time on a first build |
 
-**Alternatives and the trade-off** — _To be written._
+**How AntKart uses it** — Every resource is a declaration in `infrastructure/modules/` instantiated per environment under `infrastructure/environments/dev/`. The runbook's standing rules are literally "**plan before apply, every time**" and "**one wave at a time** — do not `run-all apply` across the whole tree on a first build." So a build is: `terragrunt plan` a unit, read the diff, `apply`, verify, move to the next wave. Decision: [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md); guide: [docs/guides/iac-concepts.md](guides/iac-concepts.md).
 
-**Gotchas** — _To be written._
+**Alternatives and the trade-off** — Alternatives: portal clicks or imperative scripts (no record, drifts, unreproducible), ARM/Bicep (Azure-only), or Pulumi (general-purpose languages). [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md) rejected Bicep/ARM (single-cloud, less portable) and Pulumi in favour of Terraform's mature declarative model + Terragrunt orchestration. Declarative IaC trades a learning curve and a state file to manage for reviewable, versioned, reproducible infrastructure with a mandatory "read the diff" gate.
 
-**Interview traps** — _To be written._
+**Gotchas** —
+- **`plan` is a point-in-time diff.** If someone changes a resource in the portal, the next `plan` shows drift — declarative tools *detect* drift but only correct it on the next `apply`.
+- **Never `apply` without reading the `plan`.** The whole value is the diff; skipping it is how you destroy something you didn't mean to (`prevent_destroy` guards the worst cases).
+- **First builds go wave-by-wave.** A blanket `run-all apply` on an unbuilt tree fights dependency order.
 
-**The 60-second answer** — _To be written._
+**Interview traps** —
+- *"What's the difference between declarative and imperative infrastructure?"* — You declare the end state and the tool computes the actions, vs scripting the steps yourself. Declarative gives idempotency and drift detection.
+- *"What does `terraform plan` actually guarantee?"* — That `apply` will attempt exactly the create/update/destroy shown — nothing more; it's your review gate, not a promise the cloud won't change under you.
+- *"Someone changed a setting in the portal — what happens on your next run?"* — `plan` reports drift; `apply` reconciles it back to code. Testing whether you understand drift.
+- *"Why Terraform over Bicep here?"* — Portability and a mature ecosystem; ADR-012 rejected the Azure-only options.
+
+**The 60-second answer** — "Infrastructure as code here is declarative: I describe the desired end state in modules, and Terraform figures out the actions. `plan` refreshes state against the real cloud, diffs it against my code, and shows exactly what it would create, update, or destroy — and the standing rule is you always read that diff before applying. `apply` makes the change and records it in state. You never write imperative steps. On a first build we go one wave at a time rather than applying the whole tree, and because it's declarative, if someone changes something in the portal the next plan shows the drift and apply reconciles it. We chose Terraform over Bicep or ARM for portability and the ecosystem — that's ADR-012."
 
 **Read the code** — Modules under `infrastructure/modules/` (the *what*), instantiated per environment
 under `infrastructure/environments/dev/` (the *where*). Concept guide:
 [docs/guides/iac-concepts.md](guides/iac-concepts.md) §5. Decision:
 [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain plan-vs-apply and what drift is. Then run `terragrunt plan` on one unit and predict whether it shows any changes before you read the output.
 
 ---
 
@@ -1204,17 +1217,24 @@ version pins in every one of 18 units, and gives no first-class way to pass one 
 another. Terragrunt's `generate` and `include` blocks put that config in exactly one file (`root.hcl`),
 and its `dependency` blocks wire units together — keeping the tree DRY.
 
-**How it works** — _To be written._
+**How it works** — Terragrunt sits on top of Terraform and adds three things plain Terraform lacks a DRY answer for: **`generate` blocks** that write the backend/provider/versions config into every unit from one place; an **`include` block** that pulls a shared `root.hcl` into each unit; and **`dependency` blocks** that pass one unit's outputs into another. You run `terragrunt` instead of `terraform`; it generates the boilerplate, resolves dependencies, then calls Terraform underneath.
 
-**How AntKart uses it** — _To be written._
+**How AntKart uses it** — `infrastructure/environments/dev/root.hcl` has `generate` blocks that emit `backend.tf`, `provider.tf`, and `versions.tf` into every unit at init — so the backend, the azurerm provider, and the version pins live in **exactly one file**. Each unit's `terragrunt.hcl` starts with `include "root" { path = find_in_parent_folders("root.hcl") }` to inherit all of it. The 18 units therefore share one backend/provider/versions definition instead of copy-pasting it 18 times. Decision: [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md); guide: [docs/guides/iac-concepts.md](guides/iac-concepts.md) §2.
 
-**Alternatives and the trade-off** — _To be written._
+**Alternatives and the trade-off** — Plain Terraform would repeat the backend + provider + version block in all 18 units (and 18 more for qa), and has no first-class way to wire one unit's outputs to another (you'd use fragile `terraform_remote_state` data sources). Terraform **workspaces** share one state and give weaker isolation. Terragrunt buys DRY generation + dependency wiring + per-unit isolated state, at the cost of a second tool and its conventions. [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md) calls the plain-Terraform alternative "60 copy-pasted backend blocks."
 
-**Gotchas** — _To be written._
+**Gotchas** —
+- **You must name `"root.hcl"` explicitly.** `find_in_parent_folders()` defaults to looking for `terragrunt.hcl`; the shared file is `root.hcl`, so the argument is required or the include fails.
+- **Generated files aren't committed.** `backend.tf`/`provider.tf`/`versions.tf` are produced into the build cache at init; they are *not* tracked in Git (only `root.hcl` and each `terragrunt.hcl` are). Looking for a committed `provider.tf` and not finding one is expected.
+- **The lock file *is* committed** even though the generated versions file isn't — see concept 7 (KI-012).
 
-**Interview traps** — _To be written._
+**Interview traps** —
+- *"What does Terragrunt add over plain Terraform?"* — DRY `generate` of backend/provider/versions, `include` of a shared config, and `dependency` wiring — plus per-unit isolated state. "It's a wrapper" alone is read-about.
+- *"Where does the backend config live for 18 units?"* — In one `root.hcl`, generated into each unit; not 18 copies. Testing the DRY point.
+- *"Why `find_in_parent_folders(\"root.hcl\")` with the explicit argument?"* — The default looks for `terragrunt.hcl`; the shared file is named `root.hcl`. The precise-detail question.
+- *"Terragrunt vs Terraform workspaces for multiple environments?"* — Workspaces share state (weaker isolation); Terragrunt gives a separate state container and full isolation per environment.
 
-**The 60-second answer** — _To be written._
+**The 60-second answer** — "Terragrunt is a thin wrapper over Terraform that kills the copy-paste. Instead of repeating the backend, provider, and version pins in all eighteen units, they live in one `root.hcl` with `generate` blocks that write them into each unit at init, and every unit just `include`s that root. It also adds `dependency` blocks so one unit can consume another's outputs — which plain Terraform has no clean answer for. You run terragrunt, it generates the boilerplate and resolves dependencies, then calls Terraform underneath. The trade is a second tool and its conventions; the payoff is a DRY, wired, per-unit-isolated tree. One quirk: you must name `root.hcl` explicitly in `find_in_parent_folders` because the default is `terragrunt.hcl`."
 
 **Read the code** — `infrastructure/environments/dev/root.hcl` (`generate` blocks for backend/provider/
 versions; the DRY source of truth) and any unit's `include "root" { path = find_in_parent_folders("root.hcl") }`
@@ -1222,7 +1242,7 @@ versions; the DRY source of truth) and any unit's `include "root" { path = find_
 [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md); guide:
 [docs/guides/iac-concepts.md](guides/iac-concepts.md) §2.
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, list the three things Terragrunt generates and why `root.hcl` must be named explicitly. Then open a unit's `terragrunt.hcl` and point to the `include` block and its `source`.
 
 ---
 
@@ -1437,17 +1457,30 @@ identically.
 break behaviour; without a committed lock file, two engineers or CI can resolve different versions from the
 same code. Pinning plus a lock file make provider resolution reproducible.
 
-**How it works** — _To be written._
+**How it works** — Two mechanisms work together. **Pinning** is a version *constraint* in `required_providers` — `~> 4.76` (pessimistic: allow 4.76.x but not 4.77) — that bounds what's acceptable. The **lock file** (`.terraform.lock.hcl`) is written by `terraform init`: it records the *exact* version selected within that constraint plus its checksums, and is committed to Git so every machine and CI run installs byte-identical providers.
 
-**How AntKart uses it** — _To be written._
+| | Pinning (`required_providers`) | Lock file (`.terraform.lock.hcl`) |
+|---|---|---|
+| Says | which versions are *allowed* | which version was *chosen* + checksums |
+| Where | `versions.tf` (generated from `root.hcl`) | one per unit, **committed** |
+| Written by | you | `terraform init` |
 
-**Alternatives and the trade-off** — _To be written._
+**How AntKart uses it** — The pins are central: `root.hcl` generates the `versions.tf` for every unit with azurerm `~> 4.76`, azuread `~> 3.0`, random `~> 3.6` — one source of truth. Each of the 18 dev units (and 18 qa units) commits its own `.terraform.lock.hcl` so provider resolution is reproducible. Decision: [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md).
 
-**Gotchas** — _To be written._
+**Alternatives and the trade-off** — Alternatives: no constraint (a `terraform init` months later silently pulls a new major provider and breaks), or pinning an *exact* version everywhere (reproducible but you never get patch fixes without editing every unit). The `~>` pessimistic constraint + committed lock is the balance — patch flexibility bounded by a constraint, exact resolution frozen by the lock. The cost is remembering to refresh and commit the lock after a constraint change.
 
-**Interview traps** — _To be written._
+**Gotchas** —
+- **KI-012 (Low):** some dev lock files were written **before** the shared `required_providers` block existed, so they record only `azurerm` — meaning `azuread`/`random` are effectively unpinned in those units (dev `key-vault` holds 1 provider vs qa's 3). Mitigation: azurerm is pinned at 4.76.0 and only `app-registration` (azuread) and `postgresql` (random) exercise the others. Fix: re-run `terragrunt init` across dev units and commit the refreshed locks. Source: [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-012.
+- **Never delete the lock to "fix" a resolution.** Deleting it lets versions drift between environments; refresh it with `init` and commit, don't remove it.
+- **The generated `versions.tf` is not committed; the lock is.** Don't go looking for a tracked `versions.tf`.
 
-**The 60-second answer** — _To be written._
+**Interview traps** —
+- *"What's the difference between a version constraint and a lock file?"* — The constraint says what's *allowed*; the lock records what was *chosen* plus checksums. Conflating them is the tell.
+- *"Why commit `.terraform.lock.hcl`?"* — So every machine and CI resolves the identical provider version — reproducibility. The ran-it answer.
+- *"What does `~> 4.76` actually permit?"* — 4.76.x patch updates, not 4.77 or 5.0 — pessimistic constraint. Testing precision.
+- *"Your dev and qa resolve different provider versions from the same code — how?"* — Stale/partial lock files (KI-012): a lock written before the shared pins recorded only azurerm.
+
+**The 60-second answer** — "Two things keep provider versions reproducible. Pinning is a constraint in `required_providers` — we use `~> 4.76` for azurerm, so patch updates are allowed but not a new minor or major. The lock file, `.terraform.lock.hcl`, is written by `init` and records the exact version chosen within that constraint plus checksums, and we commit it so every machine and CI installs the identical provider. Our pins live once in `root.hcl` and generate into every unit. The one wrinkle is KI-012: some dev lock files were written before the shared pins existed, so they only record azurerm and leave azuread and random effectively unpinned in a few units — low severity because azurerm is fixed and only two units use the others, and the fix is just to re-init and commit the refreshed locks."
 
 **Read the code** — Central pins in the generated versions block: `infrastructure/environments/dev/root.hcl:111-132`
 (azurerm `~> 4.76`, azuread `~> 3.0`, random `~> 3.6`). Committed lock files: one `.terraform.lock.hcl` per
@@ -1455,7 +1488,7 @@ unit (e.g. `infrastructure/environments/dev/aks/.terraform.lock.hcl`). Gap:
 [KNOWN_ISSUES.md](KNOWN_ISSUES.md) KI-012 (dev lock files written before the shared versions block record
 only azurerm — azuread/random effectively unpinned for some units).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, distinguish the constraint from the lock and explain KI-012. Then open a unit's `.terraform.lock.hcl` and predict how many providers it lists before you read it.
 
 ---
 
@@ -1469,24 +1502,55 @@ environment is a parallel `environments/<env>/` tree, not a fork of the code.
 modules without sharing its state or its resources. A structured multi-environment layout makes "add an
 environment" a mechanical clone-and-retune rather than a rewrite.
 
-**How it works** — _To be written._
+**How it works** — Each environment is a parallel folder under `infrastructure/environments/<env>/` containing the same unit names plus its own `root.hcl`. The `root.hcl` generates that environment's DRY backend/provider/versions and — critically — sets its own **state container** so environments never collide (concept 3). The units point at the *shared* modules, so a new environment is: copy the tree, retune the inputs, give it a distinct state container. Modules are never copied.
 
-**How AntKart uses it** — _To be written._
+```mermaid
+flowchart TD
+    MOD["infrastructure/modules/ (shared blueprints)"]:::cicd
+    subgraph DEV["environments/dev/"]
+        DR["root.hcl → container tfstate"]:::paas
+        DU["18 units (inputs = dev)"]:::paas
+    end
+    subgraph QA["environments/qa/ (built)"]
+        QR["root.hcl → container tfstate-qa"]:::paas
+        QU["18 units (inputs = qa)"]:::paas
+    end
+    DU --> MOD
+    QU --> MOD
 
-**Alternatives and the trade-off** — _To be written._
+    classDef external fill:#B4B2A9,stroke:#7A7870,color:#111,stroke-dasharray:4 3;
+    classDef service fill:#1D9E75,stroke:#14795A,color:#FFF;
+    classDef paas fill:#0078D4,stroke:#005A9E,color:#FFF;
+    classDef datastore fill:#185FA5,stroke:#0F3F6E,color:#FFF;
+    classDef identity fill:#BA7517,stroke:#8A560F,color:#FFF;
+    classDef edge fill:#7F77DD,stroke:#5B52B8,color:#FFF;
+    classDef cicd fill:#639922,stroke:#496F18,color:#FFF;
+    classDef issue fill:none,stroke:#E24B4A,color:#E24B4A,stroke-dasharray:5 4;
+```
 
-**Gotchas** — _To be written._
+**How AntKart uses it** — `environments/dev/` has 18 units + `root.hcl`; `environments/qa/` is a **fully built** parallel tree that reuses the identical modules with qa inputs, and its `root.hcl:31` sets `state_container = "tfstate-qa"`. The runbook's Phase 1 is the mechanical recipe: `robocopy` the tree (excluding caches/generated files), then the **first** edits to the new `root.hcl` are `state_container` and `environment`. Decision: [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md); walkthrough: [environment-provisioning-runbook.md](guides/environment-provisioning-runbook.md) Phase 1.
 
-**Interview traps** — _To be written._
+**Alternatives and the trade-off** — Alternatives: **Terraform workspaces** (one config, environment selected by workspace — shares state and a single backend, weaker isolation), a **separate Git repo per environment** (strongest isolation, more moving parts), or copy-pasting whole modules per environment (drifts immediately). The directory-per-environment + shared-modules layout gives real isolation (separate state container, separate resources) while reusing proven module code, at the cost of a little duplication of the per-unit `terragrunt.hcl` wiring. ADR-024 names a separate GitOps repo as the long-term promotion answer for the *app* config, distinct from this IaC layout.
 
-**The 60-second answer** — _To be written._
+**Gotchas** —
+- **The state-container change is step one, and its omission is silent.** A new environment sharing dev's container collides on the path-only state key (concept 3) and clobbers dev — nothing errors.
+- **qa is built, not planned.** The development doc still calls qa "planned"; the repository has the full qa tree. Trust the tree.
+- **Reuse modules, don't copy them.** The whole point is one blueprint, many environments; copying a module forfeits it.
+
+**Interview traps** —
+- *"How do you add a new environment?"* — Copy the tree, retune inputs, set a distinct state container — reusing the same modules. Not "copy the modules." The design question.
+- *"Directory-per-environment vs Terraform workspaces — why the former?"* — Workspaces share state and a backend (weaker isolation); separate directories + a distinct state container isolate fully.
+- *"What's the very first edit when standing up qa, and why?"* — The state container in `root.hcl`, because the path-only state key would otherwise collide with dev's. The ran-it detail.
+- *"Is qa planned or built here?"* — Built — a full parallel tree with `tfstate-qa`. Testing whether you read the repo over the (stale) doc.
+
+**The 60-second answer** — "Each environment is a parallel folder — `environments/dev`, `environments/qa` — with the same unit names and its own `root.hcl`. The units all point at the *shared* modules, so a new environment is new inputs, not new code: copy the tree, retune the inputs, and give it a distinct state container. That container is the critical bit — because our state key is the unit path with no environment segment, qa must use its own container, `tfstate-qa`, or it silently overwrites dev's state. qa is actually fully built in the repo, not planned, even though one dev doc still says planned. The runbook's Phase 1 is the mechanical recipe: robocopy the tree, then the first edits are the state container and the environment name."
 
 **Read the code** — `infrastructure/environments/dev/` (18 units + `root.hcl`) and
 `infrastructure/environments/qa/` (the built parallel tree; `root.hcl:31` = `tfstate-qa`). Walkthrough:
 [environment-provisioning-runbook.md](guides/environment-provisioning-runbook.md) Phase 1; guide:
 [docs/guides/iac-concepts.md](guides/iac-concepts.md).
 
-**To reach 🟢** — _To be written._
+**To reach 🟢** — Without notes, explain "new inputs, not new code" and why the state container is the first edit. Then, for a hypothetical `staging` environment, name its state container and the first two `root.hcl` values you'd change.
 
 ---
 
