@@ -52,6 +52,27 @@ follows the **code** and says so. Where a concept in the syllabus is named but *
 (network policies, storage, autoscaling), it says that plainly rather than pretending — knowing
 what a platform deliberately left out is itself interview-grade material.
 
+### Where to start
+
+> The sections are ordered by architecture, not by study priority. For interview
+> preparation, work in this order — it front-loads the concepts this platform has the most
+> original material on, because they were learned by hitting them:
+>
+> 1. **Security and identity** — workload identity, the separate permission planes,
+>    DefaultAzureCredential, Entra and PKCE.
+> 2. **Infrastructure as code** — state as memory, remote state and key collisions,
+>    modules versus environments.
+> 3. **GitOps** — Argo CD architecture, what Argo does not watch, sync and self-heal.
+> 4. **Kubernetes** — the reconciliation loop, ConfigMaps and Secrets, Helm and what it
+>    is not.
+> 5. **Observability** — OpenTelemetry, trace correlation.
+> 6. **Platform** — the outbox, the saga, CQRS.
+> 7. **DevOps**, then **Azure services** — broadest, and the easiest to speak to from
+>    existing experience.
+>
+> A concept moves to 🟢 only after it has been explained aloud, without notes, with its
+> gotchas recalled and its code located. Reading it does not move the tag.
+
 ---
 
 # 1. Platform — architecture and patterns
@@ -353,7 +374,7 @@ Decision: [ADR-005](adr/ADR-005-saga-orchestration.md).
   design feature.
 - **The ADRs misplace the saga.** [ADR-002](adr/ADR-002-clean-architecture-and-ddd.md) and
   [ADR-005](adr/ADR-005-saga-orchestration.md) say `OrderSaga` lives in `AK.Order.Infrastructure`.
-  It actually lives in **`AK.Order.Application/Sagas/`**; only its *registration* is in
+  It actually lives in **`AK.Order/AK.Order.Application/Sagas/`**; only its *registration* is in
   Infrastructure. Trust the code.
 - **The order state machine and the saga state machine are two different things.** The saga's states
   (`StockPending`/`Confirmed`/`Cancelled`) are not the order's statuses (`Pending`/`Confirmed`/`Paid`…);
@@ -1182,9 +1203,12 @@ mocks are the price of isolation, not decoration.
 - **Mocks are read-only by design.** `mock_outputs_allowed_terraform_commands` restricts them to
   init/plan/validate; an `apply` will not accept a mock, so you can't accidentally apply against fake
   values.
-- **The "11 units depend only on resource-group" figure is slightly off.** `key-vault` also depends on
-  `observability`, so the true resource-group-only set is 10, not 11 — a minor doc imprecision worth not
-  repeating. (⚠️ confirm before quoting a count.)
+- **Ten units depend only on `resource-group`, not eleven.** Verified against the `dependency` blocks in
+  `infrastructure/environments/dev/*/terragrunt.hcl`: `key-vault` also declares a dependency on
+  `observability`, so it is not in the resource-group-only set. The true count is **10** —
+  `communication-services`, `container-registry`, `cosmosdb`, `eventgrid`, `governance`, `networking`,
+  `observability`, `postgresql`, `redis`, `servicebus`. (The development-doc dependency diagram in
+  `docs/development/1-infrastructure-as-code.md` still says "11"; it is off by one.)
 
 **Interview traps** —
 - *"How does one Terragrunt unit use another unit's output?"* — A `dependency` block exposing
