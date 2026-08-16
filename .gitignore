@@ -390,3 +390,7 @@ override.tf.json
 *.pfx
 *.crt
 *.p12
+
+# Personal working tracker — never committed
+JOB-SEARCH.local.md
+*.local.md
