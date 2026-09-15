@@ -1990,6 +1990,45 @@ az storage container delete --name $STATE_CONTAINER --account-name $STATE_SA --a
 
 ## Appendix C — What this runbook does not yet cover
 
+### The first-time reader
+
+> This runbook is a CLONE procedure, not a BUILD procedure. It takes someone who already
+> operates one environment and gives them a second. A reader arriving with only an Azure
+> subscription cannot start at Phase 0, because Phase 0 already assumes:
+>
+> - an Azure subscription with the required resource providers registered
+> - the Terraform state storage account and its resource group, which nothing here creates
+> - a Terraform service principal holding roles across four separate permission planes —
+>   Azure RBAC, the Entra directory, the Key Vault data plane, and Kubernetes
+>   authorization (see section 1.1.1)
+> - an existing source environment whose values are copied and edited in Phase 1
+> - a registry already holding images to import in section 5.4
+> - a DNS zone the reader controls, for section 5.7
+>
+> Globally-unique names are also specific to this author. The runbook is parameterised by
+> `$ENV` but not by project or organisation, so a second reader building `qa` would collide
+> on the container registry, Key Vault, storage account, Cosmos, Service Bus and PostgreSQL
+> names immediately.
+>
+> Four questions a first-time reader cannot answer from the repository today:
+> what tooling to install; that this provisions real, billable Azure resources and roughly
+> what they cost; whether an Azure subscription is mandatory or some part runs locally;
+> and whether to start by reading or by building.
+>
+> **What closing this gap requires**, in rough order of value:
+>
+> 1. A "Start here" section at the entry point answering those four questions. Smallest
+>    piece of work, largest effect.
+> 2. A **Phase -1** covering subscription prerequisites, tooling, provider registration,
+>    creating the Terraform service principal, and granting it all four permission planes.
+> 3. Creating the state backend — resource group, storage account, first container — which
+>    Phase 0 currently assumes exists.
+> 4. Parameterising globally-unique names by project or organisation, not only by `$ENV`.
+>    This is a rewrite, not an edit, and should come last.
+>
+> Items 1 and 2 would make the runbook followable by a stranger. Items 3 and 4 make it
+> reusable by one.
+
 Honest gaps, to be closed as they are built:
 
 - Seeding Cosmos with product data for the new environment.
