@@ -25,6 +25,14 @@ a status tag changes only when the concept has been **proven**, never when it ha
   not use it** (the honest reason, citing the ADR — or stating plainly that the choice was never
   formally recorded), and *Read the code* becomes **Where you would see it** (the kind of platform
   where it is the right call). Everything else about the template is identical.
+- **Some concepts describe planned or unimplemented work** — things this platform does not contain
+  today (Well-Architected assessment, landing zones, HA/DR, sovereign cloud, load testing, image
+  signing, and more). They are here because **an architect is expected to discuss them whether or
+  not this platform contains them** — the interview does not stop at what you built. Where the work
+  is on the roadmap, the *How AntKart uses it* subsection becomes **Why AntKart does not use it** or
+  **Planned — and what it would change**, citing the roadmap entry, ADR, or known issue; where the
+  concept only ever assesses the platform (most of **Section 9**), *Read the code* becomes **Where
+  this appears in AntKart**. The rule never bends: no rationale is manufactured where none is recorded.
 
 ## Status convention
 
@@ -42,22 +50,24 @@ Every concept heading carries exactly one tag. Everything starts 🟡 — a tag 
 |---|---------|:-----------:|:--------------:|:---------:|:-----:|
 | 1 | Platform — architecture and patterns | 20 | 0 | 0 | 20 |
 | 2 | Infrastructure as code | 12 | 0 | 0 | 12 |
-| 3 | Azure services | 17 | 0 | 0 | 17 |
-| 4 | Kubernetes | 16 | 0 | 0 | 16 |
-| 5 | Security and identity | 13 | 0 | 0 | 13 |
+| 3 | Azure services | 18 | 0 | 0 | 18 |
+| 4 | Kubernetes | 17 | 0 | 0 | 17 |
+| 5 | Security and identity | 17 | 0 | 0 | 17 |
 | 6 | Observability | 10 | 0 | 0 | 10 |
 | 7 | GitOps | 8 | 0 | 0 | 8 |
-| 8 | DevOps | 9 | 0 | 0 | 9 |
-| 9 | Architecture practice | 6 | 0 | 0 | 6 |
-| | **Total** | **111** | **0** | **0** | **111** |
+| 8 | DevOps | 12 | 0 | 0 | 12 |
+| 9 | Architecture practice | 13 | 0 | 0 | 13 |
+| | **Total** | **127** | **0** | **0** | **127** |
 
-**Depth today.** All **111 concepts** are now written to the full template — *What it is*, *The problem
+**Depth today.** All **127 concepts** are now written to the full template — *What it is*, *The problem
 it solves*, *How it works* (with a table or diagram where it helps), *How AntKart uses it* (real type,
 file, and resource names), *Alternatives and the trade-off*, *Gotchas* (sourced to KNOWN_ISSUES / the
 runbook / ADRs), *Interview traps*, *The 60-second answer*, *Read the code*, and *To reach 🟢*. Nothing
-in the syllabus is a stub. The original **70** cover what the platform runs on; the remaining **41** cover
-alternatives it chose against, adjacent technologies it does not use, and — in the new **Section 9,
-Architecture practice** — the craft of deciding, documenting, and reasoning about trade-offs. Every
+in the syllabus is a stub. The original **70** cover what the platform runs on; the next **41** cover
+alternatives it chose against, adjacent technologies it does not use, and the craft of architecture
+practice; and the latest **16** add the enterprise-architecture concepts an Azure architect is examined
+on regardless of this platform — Well-Architected, landing zones, HA/DR, multi-region and sovereignty,
+compliance, FinOps, and the security, DevOps and Kubernetes concepts that sit beside them. Every
 concept still starts 🟡 — the writing is done; the *proving* is yours.
 
 **A note on honesty.** Where an ADR's prose has drifted from the code as built, this document
@@ -75,6 +85,15 @@ interview-grade material.
 > preparation, work in this order — it front-loads the concepts this platform has the most
 > original material on, because they were learned by hitting them:
 >
+> **If you are preparing for an *architect* role, start here first** — three Section 9 concepts are
+> the vocabulary those interviews are conducted in, reachable before everything below: the
+> **Azure Well-Architected Framework** (§9.7 — the five pillars, and an honest assessment of this
+> platform against each), **High availability and disaster recovery** (§9.9 — zones vs regions,
+> RTO/RPO), and **FinOps and cost architecture** (§9.13 — the levers, and this platform's worked
+> cost model). They are interview-central and do not depend on the platform-specific material below.
+>
+> Then work the platform-material order:
+>
 > 1. **Security and identity** — workload identity, the separate permission planes,
 >    DefaultAzureCredential, Entra and PKCE.
 > 2. **Infrastructure as code** — state as memory, remote state and key collisions,
@@ -88,10 +107,11 @@ interview-grade material.
 >    (choreography, event sourcing, Dapr, BFF, 2PC).
 > 7. **DevOps**, then **Azure services** — broadest, and the easiest to speak to from
 >    existing experience.
-> 8. **Architecture practice** (Section 9) — ADRs, C4, NFRs, CAP/PACELC, trade-off analysis,
->    documenting for a reader who is not you. Study these **last but not least**: they are what
->    an interviewer uses to tell an architect from a senior engineer, and they tie every other
->    section together.
+> 8. **Architecture practice** (Section 9) — the rest of the section after the three above: ADRs,
+>    C4, NFRs, CAP/PACELC, trade-off analysis, documenting for a reader who is not you, and the
+>    enterprise-architecture concepts (landing zones, multi-region, sovereign cloud, ISO 27001).
+>    Study these **last but not least**: they are what an interviewer uses to tell an architect
+>    from a senior engineer, and they tie every other section together.
 >
 > Within each section, study the concepts the platform **uses** before the ones it deliberately
 > **does not** — the used concepts carry the original material; the not-used ones are the
@@ -2981,6 +3001,49 @@ NSGs are **stateful** (return traffic is allowed automatically). Private endpoin
 
 ---
 
+### 18. Multi-cloud and portability 🟡
+
+> **Not implemented — planned.** [ROADMAP](ROADMAP.md) records a **multi-cloud delivery** item: deploying the same application codebase to AWS through a separate infrastructure and delivery pipeline. AntKart runs only on Azure today. Here because "how portable is this to another cloud?" is a standard architect probe, and the honest answer separates the layers that transfer from the ones that don't.
+
+**What it is** — Multi-cloud is running the same system on more than one cloud provider; **portability** is the property that lets you. The architect's job is to know **which layers actually transfer** — application code, container images, Kubernetes manifests — and which are **cloud-specific and do not** — the IaC provider resources, the managed-service APIs, and the identity model.
+
+**The problem it solves** — Avoiding lock-in, meeting a customer's cloud mandate, or demonstrating that the *value* (the application) isn't welded to one vendor. But "cloud-agnostic" is mostly a myth below the application layer, and pretending otherwise is the trap.
+
+**How it works** — Portability is layered:
+
+| Layer | Transfers? | Why |
+|---|---|---|
+| Application code (.NET) | **yes** | plain .NET, no Azure SDK in the domain |
+| Container images | **yes** | OCI images run anywhere |
+| Kubernetes (Helm, ingress-nginx, cert-manager) | **mostly** | same manifests on AKS and EKS |
+| IaC provider resources (Terraform `azurerm`) | **no** | AWS needs `aws` provider + rewritten modules |
+| Managed-service APIs (Cosmos, Service Bus, Key Vault) | **no** | map to DynamoDB, SQS/SNS, Secrets Manager |
+| Identity (Entra, workload identity) | **no** | AWS uses IAM roles for service accounts (IRSA) |
+
+**Planned — and what it would change** — The [ROADMAP](ROADMAP.md) multi-cloud item is scoped precisely to the portable layer: "deploying the same application **codebase** to AWS … demonstrating portability of the **application layer**." The evidence for this is already in the tree: the ingress/TLS stack (self-managed **ingress-nginx** + cert-manager) was chosen so it "run[s] **identically on AKS and EKS** … transfers unchanged to the planned AWS deployment" ([AKS Guide](guides/aks-guide.md)), and Terraform/Terragrunt was chosen partly because those skills "are directly applicable to … Azure, AWS, and GCP" while acknowledging AntKart today is **Azure-only** and its modules "are not transferable to multi-cloud" ([ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md)). So a move to AWS would keep the app and the Kubernetes layer, and **rewrite the infrastructure and identity layers entirely** — new provider, new managed-service bindings, IRSA instead of Entra workload identity.
+
+**Alternatives and the trade-off** — True cloud-agnosticism (only portable primitives — plain VMs, self-hosted everything) trades away the managed services that make AntKart cheap and secret-less; single-cloud with deep managed-service use (AntKart) maximises those benefits at the cost of portability below the app layer. An abstraction layer (Dapr, §1.18) buys some managed-service portability at the cost of a sidecar. AntKart deliberately went deep on Azure managed services and keeps portability only where it's cheap (app + Kubernetes).
+
+**Gotchas** —
+- **"Cloud-agnostic" usually means the app layer only** — the infra and identity layers are where the real work and the real lock-in live; claiming the whole system is portable is the tell.
+- **Managed services are the lock-in, and also the point** — Cosmos, Service Bus, and Entra workload identity are why AntKart is cheap and secret-less; portability would mean giving them up or re-binding them.
+- **Kubernetes is the portability layer** — the reason the Helm/ingress choice matters is that it's the one non-trivial layer that *does* transfer; self-managing ingress-nginx (vs a cloud LB controller) was a deliberate portability call.
+- **Identity does not port** — Entra workload identity ↔ AWS IRSA is a conceptual match but a full rewrite; there is no lift-and-shift for the auth model.
+
+**Interview traps** —
+- *"How portable is this platform?"* — App code and the Kubernetes layer transfer; the Terraform provider, the managed-service bindings, and the identity model do not. Naming the layers is the whole answer.
+- *"What did you do to keep it portable?"* — Chose self-managed ingress-nginx + cert-manager so the ingress/TLS layer runs identically on AKS and EKS (AKS Guide); nothing below that is portable, and that's honest.
+- *"Isn't Terraform cloud-agnostic?"* — The *tool* and skills transfer; the *modules* don't — `azurerm` resources have no meaning on AWS. ADR-012 says this explicitly.
+- *"What breaks first moving to AWS?"* — Identity (Entra workload identity → IRSA) and the managed-service APIs (Cosmos → DynamoDB, Service Bus → SQS/SNS). The app barely changes.
+
+**The 60-second answer** — "Portability is layered, and the honest answer names which layers move. The .NET application code and container images are fully portable, and the Kubernetes layer mostly is — we deliberately chose self-managed ingress-nginx and cert-manager so the ingress and TLS stack runs identically on AKS and EKS, which the AKS guide calls out as transferring unchanged to the planned AWS deployment. What does not transfer is everything below that: the Terraform azurerm modules, the managed-service APIs — Cosmos, Service Bus, Key Vault — and the identity model, since Entra workload identity would become AWS IRSA. So the roadmap's multi-cloud item is scoped exactly to the application layer, and ADR-012 is explicit that our IaC skills transfer but our modules don't. 'Cloud-agnostic' below the app layer is mostly a myth."
+
+**Where you would see it** — Organisations with a genuine multi-cloud mandate (regulatory, customer-driven, or acquisition-driven), teams building deliberately portable platforms on Kubernetes + open-source data stores, or vendors who must ship the same product to whichever cloud a customer runs.
+
+**To reach 🟢** — Without notes, lay out which layers transfer and which don't, cite the ingress-nginx portability choice and ADR-012's tool-vs-module distinction, name identity and managed-service APIs as what breaks first, and frame the roadmap AWS item as application-layer only.
+
+---
+
 # 4. Kubernetes
 
 ### 1. Cluster architecture and the reconciliation loop 🟡
@@ -3893,6 +3956,44 @@ No ADR weighed a mesh — for six services the sidecar-per-pod cost (latency, re
 
 ---
 
+### 17. Cluster upgrades and node pool management 🟡
+
+> **Not exercised on AntKart.** The cluster runs a **single, fixed-size node pool with autoscaling disabled** ([ADR-018](adr/ADR-018-aks-workload-identity-base-image.md)); no upgrade has been performed, and a two-pool production topology is recorded as **future work**. Here because zero-downtime cluster upgrades and node-pool design are heavily examined at CKA and architect level, and AntKart's setup is deliberately the simple case.
+
+**What it is** — Keeping a Kubernetes cluster current and correctly sized. **Cluster upgrades** move the control plane and the nodes to a new Kubernetes version without downtime, respecting **version skew** rules (nodes may trail the control plane by up to two minors, never lead it). **Node pool management** is designing pools (system vs user), sizing them, and choosing **autoscaling** vs fixed capacity. On AKS the mechanisms are **surge upgrades** and **node image updates**.
+
+**The problem it solves** — Clusters must be patched (security, support windows) and resized (load) *while serving traffic*. Doing it wrong — upgrading nodes all at once, ignoring PodDisruptionBudgets, or running one pool for everything — causes outages or evicts system components. Upgrades and pool design are how you stay current and available at the same time.
+
+**How it works** —
+- **Control plane first, then nodes:** AKS upgrades the managed control plane, then each node pool. Skew rules mean you can't jump the nodes past the control plane.
+- **Surge upgrade:** AKS adds **extra (surge) nodes**, cordons and drains an old node (respecting PodDisruptionBudgets), schedules pods onto the new-version node, then removes the old one — a rolling replacement. `maxSurge` tunes how many at once (speed vs headroom). This is why the network must leave **surge headroom** — "during an upgrade the cluster temporarily runs extra nodes" ([networking-concepts](guides/networking-concepts.md)).
+- **Node image updates:** patch the node OS image without a full Kubernetes version bump.
+- **System vs user pools:** a **system** pool (tainted `CriticalAddonsOnly`) runs cluster-critical add-ons; **user** pools run app workloads — so an app scaling event never starves CoreDNS/metrics-server.
+
+**Why AntKart does not exercise it** — AntKart runs a **single `system` node pool of `2 × Standard_D2s_v3` with autoscaling disabled** ([ADR-018](adr/ADR-018-aks-workload-identity-base-image.md), [AKS Guide](guides/aks-guide.md)) — the deliberate simple case for a disposable, cost-predictable dev cluster. **No upgrade has been run**, so surge upgrades and skew handling are untested here. The AKS subnet *is* sized `/22` partly to leave **upgrade surge headroom** ([networking-concepts](guides/networking-concepts.md)), so the network is ready for an upgrade even though one hasn't happened. The production topology — **split `system`/`user` pools with per-pool autoscaling** — is recorded as **future work** in ADR-018, not built. So AntKart demonstrates the network sizing and the awareness, not the operation.
+
+**Alternatives and the trade-off** — A single fixed pool (AntKart) is simplest and cheapest but has no capacity elasticity and puts app and system pods together; split pools + autoscaling cost more design and money but isolate system components and scale to load. `maxSurge` trades upgrade speed against temporary node cost. AntKart chose the simple pool because a two-node dev cluster that's stopped between sessions doesn't need elasticity or workload isolation — but it's explicitly not the production shape.
+
+**Gotchas** —
+- **Version skew is a hard rule** — nodes can trail the control plane by up to two minors but never lead it; upgrade the control plane first. Skipping minors on the control plane isn't allowed either.
+- **No surge headroom = a stuck upgrade** — if the subnet/quota can't fit the extra surge nodes, the rolling upgrade stalls; AntKart's `/22` sizing exists partly for this.
+- **PodDisruptionBudgets can block a drain** — a PDB that never allows a pod to be evicted will hang the node drain forever; upgrades depend on workloads tolerating disruption.
+- **One pool means app load can starve system pods** — without a tainted system pool, a noisy app can evict cluster-critical add-ons; the split exists to prevent that.
+
+**Interview traps** —
+- *"How do you upgrade a cluster with no downtime?"* — Control plane first (respecting skew), then surge-upgrade each node pool: add surge nodes, cordon/drain old ones honouring PDBs, reschedule, remove old. AntKart hasn't run one, but the network is sized for the surge.
+- *"System vs user node pools — why?"* — The tainted system pool isolates cluster-critical add-ons so app scaling can't starve them; AntKart runs a single system pool (dev simplicity), production splits them (ADR-018 future work).
+- *"What's version skew?"* — Nodes may trail the control plane by up to two minors, never lead it; you upgrade the control plane first.
+- *"What can stall an upgrade?"* — No surge capacity (subnet/quota) or a PodDisruptionBudget that blocks the drain.
+
+**The 60-second answer** — "A zero-downtime AKS upgrade goes control plane first, respecting version skew — nodes trail the control plane by up to two minors, never lead — then each node pool via surge upgrade: AKS adds extra surge nodes, cordons and drains an old node honouring PodDisruptionBudgets, reschedules the pods, and removes the old node, rolling through the pool. That's why you leave surge headroom in the subnet. AntKart deliberately runs the simple case — a single fixed system pool of two nodes with autoscaling off — so I've never actually run an upgrade here, though the AKS subnet is sized /22 partly to leave that surge headroom. The production shape, split system and user pools with autoscaling, is recorded in ADR-018 as future work. The classic stalls are no surge capacity and a PDB that blocks the drain."
+
+**Read the code** — The single-pool, autoscaling-disabled cluster in [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md) (Decision 1 node pool + Future Work two-pool topology) and the [AKS Guide](guides/aks-guide.md#the-aks-cluster); the surge-headroom subnet sizing in [networking-concepts](guides/networking-concepts.md); the AKS module in `infrastructure/modules/aks`.
+
+**To reach 🟢** — Without notes, describe a surge upgrade and version skew, explain system-vs-user pools, state that AntKart runs the single-pool simple case with the surge headroom pre-sized, and name no-surge-capacity and blocking PDBs as the stalls.
+
+---
+
 # 5. Security and identity
 
 ### 1. Entra ID, OAuth2 and PKCE 🟡
@@ -4726,6 +4827,149 @@ Where AntKart **falls short** of full zero trust is the **network layer**: with 
 **Where this appears in AntKart** — There is no threat-model document; the nearest artefact is the [Known Issues Register](KNOWN_ISSUES.md), whose entries map onto STRIDE categories (KI-002 → Spoofing/Elevation, private-endpoint gap → Information disclosure, KI-003 → client trust, KI-005 → integrity/availability); the trust boundaries are drawn in the Security C4 render and §5's authentication-chain concepts.
 
 **To reach 🟢** — Without notes, define threat modelling and the six STRIDE letters, explain that AntKart does it informally via the issues register not formally via STRIDE, map at least two known issues to STRIDE categories, and name a category (Repudiation/audit) the informal approach might miss.
+
+---
+
+### 14. Customer-managed keys and encryption at rest 🟡
+
+> **Not implemented — planned.** AntKart relies on **platform-managed** encryption at rest (the Azure default); **customer-managed keys (CMK)** are listed in the [ROADMAP](ROADMAP.md) security programme, not built. Here because "how is data encrypted at rest, and who controls the keys?" is a routine security and compliance question.
+
+**What it is** — **Encryption at rest** means stored data is encrypted on disk; the question is **who holds the key**. **Platform-managed keys (PMK)** — Microsoft creates, stores, and rotates the encryption key; on by default for every Azure data service, invisible to you. **Customer-managed keys (CMK)** — you supply and control the key in Key Vault (or Managed HSM), so *you* govern rotation, access, and revocation, at the cost of operating the key lifecycle.
+
+**The problem it solves** — Everything is encrypted at rest by default, so PMK covers the baseline. CMK exists for **control and compliance**: regulators or contracts that require the customer to hold the key, be able to **revoke** it (cryptographic shred), and audit its use — control PMK cannot give because Microsoft holds the key.
+
+**How it works** — With PMK, the service encrypts data with a Microsoft-managed key hierarchy; nothing to configure. With CMK, you create a key in Key Vault, grant the data service's managed identity **wrap/unwrap** rights, and point the service at that key; the service uses it as the key-encryption-key over its data-encryption-keys. **Revoke or disable the key and the data becomes unreadable** — the compliance lever. You then own **key rotation** (manual or Key-Vault-automated) and the availability risk (lose the key, lose the data).
+
+**Why AntKart does not use it** — AntKart's data stores (Cosmos, PostgreSQL, Redis, Storage, Service Bus) are all encrypted at rest by **Azure platform-managed keys** — the default, so encryption-at-rest is satisfied without configuration. It does **not** use CMK: no customer key wraps any store. CMK is recorded in the [ROADMAP](ROADMAP.md) **security programme** ("customer-managed keys") and the [security-tests placeholder](test/README.md) as planned. That's the honest posture — every byte is encrypted at rest, but Microsoft holds the keys, so AntKart cannot demonstrate key revocation or customer-controlled rotation. For a dev platform with no regulated data, PMK is the right call; a regulated workload would flip this.
+
+**Alternatives and the trade-off** — PMK (AntKart) is zero-effort and Microsoft handles rotation and availability, but you can't revoke or independently audit the key; CMK gives control, revocation, and audit at the cost of operating the key lifecycle and carrying the availability risk (a lost/disabled key is unrecoverable data). Managed HSM is the strongest CMK form (single-tenant, FIPS 140-3) for the highest assurance. AntKart traded control for simplicity because nothing here requires customer-held keys.
+
+**Gotchas** —
+- **"Is it encrypted at rest?" is almost always yes by default** — the real question is *who holds the key*; conflating "encrypted at rest" with "we control the key" is the tell.
+- **CMK's power is revocation** — disabling the key cryptographically shreds access; that's the compliance feature PMK can't offer, and also the foot-gun (disable it by accident, outage).
+- **CMK makes you own availability** — lose the key or its access and the data is gone; PMK never has this failure mode.
+- **CMK ≠ encryption in transit** — at-rest keys say nothing about TLS/mTLS on the wire; they're different controls (see §4.14, §5.10).
+
+**Interview traps** —
+- *"Is AntKart's data encrypted at rest?"* — Yes — Azure platform-managed keys, on by default for every store. But we don't use customer-managed keys, so Microsoft holds them; CMK is planned.
+- *"PMK vs CMK — when do you need CMK?"* — When a regulator or contract requires the customer to control and be able to revoke the key, or to audit its use — compliance-driven, not a security default.
+- *"What's the risk of CMK?"* — You own the key's availability: disable or lose it and the data is unreadable. That revocation power is also the compliance feature.
+- *"Does CMK encrypt traffic?"* — No — it's at-rest only; in-transit encryption is a separate control.
+
+**The 60-second answer** — "Everything in AntKart is encrypted at rest by Azure platform-managed keys — that's on by default for Cosmos, Postgres, Redis, Storage, and Service Bus, so the baseline is covered without configuration. What we don't do is customer-managed keys: we don't hold or wrap with our own key in Key Vault, so Microsoft controls rotation and we can't demonstrate revocation. CMK is on the roadmap security programme. The point of CMK is control and compliance — when a regulator requires the customer to hold the key and be able to revoke it, which cryptographically shreds access. The trade is that CMK makes you own the key's availability: lose or disable it and the data is unrecoverable. For a dev platform with no regulated data, platform-managed keys are the right default."
+
+**Where you would see it** — Regulated workloads (finance, health, government) where contracts or law require customer-held, revocable keys; any system needing cryptographic-shred as a data-disposal control; or high-assurance environments using Managed HSM.
+
+**To reach 🟢** — Without notes, distinguish PMK from CMK and state AntKart uses PMK by default with CMK planned, explain revocation as CMK's compliance lever and availability as its risk, and separate at-rest keys from in-transit encryption.
+
+---
+
+### 15. DAST, SAST, and penetration testing 🟡
+
+> **Partly present.** AntKart runs **SonarCloud** (static analysis) and **Trivy** (dependency/image scanning) as required CI checks; **DAST** and **penetration testing** are recorded in the [ROADMAP](ROADMAP.md) security programme and the [security-tests placeholder](test/SECURITY_TESTS.md), not yet run. Here because "where do SAST, DAST, and pen-testing each sit?" is a standard lifecycle question.
+
+**What it is** — Three complementary ways to find security defects. **SAST** (static application security testing) — analyses **source/build** without running it, catching insecure code patterns and known-vulnerable dependencies early. **DAST** (dynamic) — probes the **running** application from the outside (unauthenticated, then authenticated), finding runtime and configuration flaws SAST can't see. **Penetration testing** — a human (or team) actively attempts to exploit the live system, chaining weaknesses the automated tools miss.
+
+**The problem it solves** — Each finds a different class of defect at a different lifecycle stage: SAST is cheap and early (shift-left, on every PR), DAST needs a deployed target and finds what only appears at runtime, and pen-testing finds the creative, chained exploits automation can't. Relying on one leaves the others' classes unfound.
+
+**How it works** —
+
+| | SAST | DAST | Pen test |
+|---|---|---|---|
+| Target | source + dependencies | running app | running system |
+| When | every PR (shift-left) | against a deployed env | periodic, pre-release |
+| Finds | insecure code, vulnerable deps | auth/authz/config/runtime flaws | chained, creative exploits |
+| Actor | automated in CI | automated, deployed | human-led |
+
+**How AntKart uses it** — AntKart does the **SAST end** in CI: **SonarCloud** (static code analysis) and **Trivy** (filesystem + Dockerfile dependency/image scanning) are two of the **four required branch-protection checks**, so insecure code and known-vulnerable dependencies block a merge ([ROADMAP](ROADMAP.md), [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md)). What it does **not** yet do is **DAST or penetration testing**: the [security-tests guide](test/SECURITY_TESTS.md) is an explicit **placeholder** — the black-box/grey-box probes against the live `api.antkart.in` (401 on tampered/`alg:none` tokens, 403 for non-admins, IDOR/ownership, exposure checks) and the broader **security programme** (DAST specifically named) are **planned, not run**. So AntKart covers the shift-left static class and has *unit/integration* tests for authorization and ownership, but no dynamic scan or human pen-test of the running platform — and the highest-severity known issue, **KI-002** (Discount accepts unverified tokens), is exactly the kind of finding a DAST/pen-test pass targets.
+
+**Alternatives and the trade-off** — SAST alone (much of AntKart today) is cheap and catches early but misses runtime/config and chained flaws; adding DAST catches deployed-only issues at the cost of a target environment and tuning; pen-testing catches the creative class at the cost of skilled human time. The mature answer is all three at their right stages; AntKart has the cheap early layer and defers the deployed/human layers to the security programme.
+
+**Gotchas** —
+- **SAST can't see runtime or config** — an `alg:none` token acceptance (KI-002-shaped) or a permissive CORS (KI-003) is a *running-system* flaw; only DAST/pen-testing reliably catch it.
+- **DAST needs a deployed, representative target** — running it against a stub finds nothing real; that's why AntKart's is scoped to live `api.antkart.in`.
+- **Pen-testing is point-in-time** — it certifies the system *as tested*; the next change can reintroduce a hole, so it complements, not replaces, the automated layers.
+- **Unit tests for authz are not DAST** — AntKart's handler-level ownership/authorization tests are valuable but test the code, not the deployed edge; don't claim dynamic coverage from them.
+
+**Interview traps** —
+- *"SAST vs DAST — the difference?"* — SAST analyses source/build without running it (early, every PR); DAST probes the running app from outside (deployed, runtime/config flaws). Different classes, different stages.
+- *"What do you run today?"* — SonarCloud + Trivy as required CI checks (the SAST end); DAST and pen-testing are planned in the security programme, not yet run — I'd say so plainly.
+- *"Which tool would catch KI-002?"* — DAST or a pen-test of the running Discount path (a forged `alg:none` token) — not SAST, which sees code, not the deployed token-validation gap.
+- *"Where does each sit in the pipeline?"* — SAST in CI on every PR; DAST against a deployed environment; pen-testing periodically before release.
+
+**The 60-second answer** — "SAST, DAST, and pen-testing find different defect classes at different stages. SAST analyses source and dependencies without running them — cheap, shift-left, on every PR; DAST probes the running app from outside for auth, config, and runtime flaws SAST can't see; pen-testing is a human actively exploiting the live system for chained weaknesses automation misses. AntKart does the SAST end in CI — SonarCloud and Trivy are required checks that block a merge on insecure code or vulnerable dependencies. We don't yet run DAST or a pen-test; the security-tests guide is an explicit placeholder and the security programme has DAST planned. That's honest, and it matters — our top known issue, Discount accepting unverified tokens, is exactly a runtime flaw a DAST or pen-test would catch and SAST wouldn't."
+
+**Where you would see it** — Any security-mature SDLC: SAST gates in CI everywhere, DAST against staging/prod-like environments, and scheduled pen-tests before major releases or for compliance (PCI, SOC 2) that mandates them.
+
+**To reach 🟢** — Without notes, distinguish the three by target/stage/finding, state AntKart runs the SAST layer (SonarCloud/Trivy) with DAST and pen-testing planned, and explain why KI-002 is a DAST/pen-test finding rather than a SAST one.
+
+---
+
+### 16. Image signing and provenance 🟡
+
+> **Not implemented — planned.** Image **signing** is named in the [ROADMAP](ROADMAP.md) security programme; AntKart's images are unsigned today. This is the focused sibling of the broader supply-chain concept (§8.9) — here we go deep on signing, provenance, and admission-time verification. Here because "how do you prove an image is really yours and untampered?" is a standard supply-chain probe.
+
+**What it is** — Cryptographically **signing** container images and **verifying** the signature before they run. **Cosign** (Sigstore) and **Notary/Notation** sign an image **digest** and store the signature alongside it in the registry; **provenance/attestation** (SLSA) additionally records *how and where* the image was built. An **admission controller** (a policy engine like Kyverno/Gatekeeper, or Ratify) then **rejects any image whose signature it can't verify** — turning "signed" into "enforced."
+
+**The problem it solves** — Scanning tells you an image has no *known* CVEs; it says nothing about **authenticity**. Signing + verification answers "was this image built by *our* pipeline and unmodified since?" — closing the gap where a swapped or tampered image (no CVEs) would otherwise pass. It's the authenticity layer beneath integrity.
+
+**How it works** — CI signs the pushed image's digest with a key (or keyless, via an OIDC identity and a transparency log — Sigstore's model, no long-lived key to hold). The signature and any SLSA provenance attestation are stored in the registry next to the image. At deploy time an **admission webhook** checks the signature against the trusted identity/key and **admits only verified images**; provenance policies can further require the image came from the expected builder and source. No verification enforcer = the signature is just decoration.
+
+**Why AntKart does not use it** — AntKart's images are **built and pushed unsigned**: CI produces an **immutable commit-SHA-tagged** image and pushes it to ACR over secret-less OIDC ([ADR-022](adr/ADR-022-cicd-github-actions-oidc.md)), but **nothing signs the digest and nothing verifies a signature at admission** — there is no cosign step and no signature-checking admission policy (which also ties to the missing admission-control layer, §4.16). Image **signing** is explicitly in the [ROADMAP](ROADMAP.md) security programme, not built. So AntKart has **integrity of *which* image** (the SHA tag pins the bytes) but **not authenticity** (no proof those bytes came from its pipeline) — the exact gap signing closes. No manufactured rationale: it simply isn't done yet, and it's recorded as planned.
+
+**Alternatives and the trade-off** — Immutable SHA tags alone (AntKart) give integrity cheaply but no authenticity; keyed signing (Notation) adds authenticity at the cost of key management; **keyless** signing (Cosign/Sigstore, OIDC + transparency log) avoids long-lived keys but depends on the Sigstore infrastructure; adding admission-time verification is what makes any of it enforced, at the cost of running a policy engine. AntKart has the cheap integrity layer and defers the cryptographic-authenticity layer.
+
+**Gotchas** —
+- **A signature nobody verifies is decoration** — signing without an admission controller that *rejects* unsigned/unverified images changes nothing; verification is the load-bearing half.
+- **Integrity ≠ authenticity** — a SHA tag pins *which* bytes; a signature proves *who produced* them. AntKart has the first, not the second.
+- **Keyless signing still has a root of trust** — "no key" (Sigstore) means trusting an OIDC identity and a transparency log, not trusting *nothing*; know what you're trusting.
+- **Provenance needs a trusted builder** — SLSA attestations are only as good as the builder that issues them; a compromised CI can attest a compromised image.
+
+**Interview traps** —
+- *"Are your images signed?"* — No — they're immutable SHA-tagged and scanned, but unsigned and unverified at admission; signing is on the roadmap security programme. Owning the gap is the answer.
+- *"Signing vs scanning — what's the difference?"* — Scanning (Trivy) finds known CVEs; signing proves authenticity — that the image is really yours and untampered. Different guarantees.
+- *"What makes signing actually enforce anything?"* — An admission controller that rejects images it can't verify; without it a signature is inert. (AntKart has neither the signature nor the admission gate.)
+- *"Cosign keyless — is there no trust root?"* — There is: an OIDC identity plus a transparency log. Keyless means no long-lived key, not no trust.
+
+**The 60-second answer** — "Image signing cryptographically signs the image digest — with Cosign or Notation — and an admission controller verifies that signature before the image runs, so you can prove an image was built by your pipeline and untampered. Provenance goes further and attests how and where it was built, SLSA-style. AntKart doesn't do this yet: our images are immutable SHA-tagged and Trivy-scanned, but nothing signs them and nothing verifies a signature at admission — signing is on the roadmap security programme. So we have integrity of which image runs, but not authenticity — no proof the bytes came from us. The key nuance is that a signature nobody verifies is just decoration; the admission controller that rejects unverified images is the load-bearing half, and we don't have that layer either."
+
+**Where you would see it** — Regulated or high-assurance supply chains, zero-trust clusters that admit only verified images, SLSA-conformant pipelines, and any organisation hardening against dependency/build-time attacks (post-SolarWinds).
+
+**To reach 🟢** — Without notes, explain signing + admission-time verification and distinguish integrity from authenticity, state AntKart has SHA-tag integrity but no signing/verification (planned), and note that keyless signing still has an OIDC/transparency-log trust root.
+
+---
+
+### 17. Hardened base images 🟡
+
+> **Not implemented — planned.** Images are **non-root today** but build from the **standard** ASP.NET runtime image; a **chiselled/distroless organisation-owned base image** is recorded as **future work** in [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md) and the [ROADMAP](ROADMAP.md). Here because container attack surface is a routine security question and AntKart's images are hardened in one dimension but not the other.
+
+**What it is** — A **hardened base image** minimises what's inside a container so there's less to attack. **Distroless** images contain only the app and its runtime — **no shell, no package manager, no OS utilities**. Ubuntu **Chiseled** images are Canonical's ultra-minimal .NET base (a subset filesystem, non-root, no shell). The two hardening levers are **non-root execution** (already done) and **minimisation** (removing the shell and toolchain — future work). A shared organisation-owned base image also **centralises runtime patching** in one place.
+
+**The problem it solves** — Every binary in an image is attack surface: a shell and package manager let an attacker who lands in a container pivot, install tools, and explore. Removing them shrinks the blast radius and eliminates whole classes of exploit (no shell to spawn). A single owned base image means one place to patch, not per-service drift.
+
+**How it works** — You build `FROM` a minimal base (`dotnet/aspnet:9.0` → a chiselled/distroless variant), so the final image has the .NET runtime and your app and little else. **Non-root** (`USER $APP_UID`, UID 1654) means the process can't bind ports below 1024 (hence port 8080) and can't do root-level things if compromised. A **scan-and-sign-gated, organisation-owned** base image in ACR becomes the single upstream every service builds from — patch it once, rebuild, and the whole fleet inherits the fix.
+
+**Why AntKart does not fully do it** — AntKart images are **hardened in one dimension, not the other**. They **run non-root** — every Dockerfile uses `USER $APP_UID` (UID 1654), listening on 8080 ([ADR-018](adr/ADR-018-aks-workload-identity-base-image.md)) — so they're "not unhardened, only not-yet-minimised" (ADR-018's own words). But they build from the **standard `mcr.microsoft.com/dotnet/aspnet:9.0`** runtime image, which **still ships a shell and OS utilities**. A **chiselled/distroless, organisation-owned, scan-and-sign-gated** base image is explicitly recorded as **future work** in [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md) (Decision 3, Alternative 6) and the [ROADMAP](ROADMAP.md), deferred so it can be validated in isolation. So AntKart has the non-root half and defers the minimisation-and-central-patching half — recorded, not hidden.
+
+**Alternatives and the trade-off** — The standard runtime image (AntKart) is easy to build and debug (it has a shell) but carries more attack surface and no central patching; a chiselled/distroless base removes the shell/toolchain (smaller, safer, one patch point) at the cost of **harder in-container debugging** (no shell to `exec` into) and the effort of owning and scan-gating the base image. Non-root is cheap and already done. AntKart shipped a working non-root fleet first and sequenced minimisation as its own hardening step.
+
+**Gotchas** —
+- **Non-root and minimal are different levers** — AntKart is non-root but not minimal; claiming "hardened images" without qualifying which dimension overstates it.
+- **Distroless breaks `kubectl exec` debugging** — no shell means no interactive troubleshooting inside the container; you debug via logs, ephemeral debug containers, or rebuild — a real operational trade.
+- **A non-root user can't bind low ports** — that's *why* every service listens on 8080; a hardened image that tried to bind 80 as non-root would fail.
+- **An owned base image is only a win if it's actually patched** — centralised patching requires the discipline to rebuild the fleet when the base updates; a stale owned base is worse than the maintained upstream.
+
+**Interview traps** —
+- *"Are your containers hardened?"* — Non-root, yes — UID 1654 on 8080 per ADR-018. Minimised, no — they use the standard runtime image with a shell; a chiselled/distroless base is recorded future work.
+- *"What does distroless actually remove?"* — The shell, package manager, and OS utilities — so an attacker who lands in the container has no toolchain to pivot with.
+- *"Why do your services listen on 8080, not 80?"* — Non-root users can't bind ports below 1024; running non-root forces a high port.
+- *"Downside of distroless?"* — No shell to exec into for debugging; you troubleshoot via logs and ephemeral debug containers instead.
+
+**The 60-second answer** — "A hardened base image minimises what's inside the container. There are two levers: non-root execution and minimisation. AntKart does the first — every image runs as non-root UID 1654 and listens on 8080, because a non-root user can't bind low ports — but not the second: images build from the standard ASP.NET runtime image, which still ships a shell and OS utilities. A chiselled or distroless, organisation-owned base image is recorded as future work in ADR-018 and the roadmap, deferred so it can be validated in isolation. ADR-018's own framing is that the images are 'not unhardened, only not-yet-minimised.' Distroless would remove the shell and toolchain — less attack surface, one central place to patch — at the cost of harder in-container debugging, since there's no shell to exec into."
+
+**Read the code** — The non-root `USER $APP_UID` (UID 1654) in each service's Dockerfile and Decision 3 + Alternative 6 + Future Work in [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md); the chiselled/distroless base as a roadmap item in [ROADMAP](ROADMAP.md); §4.16 (pod security) for the runtime-hardening sibling and §5.16 (image signing) for the scan-and-sign gate the owned base would use.
+
+**To reach 🟢** — Without notes, separate non-root from minimisation and state AntKart does the first not the second, explain what distroless removes and why 8080, name the lost-shell debugging trade, and cite ADR-018's "not unhardened, only not-yet-minimised."
 
 ---
 
@@ -6339,6 +6583,117 @@ Push: the pipeline authenticates *to* the cluster and applies — the cluster's 
 
 ---
 
+### 10. Load and performance testing 🟡
+
+> **Not implemented — planned.** A **Load / Performance** test guide and **performance and scalability validation** are recorded in the [ROADMAP](ROADMAP.md) (future); no load test has been run against AntKart. Here because "how do you know it scales, and how would you prove it?" is a standard question, and the honest answer is that this platform's performance is un-measured.
+
+**What it is** — Testing a system under load to learn how it behaves before real users do. The four shapes: **load** (expected traffic — does it meet its SLA?), **stress** (past the limit — where and how does it break?), **soak** (sustained load over hours — memory leaks, resource exhaustion?), and **spike** (sudden surge — does it absorb or fall over?). Together they turn "it feels fast" into numbers: throughput, latency percentiles, and the breaking point.
+
+**The problem it solves** — Performance assumptions are usually wrong, and the failure mode (a memory leak, a connection-pool exhaustion, a cascade under spike) only appears under load. These tests find the ceiling and the failure behaviour *deliberately*, in a controlled run, instead of discovering them in production.
+
+**How it works** —
+
+| Shape | Question it answers | Typical finding |
+|---|---|---|
+| Load | meets SLA at expected traffic? | p99 latency, throughput |
+| Stress | where does it break? | the saturation point / bottleneck |
+| Soak | stable over hours? | memory leaks, resource creep |
+| Spike | absorbs a sudden surge? | cold-start, autoscale lag, cascade |
+
+A tool (k6, JMeter, Azure Load Testing) drives synthetic traffic while you watch latency, error rate, and resource use; the run belongs against a **production-like** environment, and a baseline can be automated into a pipeline as a gate.
+
+**Why AntKart does not do it** — AntKart has been **functionally** verified end to end (the full saga over HTTPS, both payment branches — [ROADMAP](ROADMAP.md)) but **never load-tested**: there is no throughput number, no latency percentile, no known breaking point. The [ROADMAP](ROADMAP.md) records a **Load / Performance** test guide and **performance and scalability validation** as planned future work, and the [testing index](test/README.md) notes only cloud tests are valid going forward. Two structural facts make this a real gap: the cluster runs a **single fixed node pool with autoscaling disabled** (§4.17), so it *can't* scale to a spike today, and **Razorpay signature verification depends on SDK static state** (breaks if Payments scales beyond one replica — [ROADMAP](ROADMAP.md) open technical debt), a bug a load test with multiple replicas would surface. So AntKart's performance is honestly unknown — proven correct, not proven fast or scalable.
+
+**Alternatives and the trade-off** — No load testing (AntKart today) is cheap and fine for a functional dev demo but leaves scale and failure behaviour unknown; running the four shapes costs tooling, a representative environment, and analysis time but converts assumptions into evidence. A lightweight baseline in CI catches regressions cheaply; a full stress/soak campaign is a pre-production investment. AntKart deferred all of it — appropriate for a stopped-between-sessions dev platform, a gap for anything claiming production readiness.
+
+**Gotchas** —
+- **The four shapes answer different questions** — load ≠ stress ≠ soak ≠ spike; "we load tested it" without saying which leaves the others' failure classes unfound.
+- **Testing a non-representative environment lies** — a single-node dev cluster with autoscaling off can't reveal production scale behaviour; the environment must resemble prod.
+- **Soak finds what a short run hides** — memory leaks and resource creep need *hours*; a five-minute load test passes right over them.
+- **A known scaling bug fails under load, not correctness tests** — the Razorpay-static-state bug is invisible to functional tests and would only appear when Payments runs multiple replicas under load.
+
+**Interview traps** —
+- *"Have you load tested this?"* — No — it's functionally verified but never load-tested; there's no throughput or latency number. Load/performance is planned roadmap work. Owning it is the answer.
+- *"Load vs stress vs soak vs spike?"* — Load = SLA at expected traffic; stress = find the breaking point; soak = sustained-load stability; spike = sudden-surge absorption. Different questions.
+- *"Could this platform handle a spike today?"* — No — single fixed node pool, autoscaling disabled; it can't add capacity. That's an honest structural limit.
+- *"What bug would a load test catch here?"* — The Razorpay signature verification's dependence on SDK static state, which breaks Payments beyond one replica — invisible to functional tests.
+
+**The 60-second answer** — "Load testing comes in four shapes that answer different questions: load checks the SLA at expected traffic, stress finds the breaking point, soak runs for hours to catch leaks, and spike tests sudden surges. AntKart has been functionally verified end to end but never load-tested — there's no throughput figure, no latency percentile, no known ceiling, and performance and scalability validation is planned roadmap work. Two things make that a real gap: the cluster is a single fixed node pool with autoscaling off, so it can't even scale to a spike today, and we have a known bug where Razorpay signature verification depends on SDK static state and would break Payments beyond one replica — exactly the kind of thing a multi-replica load test surfaces and functional tests never will. So it's proven correct, not proven fast."
+
+**Where you would see it** — Any system with real traffic or SLAs: pre-launch capacity planning, performance-regression gates in CI, and stress/soak campaigns before a major release or a known traffic event (a sale, a launch).
+
+**To reach 🟢** — Without notes, distinguish the four shapes by the question each answers, state AntKart is functionally verified but never load-tested (planned), name the single-pool/no-autoscale and Razorpay-static-state facts as concrete scale limits, and explain why soak and multi-replica runs find what functional tests miss.
+
+---
+
+### 11. Chaos engineering 🟡
+
+> **Not implemented, and not recorded.** No chaos testing has been run against AntKart and **no ROADMAP or ADR mentions it** — the choice was never made. Here because "how do you know your resilience actually works?" is a standard reliability question, and a platform never broken on purpose has *unproven* resilience.
+
+**What it is** — Chaos engineering is **deliberately injecting failure** into a system to verify it behaves as designed under adverse conditions. You form a hypothesis ("if Postgres goes away, Order self-heals and the saga compensates"), inject the fault (kill a pod, block a dependency, add latency), and observe whether reality matches. **Azure Chaos Studio** is the managed fault-injection service for Azure/AKS. The core insight: **resilience you haven't tested is a hope, not a property**.
+
+**The problem it solves** — Systems have resilience *mechanisms* (retries, circuit breakers, health probes, self-heal, saga compensation) that are only ever exercised by real failures — which arrive at the worst time. Chaos engineering exercises them *on purpose*, in controlled conditions, so you discover the gap between "designed to survive" and "actually survives" before a real incident does.
+
+**How it works** — Define a **steady state** (the normal metric), form a **hypothesis** about a fault, inject it with a **small blast radius** (one pod, one dependency, one zone) — pod kills, CPU pressure, network latency/blackhole, a stopped dependency — and watch whether the steady state holds. You start in non-prod, expand the blast radius as confidence grows, and always have an **abort/rollback**. Chaos Studio models these as experiments with targets and faults.
+
+**Why AntKart does not use it** — AntKart has **resilience mechanisms** but has never had them **deliberately broken**: criticality-tiered Polly pipelines (§ resilience), the orchestrated saga with compensation, health probes with self-heal, and a startupProbe that stops Key-Vault-at-boot restart loops. Some of these were validated **incidentally** — after a stop/redeploy, three services **self-healed from `CrashLoopBackOff`** once Postgres started ([ROADMAP](ROADMAP.md)) — but never through a controlled fault-injection experiment. **No ROADMAP item or ADR mentions chaos engineering**, so honestly the choice was never made — it's neither done nor planned. Tellingly, two of the platform's own defects are **silent failures** a chaos experiment would have exposed: **KI-014** (MassTransit topology auth fails as a *warning* while messaging is silently broken) and **KI-013** (config changes don't restart pods; every signal reports healthy on stale config). Chaos engineering's whole point is finding exactly those "looks healthy, isn't" gaps.
+
+**Alternatives and the trade-off** — Not doing chaos (AntKart) is free and safe but leaves resilience unproven — you learn whether it works during a real incident; running experiments costs tooling and careful blast-radius control but converts hope into evidence. Incidental validation (the accidental self-heal) is better than nothing but isn't systematic — it tests what happened to break, not what you chose to test. AntKart has designed-in resilience and no proof it holds under deliberate stress.
+
+**Gotchas** —
+- **Untested resilience is unproven resilience** — a circuit breaker or compensation path that's never fired may not work; the mechanism existing isn't evidence it functions.
+- **Blast radius is everything** — chaos without a small, controlled scope and an abort is just an outage; the discipline is what separates it from recklessness.
+- **The dangerous failures are the silent ones** — KI-013 and KI-014 both report "healthy" while broken; chaos experiments that assert on *behaviour*, not just pod status, are what catch them.
+- **Incidental ≠ intentional** — surviving an accidental CrashLoopBackOff proves that one path; it doesn't substitute for hypotheses you deliberately test.
+
+**Interview traps** —
+- *"Do you do chaos engineering?"* — No — and it's not on the roadmap either, so the honest statement is the choice was never made. We have resilience mechanisms but haven't deliberately broken them.
+- *"Why does that matter?"* — Untested resilience is a hope; a saga's compensation or a circuit breaker only proves out when it actually fires. Two of our own silent-failure defects (KI-013, KI-014) are exactly what chaos would surface.
+- *"How would you run it safely here?"* — Steady-state hypothesis, small blast radius (one pod/dependency), inject via Chaos Studio, assert on behaviour not just pod health, always have an abort.
+- *"Didn't a self-heal already prove resilience?"* — Only incidentally — three services recovered from CrashLoopBackOff after Postgres started; that's one accidental path, not a systematic test.
+
+**The 60-second answer** — "Chaos engineering deliberately injects failure — kill a pod, block a dependency, add latency — to verify a system behaves as designed under adversity, because resilience you haven't tested is a hope, not a property. You form a steady-state hypothesis, inject with a small blast radius and an abort, and check reality matches. Azure Chaos Studio is the managed tool. AntKart has resilience mechanisms — tiered Polly retries, saga compensation, self-healing probes — but has never had them deliberately broken; it's not done and not on the roadmap, so honestly the choice was never made. What makes that pointed is that two of our own defects are silent failures — MassTransit breaking as a warning, config changes not restarting pods — both 'looks healthy, isn't,' which is precisely what a behaviour-asserting chaos experiment catches."
+
+**Where you would see it** — SRE-mature organisations with reliability targets (Netflix's Chaos Monkey being the origin), any platform where resilience is a hard requirement, and teams that run game-days to validate incident response and failover before they're needed.
+
+**To reach 🟢** — Without notes, explain the hypothesis/inject/observe loop and blast-radius discipline, state AntKart has resilience mechanisms but no chaos testing (and none planned — never recorded), and connect KI-013/KI-014 silent failures to what chaos would surface.
+
+---
+
+### 12. Package feeds and shared libraries 🟡
+
+> **Partly present — evolution planned.** AntKart already has a shared library (`AK.BuildingBlocks`) consumed by **project reference**; publishing it as a **versioned package feed** is a [ROADMAP](ROADMAP.md) item. Here because sharing cross-cutting code is a coupling decision every multi-service codebase faces, and the project-reference-vs-package choice is a common architect probe.
+
+**What it is** — A **shared library** is cross-cutting code (base types, auth, messaging, resilience, middleware) reused across services. A **package feed** (NuGet feed, Azure Artifacts, GitHub Packages) publishes that library as a **versioned artifact** services consume by version, rather than by direct source/project reference. The choice between the two is really a choice about **coupling and release cadence**.
+
+**The problem it solves** — Every multi-service codebase must reuse cross-cutting code without copy-paste. But *how* you share it determines whether all services move together (project reference — one repo, lock-step) or independently (versioned package — each upgrades on its own schedule). It also raises the **diamond dependency problem**: when two dependencies demand different versions of the same shared library, something has to give.
+
+**How it works** — With a **project reference** (AntKart today), services reference the library's source project directly; a change to it rebuilds and affects **every** consumer at once, in lock-step — simple, always-consistent, but tightly coupled. With a **package feed**, CI publishes `AK.BuildingBlocks 1.4.0` to a feed; each service references a **version** and upgrades when it chooses — decoupled release cadence, independent blast radius, but now you manage **versioning** (SemVer), **compatibility**, and the **diamond problem** (Service A wants 1.4, a transitive dep wants 1.2 — the build must resolve or unify).
+
+**Planned — and what it would change** — AntKart's [ADR-008](adr/ADR-008-shared-ddd-contracts-in-buildingblocks.md) put the shared DDD contracts, auth, messaging, resilience, and middleware into **`AK.BuildingBlocks`**, consumed by **project reference** across all services — deliberately lock-step in a single repo. The [ROADMAP](ROADMAP.md) records **"Shared building blocks as a package feed"** — publishing it as a versioned package for consumption across services. That change would **decouple** each service's upgrade cadence (a service could stay on an older BuildingBlocks while another moves) at the cost of introducing **versioning discipline and the diamond dependency problem** the current lock-step reference avoids entirely. So today's tight coupling is a *feature* for a single-repo platform; the package feed is the step you take when services need to evolve independently — a coupling decision, recorded as planned, not yet made real.
+
+**Alternatives and the trade-off** — Project reference (AntKart) guarantees every service runs the *same* BuildingBlocks — no version skew, no diamond problem — at the cost of lock-step upgrades (a breaking change hits everyone at once). A package feed buys independent cadence and blast-radius isolation at the cost of versioning discipline, compatibility management, and diamond resolution. Copy-paste (neither) is the anti-pattern — drift and no single source. AntKart chose lock-step consistency appropriate to one repo; the feed is for when that repo splits or services need to diverge.
+
+**Gotchas** —
+- **Sharing code is coupling, not just reuse** — a shared library ties its consumers together; the more you put in it, the more lock-step they become. That's a design decision, not a convenience.
+- **The diamond dependency problem is the package-feed tax** — versioned sharing means two paths can demand different versions of the same library; you must unify or pin, and it gets worse with depth.
+- **Project reference means a breaking change breaks everyone at once** — great for consistency, unforgiving for independent release; that's the trade the feed reverses.
+- **A shared library that grows unbounded becomes a distributed monolith** — if every service must upgrade in lock-step because BuildingBlocks changed, you've coupled them; keep shared code genuinely cross-cutting (ADR-008's intent).
+
+**Interview traps** —
+- *"How do you share cross-cutting code?"* — A shared library, `AK.BuildingBlocks` (ADR-008), consumed by project reference today — lock-step across all services; publishing it as a versioned package feed is planned.
+- *"Project reference vs package feed — the trade?"* — Project reference = one version everywhere, no diamond problem, but lock-step upgrades; package feed = independent cadence and isolation, but versioning discipline and the diamond problem.
+- *"What's the diamond dependency problem?"* — Two dependencies require different versions of the same shared library; the build must unify or pin one, and it compounds with transitive depth.
+- *"Isn't a shared library just reuse?"* — It's also coupling — consumers move together; an unbounded shared library becomes a distributed monolith.
+
+**The 60-second answer** — "A shared library reuses cross-cutting code across services, and how you share it is a coupling decision. AntKart has AK.BuildingBlocks — base types, auth, messaging, resilience, middleware, per ADR-008 — consumed by project reference, so every service builds against the same source and moves in lock-step: no version skew, no diamond problem, but a breaking change hits everyone at once. The roadmap plans to publish it as a versioned package feed, which would decouple each service's upgrade cadence at the cost of versioning discipline and the diamond dependency problem — where two dependencies demand different versions of the same library and the build must resolve it. So today's tight coupling is actually a feature for a single repo; the feed is the step you take when services need to evolve independently. The risk either way is an unbounded shared library becoming a distributed monolith."
+
+**Read the code** — The shared library `AK.BuildingBlocks` and its scope in [ADR-008](adr/ADR-008-shared-ddd-contracts-in-buildingblocks.md) and [BUILDING_BLOCKS.md](../AK.BuildingBlocks/BUILDING_BLOCKS.md); the project references in each service's `.csproj`; the package-feed evolution as a [ROADMAP](ROADMAP.md) item.
+
+**To reach 🟢** — Without notes, frame shared-code sharing as a coupling decision, contrast project reference (lock-step, no diamond) with a package feed (independent cadence, diamond problem), state AntKart uses project reference today with the feed planned, and name the distributed-monolith risk of an unbounded shared library.
+
+---
+
 # 9. Architecture practice
 
 > This section is different. The eight sections before it are about **technologies**; this one is about the **craft of being an architect** — how you decide, document, and reason about trade-offs. These concepts have no "Read the code" line because they aren't in the code; instead each ends with **"Where this appears in AntKart"**, pointing at the ADRs, C4 models, and known-issues register where the practice is visible. An interviewer probes these to tell an architect from a senior engineer.
@@ -6556,8 +6911,279 @@ The public-vs-internal repository split is the same idea institutionalised: *ass
 
 ---
 
-_End of syllabus. **One hundred and eleven concepts** across nine sections, all written to the full template — the
-original seventy the platform runs on, plus alternatives it chose against, adjacent technologies it doesn't use, and
-the architecture-practice concepts that turn a builder into an architect. Every tag starts 🟡 — the writing is
-done; the proving is yours. When you change the last one to 🟢, this platform is yours to explain to anyone —
-including everything you deliberately did **not** build, and why._
+### 7. The Azure Well-Architected Framework 🟡
+
+**What it is** — The **Well-Architected Framework (WAF)** is Microsoft's set of **five pillars** for judging a workload: **Reliability**, **Security**, **Cost Optimisation**, **Operational Excellence**, and **Performance Efficiency**. It's the vocabulary Azure architect interviews are conducted in and the backbone of **AZ-305**. Its central truth is that the pillars **conflict** — you cannot maximise all five, so architecture is choosing which to favour, deliberately, for a workload.
+
+**The problem it solves** — "Is this a good architecture?" is unanswerable in the abstract. WAF makes it answerable by decomposing "good" into five measurable dimensions and forcing the trade-offs into the open — so a design can be assessed, scored, and defended pillar by pillar instead of by gut feel.
+
+**How a review is actually run** — You take **one workload**, and against each pillar walk a checklist of questions (Microsoft's WAF assessment tool scores this 0–100 per pillar and emits prioritised recommendations). You identify **trade-offs** — every choice that strengthens one pillar usually weakens another — and produce a ranked list of improvements. It's per-workload, evidence-based, and repeated as the system evolves.
+
+**How AntKart uses it — an honest assessment against each pillar:**
+
+| Pillar | AntKart's posture | Verdict |
+|---|---|---|
+| **Reliability** | Single region, single node pool, autoscaling off; no HA/DR; KI-005 stock leak; silent-failure defects (KI-013/KI-014) | **Weak** |
+| **Security** | Strong identity (secret-less workload identity, per-service token validation) but no private endpoints, no mTLS, KI-002 unverified token, no CMK/signing | **Mixed** — strong identity, weak network/supply-chain |
+| **Cost Optimisation** | Budget module, stop-between-sessions, `Free` control-plane tier in dev, right-sized node pool | **Strong (for its scope)** |
+| **Operational Excellence** | IaC + GitOps + CI/CD + ADRs + logs/traces; but no metrics, config-drift (KI-013), a manual grant not in code (KI-014) | **Mixed** |
+| **Performance Efficiency** | Never load-tested, no autoscaling, no metrics — **unmeasured** | **Weak/unproven** |
+
+So AntKart is strongest on **cost** and **operational excellence** (the automation and documentation are genuinely good), acceptable on the **identity half of security**, and honestly **weak on reliability, performance, and the network/supply-chain half of security** — and it says so throughout this playbook rather than claiming five-pillar excellence.
+
+**Alternatives and the trade-off** — There is no alternative *framework* an Azure architect is examined on instead (AWS has its own Well-Architected Framework — near-identical pillars). The real content is the **trade-offs**: AntKart's `Free` control-plane tier and single node pool favour **cost** over **reliability**; autoscaling-off favours **cost** over **performance**; the absence of private endpoints favours **operational simplicity/cost** over **security**. Each is a defensible WAF trade for a dev platform — and the wrong one for production.
+
+**Gotchas** —
+- **The pillars conflict — that's the point** — cost vs reliability, security vs performance/cost, reliability vs simplicity. Anyone claiming a design "nails all five" hasn't understood WAF.
+- **It's per-workload, not per-org** — you assess *a workload* against the pillars; a blanket "the company is well-architected" misuses it.
+- **A pillar without evidence is a claim** — "it's reliable" means nothing without an RTO/RPO or an SLO; AntKart's honesty is naming the pillars it *can't* evidence (performance: no load test).
+- **Cost optimisation ≠ cheapest** — it's *value* for spend; AntKart's stop-start is cost-optimal for a dev platform but would be wrong for a 24/7 production SLA.
+
+**Interview traps** —
+- *"Name the five pillars."* — Reliability, Security, Cost Optimisation, Operational Excellence, Performance Efficiency. This is table stakes for an Azure architect.
+- *"Assess your own platform against them."* — Strong on cost and operational excellence, mixed on security (strong identity, weak network), weak on reliability and performance (single region, no autoscaling, never load-tested). Naming your own weaknesses is the credibility signal.
+- *"Give a concrete pillar conflict in your design."* — The `Free` control-plane tier and single node pool trade reliability for cost; autoscaling-off trades performance for cost — deliberate WAF trades for a dev platform (ADR-018).
+- *"Can you maximise all five?"* — No — they conflict; architecture is choosing which to favour for the workload.
+
+**The 60-second answer** — "The Well-Architected Framework judges a workload against five pillars — reliability, security, cost optimisation, operational excellence, and performance efficiency — and its central truth is that they conflict, so you choose which to favour deliberately. A review takes one workload, scores each pillar against a checklist, and surfaces the trade-offs. Assessing AntKart honestly: it's strong on cost — a budget module, stop-between-sessions, the free dev control-plane tier — and strong on operational excellence — IaC, GitOps, CI/CD, ADRs, logs and traces. It's mixed on security: excellent identity with secret-less workload identity, but weak network and supply-chain — no private endpoints, no mTLS, an unverified-token defect. And it's honestly weak on reliability and performance — single region, single node pool, autoscaling off, never load-tested. Those are deliberate cost-favouring trades for a dev platform, and the wrong ones for production."
+
+**Where this appears in AntKart** — The cost-pillar trades in [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md) (`Free` tier, single node pool — "a deliberate Well-Architected cost-pillar pattern") and the governance "well-architected … cost-aware, reproducible, protected, secret-less" evidence in the [Infrastructure Guide](guides/infrastructure-guide.md); the reliability/performance gaps in §4.17, §8.10, §9.9, and [KNOWN_ISSUES.md](KNOWN_ISSUES.md); the security posture in §5; the AZ-305 goal in [ROADMAP](ROADMAP.md).
+
+**To reach 🟢** — Without notes, name the five pillars, assess AntKart honestly against each (naming the weak ones), give a concrete pillar conflict from ADR-018, and explain why you can't maximise all five.
+
+---
+
+### 8. Cloud Adoption Framework and landing zones 🟡
+
+> **Not used in AntKart.** The platform is a **single subscription with no landing zone**; no ROADMAP item or ADR plans one (ADR-012 references CAF only for *naming conventions*). Here because "how would you structure this for an enterprise?" is a core AZ-305 topic and the honest answer is that AntKart deliberately isn't structured that way.
+
+**What it is** — The **Cloud Adoption Framework (CAF)** is Microsoft's guidance for adopting Azure at organisation scale; its signature construct is the **landing zone** — a pre-provisioned, governed environment (identity, network, policy, management) that workloads are deployed *into*, so every workload inherits enterprise guardrails instead of reinventing them. The building blocks: **management groups** (a hierarchy above subscriptions), **subscription topology** (workload/platform separation), **Azure Policy** (governance as code), and a **hub-and-spoke** network (a shared hub for connectivity/security, spokes per workload).
+
+**The problem it solves** — At enterprise scale, letting each team build its own subscription from scratch produces inconsistent security, networking, and governance. A landing zone provides the "ready environment" — identity, network, policy, logging already wired — so workloads land on a compliant foundation on day one, and governance is enforced centrally rather than hoped for per team.
+
+**How it works** — **Management groups** organise many subscriptions into a hierarchy; **Azure Policy** applied at a management group cascades to every subscription beneath (deny public IPs, require tags, enforce regions). Platform subscriptions (identity, management, connectivity) are separated from workload subscriptions. A **hub-and-spoke** topology puts shared services (firewall, DNS, ExpressRoute/VPN) in a hub VNet, peered to per-workload spoke VNets. Workloads deploy into a spoke and inherit the guardrails.
+
+**Why AntKart does not use it** — AntKart runs in a **single subscription** with a **single VNet** ([networking module](../infrastructure/modules/networking/main.tf)) and **no landing zone** — no management group hierarchy, no hub-and-spoke, no centrally-cascaded Azure Policy (the governance module creates a **budget**, not policy — noted in [KI-007](KNOWN_ISSUES.md)). CAF appears in the repo only as the source of the **naming conventions** ([ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md) cites CAF naming). No ROADMAP item plans a landing zone, so honestly the choice was never made — it's a single-subscription reference platform, not an enterprise-scale estate. Adopting one would mean a management-group hierarchy, workload/platform subscription separation, hub-and-spoke networking, and policy-as-code — a substantial restructuring that would also naturally absorb the private-endpoint and network-isolation gaps (§5.10).
+
+**Alternatives and the trade-off** — A single subscription (AntKart) is simple, cheap, and fine for one workload owned by one person, but offers no central governance, no network segmentation, and no multi-team isolation; a landing zone provides all of that at the cost of significant up-front platform engineering and ongoing governance. For a solo dev reference platform, the single subscription is right; for any real enterprise onboarding many teams, starting *without* a landing zone is the classic expensive mistake.
+
+**Gotchas** —
+- **A landing zone is where enterprises *start*, not where they end up** — the whole point is provisioning the governed foundation *before* workloads; retrofitting one onto a sprawl of ungoverned subscriptions is far harder.
+- **Management-group policy cascades — that's the power and the risk** — a deny policy at the root hits every subscription; misapplied, it can block legitimate deployments estate-wide.
+- **A budget is not governance** — AntKart's governance module creates a cost budget, not Azure Policy; don't conflate "we have a governance unit" with "we enforce policy."
+- **Single subscription ≠ a landing zone with one subscription** — a landing zone is the *governance structure*; having one subscription is the absence of it, not a minimal version.
+
+**Interview traps** —
+- *"How is this structured for the enterprise?"* — It isn't — single subscription, single VNet, no landing zone, no management groups or hub-and-spoke. Honest, and correct for a solo reference platform.
+- *"What's a landing zone?"* — A pre-provisioned, governed environment (identity, network, policy, management) workloads deploy *into*, so they inherit guardrails; management groups + subscription topology + Azure Policy + hub-and-spoke.
+- *"Where does policy get enforced in CAF?"* — At management-group scope, cascading down the subscription hierarchy — governance as code, centrally.
+- *"Do you use Azure Policy?"* — No — the governance module creates a budget, not policy; that's an honest distinction, not governance-by-policy.
+
+**The 60-second answer** — "The Cloud Adoption Framework is Microsoft's guidance for adopting Azure at scale, and its signature construct is the landing zone — a pre-provisioned, governed environment workloads deploy into, so they inherit identity, network, policy, and management guardrails instead of reinventing them. The building blocks are management groups above subscriptions, workload-versus-platform subscription separation, Azure Policy cascading down the hierarchy, and hub-and-spoke networking. AntKart uses none of it — it's a single subscription, a single VNet, no landing zone, and our governance module creates a budget, not policy. CAF shows up in the repo only as the source of our naming conventions. No roadmap item plans a landing zone, so the honest statement is it was never the goal — it's a solo reference platform. Adopting one is where an enterprise *starts*, and it's expensive to retrofit later."
+
+**Where this appears in AntKart** — CAF as the naming-convention source in [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md); the single-VNet setup in [`infrastructure/modules/networking`](../infrastructure/modules/networking/main.tf); the budget-not-policy governance in the [Infrastructure Guide](guides/infrastructure-guide.md) and [KI-007](KNOWN_ISSUES.md); the network-isolation gaps a landing zone would absorb in §5.10.
+
+**To reach 🟢** — Without notes, define CAF and a landing zone and its four building blocks, state AntKart is a single subscription with no landing zone (budget, not policy), explain that management-group policy cascades, and note a landing zone is where enterprises start, not retrofit.
+
+---
+
+### 9. High availability and disaster recovery 🟡
+
+> **Not implemented in AntKart.** The platform is **single-region, single-node-pool**, with **no HA or DR posture**; no ROADMAP item plans one. Here because HA/DR is central to any architect role and AntKart is deliberately the minimal case — worth being able to assess honestly.
+
+**What it is** — Two distinct disciplines. **High availability (HA)** — surviving *component* failure with no meaningful downtime, via redundancy: **availability zones** (physically separate datacentres within a region) and multiple instances. **Disaster recovery (DR)** — surviving *regional* loss and recovering to a known state, measured by **RTO** (Recovery Time Objective — how long to recover) and **RPO** (Recovery Point Objective — how much data loss is acceptable). The postures: **active-active** (multiple regions serving simultaneously) vs **active-passive** (a standby region promoted on failure), plus a **backup/restore** strategy underpinning both.
+
+**The problem it solves** — Hardware, zones, and whole regions fail. HA keeps you serving through the common failures (a node, a zone); DR gets you back after the rare catastrophic one (a region). Without explicit RTO/RPO targets and a tested recovery, "highly available" is a wish — and you discover your real recovery time during the outage.
+
+**How it works** —
+- **Zone redundancy (HA):** spread instances across **availability zones** so a zone failure loses only part of your capacity; zone-redundant managed services (zone-redundant Postgres, ZRS storage) do this for data.
+- **Multi-region (DR):** replicate data to a second region and route traffic there. **Active-active** (both live — best RTO, hardest consistency) vs **active-passive** (standby promoted — simpler, higher RTO).
+- **RTO/RPO drive the design:** near-zero RPO needs synchronous replication (latency cost); a longer RPO allows async/backups. The numbers dictate the architecture, not the other way round.
+- **Backup/restore** is the floor: point-in-time restore, geo-redundant backups, and — critically — **tested** restores.
+
+**Why AntKart does not have it** — AntKart is deliberately the **minimal case**: a **single region**, a **single node pool** with **autoscaling disabled** (§4.17, [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md)), **no availability-zone spread**, **no second region**, and **no defined RTO/RPO**. It is, in fact, *usually stopped* between sessions ([PROJECT-STATE.md](PROJECT-STATE.md)) — the opposite of an availability posture. There *is* an incidental resilience signal — after a stop/redeploy, services **self-healed from `CrashLoopBackOff`** once Postgres started ([ROADMAP](ROADMAP.md)) — and platform-managed **backups** exist on the managed data services by default, but neither is an HA/DR *design*. No ROADMAP item plans HA/DR, so the honest position is it was never a goal. A real posture would require zone-redundant node pools and data, a second region with replication, explicit RTO/RPO targets, and a **tested** failover — none of which exist.
+
+**Alternatives and the trade-off** — Single-region/single-pool (AntKart) is cheapest and simplest but has no redundancy and an undefined, probably-hours recovery; zone redundancy adds HA within a region for modest cost; multi-region DR (active-passive, then active-active) adds regional survival at escalating cost and consistency complexity. The RTO/RPO targets set how far up that ladder you climb. AntKart is at the bottom rung deliberately — a dev reference, not an available service.
+
+**Gotchas** —
+- **HA ≠ DR** — HA survives component/zone failure with redundancy; DR recovers from regional loss. Conflating them is the classic error; you need both, and they're different designs.
+- **Availability zones ≠ regions** — zones are separate datacentres *within* a region (low-latency, HA); regions are geographically distant (DR, higher latency). Mixing them up is a tell.
+- **An untested DR plan is a hope** — backups you've never restored and failovers you've never run are the ones that fail in the incident; the discipline overlaps chaos engineering (§8.11).
+- **RTO/RPO are requirements, not outputs** — you design *to* them; "how available is it?" without numbers is unanswerable, which is exactly AntKart's honest state.
+
+**Interview traps** —
+- *"What's this platform's HA/DR posture?"* — None by design — single region, single node pool, no zone spread, no second region, no RTO/RPO; it's usually stopped between sessions. Owning that is the answer.
+- *"HA vs DR?"* — HA survives component/zone failure via redundancy (availability zones, instances); DR recovers from regional loss, measured by RTO and RPO.
+- *"Active-active vs active-passive?"* — Both-live (best RTO, hardest consistency) vs standby-promoted (simpler, higher RTO); the choice follows the RTO/RPO targets.
+- *"What would real HA here require?"* — Zone-redundant node pools and data, a second region with replication, defined RTO/RPO, and a *tested* failover — none of which exist today.
+
+**The 60-second answer** — "High availability and disaster recovery are different disciplines. HA survives component or zone failure through redundancy — availability zones, which are separate datacentres within a region, and multiple instances. DR survives regional loss and is measured by RTO, how fast you recover, and RPO, how much data you can lose; the postures are active-active or active-passive, over a backup-and-restore floor. AntKart has neither by design: single region, single node pool, autoscaling off, no zone spread, no second region, no defined RTO or RPO — and it's actually stopped between sessions, the opposite of availability. There's an incidental self-heal signal and default managed backups, but no HA/DR design, and none is planned. A real posture would need zone-redundant nodes and data, a second region with replication, explicit RTO/RPO, and a tested failover."
+
+**Where this appears in AntKart** — The single-region/single-pool cluster in [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md) and §4.17; the stop-between-sessions operating model in [PROJECT-STATE.md](PROJECT-STATE.md); the incidental self-heal in [ROADMAP](ROADMAP.md); the reliability-pillar verdict in §9.7; the tested-failover discipline shared with chaos engineering (§8.11).
+
+**To reach 🟢** — Without notes, separate HA (zones/redundancy) from DR (RTO/RPO, active-active vs passive), state AntKart has neither and is usually stopped, distinguish zones from regions, and list what a real posture would require.
+
+---
+
+### 10. Multi-region and data residency 🟡
+
+> **Not implemented in AntKart.** Single region, no multi-region routing or replication; recorded on the [ROADMAP](ROADMAP.md) only as broad "sovereign and regulated-cloud considerations." The worked example below is drawn from prior professional experience, not this repository. Here because multi-region routing and the data-residency/consistency trade-off are core architect material.
+
+**What it is** — Running a system across **multiple regions** for **latency** (serve users near them), **availability** (survive a regional failure — the DR link, §9.9), or **data residency** (keep specific data inside a required geography). It forces three coupled decisions: **traffic routing** (which region serves a request), **data replication** (how data gets to each region), and the **consistency trade-off** (global strong consistency costs latency — the CAP/PACELC point, §9.4, made concrete across geographies).
+
+**The problem it solves** — One region can't be simultaneously close to users worldwide, resilient to its own failure, and compliant with every jurisdiction's residency law. Multi-region addresses whichever of latency, availability, and residency the workload requires — but each pulls against the others and against consistency.
+
+**How it works** —
+- **Traffic routing:** a global entry (Azure **Front Door** / **Traffic Manager**) routes each request to the nearest healthy region (or a residency-pinned one).
+- **Data replication:** async (low latency, eventual consistency, some RPO) or synchronous (strong consistency, latency cost); Cosmos DB's multi-region write and tunable consistency are the canonical Azure levers.
+- **Consistency trade-off:** strong global consistency requires cross-region coordination (high latency); most designs accept **eventual** consistency between regions and pin *authoritative* writes per region.
+- **Data residency:** some data is **partitioned by region** and never leaves it — the routing and replication rules must enforce the legal boundary, not just optimise latency.
+
+**Why AntKart does not use it** — AntKart is **single-region**: one AKS cluster, one set of data stores, no global routing, no cross-region replication (its Postgres even sits in a *different* region from the cluster — a latency note, not a multi-region design — see the [README](../README.md)). The [ROADMAP](ROADMAP.md) records only broad "sovereign and regulated-cloud considerations" as future documentation; there is no multi-region delivery item. So the choice was never made here. As a **worked example** of the problem, though: a **multi-sovereign delivery I led** ran **Azure Global and Azure China (operated by 21Vianet) from a single application codebase**, with **region-specific infrastructure and identity** per sovereign boundary — the same app, two clouds, data and control kept within each jurisdiction. That is exactly the multi-region-plus-residency problem at its hardest: one codebase, separate infrastructure/identity planes, and a hard legal boundary that routing and replication must respect (see the sovereign-cloud concept, §9.11).
+
+**Alternatives and the trade-off** — Single-region (AntKart) is simplest and cheapest but serves distant users slowly, dies with its region, and can't meet residency rules outside that geography; multi-region buys latency, availability, and residency at the cost of replication complexity, the consistency trade-off, and duplicated infrastructure. Active-passive multi-region is the cheaper entry; active-active with global data is the hardest and most expensive. The workload's latency/availability/residency requirements decide how far you go.
+
+**Gotchas** —
+- **Data residency is a legal boundary, not a latency optimisation** — routing for speed and pinning data for law are different constraints; a residency rule can *forbid* the low-latency route.
+- **Global strong consistency is expensive** — cross-region coordination adds latency on every write; most multi-region designs accept eventual consistency and localise authoritative writes (CAP/PACELC, §9.4).
+- **Multi-region ≠ automatic DR** — you still need failover *testing* and defined RTO/RPO; running in two regions isn't a DR plan by itself (§9.9).
+- **One codebase, many planes** — the hard part of multi-sovereign isn't the app (it ports); it's running **separate infrastructure and identity** per boundary from that one codebase — exactly the worked-example shape.
+
+**Interview traps** —
+- *"Is AntKart multi-region?"* — No — single region, no global routing or replication (its Postgres is merely in a different region, a latency detail). Only broad sovereign considerations are on the roadmap.
+- *"What are the three coupled decisions in multi-region?"* — Traffic routing, data replication, and the consistency trade-off — with data residency as a legal constraint layered on top.
+- *"Give a real multi-region/residency example."* — A multi-sovereign delivery running Azure Global and Azure China from one codebase with region-specific infrastructure and identity — same app, separate planes, hard jurisdictional boundary.
+- *"Why not just use global strong consistency?"* — Cross-region coordination makes every write slow; you accept eventual consistency and localise authoritative writes.
+
+**The 60-second answer** — "Multi-region runs a system across regions for latency, availability, or data residency, and it forces three coupled decisions: how traffic is routed — a global front door to the nearest healthy or residency-pinned region — how data is replicated — async for low latency and eventual consistency, or synchronous for strong consistency at a latency cost — and the consistency trade-off itself, which is CAP and PACELC across geographies. Data residency adds a hard legal boundary on top, which can forbid the fast route. AntKart is single-region with none of this. As a worked example, a multi-sovereign delivery I led ran Azure Global and Azure China from one application codebase with region-specific infrastructure and identity — the hard part isn't the app, which ports, it's running separate infrastructure and identity planes per sovereign boundary from a single codebase."
+
+**Where this appears in AntKart** — The single-region setup and the cross-region Postgres latency note in the [README](../README.md); CAP/PACELC as the underlying trade in §9.4; DR in §9.9; sovereign boundaries in §9.11; the roadmap's "sovereign and regulated-cloud considerations" in [ROADMAP](ROADMAP.md). (The multi-sovereign worked example is prior professional experience, not a repository artifact.)
+
+**To reach 🟢** — Without notes, give the three coupled decisions plus residency-as-legal-boundary, state AntKart is single-region with only broad sovereign considerations planned, deliver the multi-sovereign worked example (one codebase, separate infra/identity planes), and explain why global strong consistency is expensive.
+
+---
+
+### 11. Sovereign and regulated cloud 🟡
+
+> **Roadmap item, not implemented.** "Sovereign and regulated-cloud considerations" are listed on the [ROADMAP](ROADMAP.md) as future documentation; AntKart runs in ordinary Azure commercial regions. Here because sovereignty is routinely misunderstood — and calling a standard regional deployment "sovereign" in an interview is a trap worth being able to avoid.
+
+**What it is** — A **sovereign cloud** is a **separately operated** cloud with its own control plane, operations personnel, and compliance boundary, isolated from the commercial cloud — built so that a nation's data *and* its **operations and control** stay within that nation's legal reach. It is **distinct from data residency**: residency (keeping data in a region) is a *feature of a normal region*; sovereignty is a *different, isolated cloud*. Confusing the two is the central trap.
+
+**The problem it solves** — Some governments and regulated sectors require not just that data *sit* in-country (residency) but that the cloud be **operated under national control**, unreachable from the commercial cloud's operators — for national-security, legal-jurisdiction, or regulatory reasons that residency alone doesn't satisfy.
+
+**How it works — and the UAE example** —
+- **Azure Government** (US) and **Azure China (operated by 21Vianet)** are genuinely **sovereign**: physically and operationally separate clouds, **separate control planes**, distinct compliance sets, **not reachable from a normal commercial subscription**. Azure China is run by a local partner (21Vianet), not Microsoft directly — the operational-control point that makes it sovereign.
+- **The UAE distinction (the trap):** **UAE North is a standard Azure commercial region** — it provides **data residency** (your data stays in the UAE) but is **not** a separate sovereign cloud. A *genuinely sovereign* UAE offering is a **separately operated cloud with its own control set, unreachable from a normal subscription**. So "we deployed to UAE North, therefore it's sovereign" is **wrong** — UAE North gives residency, not sovereignty.
+- **The tell:** sovereignty is about **who operates and controls** the cloud (separate operator, separate control plane), not merely **where the data sits**.
+
+**Why AntKart does not use it** — AntKart runs entirely in **ordinary Azure commercial regions** under one commercial subscription — no Azure Government, no Azure China, no sovereign boundary. The [ROADMAP](ROADMAP.md) lists "sovereign and regulated-cloud considerations" as **future documentation**, not a build item, so the choice was never made. AntKart can demonstrate **residency** (deploy to a specific region) but **not sovereignty** (a separately operated cloud) — and the honest architect names that difference rather than blurring it. (The multi-sovereign worked example in §9.10 — Azure Global + Azure China from one codebase — is where the genuine sovereign boundary was actually handled, from prior experience, not in this repo.)
+
+**Alternatives and the trade-off** — A commercial region with residency (AntKart-capable) is simple and covers most "keep data in-country" needs; a sovereign cloud (Gov, China) meets the stricter operational-control requirement at the cost of a separate, more limited, more expensive environment with fewer services and its own operations. You pay for sovereignty only when the regulation genuinely demands operational isolation, not merely residency — over-reaching to a sovereign cloud when residency suffices is real wasted cost.
+
+**Gotchas** —
+- **Residency ≠ sovereignty** — the single most important distinction: residency keeps data in a region (a commercial-cloud feature); sovereignty is a separately operated cloud. Calling a standard region "sovereign" is the interview trap, stated plainly.
+- **Sovereign clouds are unreachable from a normal subscription** — you can't `az` your way into Azure China from a commercial tenant; separate operator, separate control plane, separate credentials.
+- **Sovereign clouds lag on services** — they carry a subset of commercial Azure and adopt new services later; an architecture assuming a bleeding-edge service may not port.
+- **UAE North specifically is a commercial region** — it delivers residency, not sovereignty; conflating the two is the exact trap the roadmap flags.
+
+**Interview traps** —
+- *"Is deploying to UAE North a sovereign deployment?"* — No — UAE North is a **standard commercial region** giving **data residency**; a sovereign UAE cloud would be a separately operated environment. Getting this right is the whole test.
+- *"Residency vs sovereignty?"* — Residency = data stays in a region (a normal-region feature); sovereignty = a separately operated cloud with its own control plane and operators (Gov, China/21Vianet). Different things.
+- *"What makes Azure China sovereign?"* — It's operated by 21Vianet, not Microsoft directly, with a separate control plane, unreachable from a commercial subscription — operational control, not just location.
+- *"Does AntKart do sovereign cloud?"* — No — ordinary commercial regions; sovereign considerations are roadmap documentation only. It can show residency, not sovereignty.
+
+**The 60-second answer** — "A sovereign cloud is a separately operated cloud with its own control plane and operations staff, isolated from the commercial cloud, so a nation's data *and its operational control* stay within national reach — Azure Government and Azure China operated by 21Vianet are the real examples, unreachable from a normal commercial subscription. The critical distinction, and the interview trap, is that this is different from data residency: residency just keeps data in a region and is a feature of any commercial region. UAE North is the sharp case — it's a standard commercial region giving residency, *not* a sovereign cloud, so calling a UAE North deployment 'sovereign' is wrong. Sovereignty is about who operates and controls the cloud, not merely where the data sits. AntKart runs in commercial regions — it can show residency, not sovereignty, and the roadmap has sovereign considerations as future documentation only."
+
+**Where this appears in AntKart** — The "sovereign and regulated-cloud considerations" roadmap item in [ROADMAP](ROADMAP.md); the residency-capable single-region setup in the [README](../README.md); the genuine sovereign-boundary handling in the §9.10 multi-sovereign worked example (prior experience, not this repo); the compliance sibling in §9.12.
+
+**To reach 🟢** — Without notes, define sovereignty as separate operation/control (not location), draw the residency-vs-sovereignty line, nail the UAE North trap (commercial region = residency, not sovereign), and name Azure Gov and China/21Vianet as genuine sovereign clouds.
+
+---
+
+### 12. ISO/IEC 27001 and compliance mapping 🟡
+
+> **Roadmap item, not implemented.** [ROADMAP](ROADMAP.md) records "**ISO/IEC 27001 alignment** — implement the applicable controls and document the mapping from control to implementation." No control mapping exists in the repo yet. Here because compliance frameworks and the architect's role in them are standard for senior/architect interviews.
+
+**What it is** — **ISO/IEC 27001** is the international standard for an **Information Security Management System (ISMS)** — a documented, risk-based system for managing security, with a set of **controls** (Annex A) an organisation selects and justifies. **Certification** is an external **audit** confirming the ISMS operates as documented. **Compliance mapping** is the artifact an architect owns: a table linking each applicable **control** to its concrete **implementation** in the system (and its evidence).
+
+**The problem it solves** — "Are we secure?" is unauditable; a standard makes it auditable by defining controls and requiring you to show, control by control, how each is met. The mapping is what turns a pile of security features into a defensible, evidenced compliance posture — and what an auditor actually reviews.
+
+**How it works** — You scope the ISMS, run a **risk assessment**, select applicable **Annex A controls** (documenting exclusions in a Statement of Applicability), **implement** them, and **map** each control to its implementation and evidence. An external auditor then certifies. It's **continual** — surveillance audits, and the ISMS is maintained, not one-and-done. The **architect's responsibility** is chiefly the **technical controls and their mapping** (access control, cryptography, logging, network security), not the whole organisational ISMS (which spans HR, legal, physical security).
+
+**Why AntKart does not have it** — AntKart has **no ISO 27001 certification and no control-to-implementation mapping**; the [ROADMAP](ROADMAP.md) records **ISO/IEC 27001 alignment** — implementing applicable controls and documenting the mapping — as **future work**. Honestly, the recorded item is that *plan*, not a completed remediation. That said, several technical controls a mapping *would* cite **already exist**: access control (Entra, per-service token validation, least-privilege workload identity — §5), cryptography at rest (platform-managed keys — §5.14), logging (Serilog + OTel to Log Analytics — §6), and secret management (Key Vault, secret-less identity). And the **known-issues register** honestly catalogues the **gaps** a mapping would flag as non-conformities: KI-002 (access control — unverified tokens), the private-endpoint gap (network security, §5.10), no CMK (§5.14), no image signing (§5.16). So AntKart has *controls*, not a *mapping* — and the honest architect distinguishes "we do these things" from "we have documented and evidenced them against a standard."
+
+**Alternatives and the trade-off** — No formal mapping (AntKart) is fine until a customer or regulator demands certification, at which point the absence is a hard blocker; building the ISMS and mapping is significant, ongoing effort that buys auditable assurance and market access (many enterprise/government contracts require it). Lighter frameworks (SOC 2, CIS benchmarks) trade breadth for speed. AntKart, as a personal reference platform, has the technical controls without the compliance apparatus — appropriate, but not certifiable.
+
+**Gotchas** —
+- **Controls existing ≠ compliance** — 27001 is about a documented, evidenced, audited *system*; having good security features without the mapping and ISMS is not compliance. AntKart is exactly here.
+- **The architect owns the technical control mapping, not the whole ISMS** — access control, crypto, logging, network security map to your design; HR/legal/physical controls don't. Claiming to "do ISO 27001" solo overstates the role.
+- **The Statement of Applicability matters** — you must justify *excluded* controls, not just implemented ones; "not applicable" needs a reason.
+- **It's continual, not a certificate on the wall** — surveillance audits and ISMS maintenance are ongoing; a one-time pass isn't the model.
+
+**Interview traps** —
+- *"Is this platform ISO 27001 compliant?"* — No — no certification and no control mapping; alignment is a roadmap item. It *has* technical controls (access, crypto-at-rest, logging), but controls aren't compliance without the documented, evidenced mapping.
+- *"What's a compliance mapping?"* — A table linking each applicable Annex A control to its concrete implementation and evidence — the artifact the architect owns and the auditor reviews.
+- *"What's your role as an architect in 27001?"* — The technical controls and their mapping — access control, cryptography, logging, network security — not the full organisational ISMS.
+- *"Where would this platform fail an audit?"* — The known-issues gaps: unverified tokens (KI-002), no network isolation, no CMK, no image signing — a mapping would flag these as non-conformities.
+
+**The 60-second answer** — "ISO 27001 is the standard for an information security management system — a documented, risk-based system with a set of Annex A controls you select, implement, and get externally audited against. The artifact an architect owns is the compliance mapping: a table linking each applicable control to its concrete implementation and evidence. AntKart isn't certified and has no mapping — it's a roadmap alignment item. What it does have is many of the technical controls a mapping would cite: Entra access control and least-privilege workload identity, encryption at rest, centralized logging, Key Vault secret management. But controls aren't compliance — 27001 is about the documented, evidenced, audited system, and our known-issues register honestly lists the gaps a mapping would flag as non-conformities, like the unverified-token defect and the missing network isolation. And the architect owns the technical control mapping, not the whole organisational ISMS."
+
+**Where this appears in AntKart** — The ISO/IEC 27001 alignment item in [ROADMAP](ROADMAP.md); the technical controls a mapping would cite in §5 (identity), §5.14 (encryption at rest), §6 (logging); the gaps it would flag in [KNOWN_ISSUES.md](KNOWN_ISSUES.md) (KI-002) and §5.10/§5.16; the security programme in [ROADMAP](ROADMAP.md) and the [security-tests placeholder](test/SECURITY_TESTS.md).
+
+**To reach 🟢** — Without notes, define an ISMS and control mapping, state AntKart has technical controls but no certification/mapping (a roadmap item), explain that controls existing isn't compliance, and scope the architect's role to the technical control mapping.
+
+---
+
+### 13. FinOps and cost architecture 🟡
+
+**What it is** — **FinOps** is treating cloud cost as an **engineering and architecture concern**, not a finance afterthought — making spend visible, attributable, and optimised as a continuous practice. Its levers: **reservations** and **savings plans** (commit for a discount on steady workloads), **spot** (cheap evictable capacity), **right-sizing** (match resources to actual need), **tagging and showback** (attribute spend to owners), and **budgets with alerts** (a ceiling that warns before it's breached). This is the practical, worked-example depth behind the WAF cost pillar (§9.7) and the §3 cost-management concept.
+
+**The problem it solves** — Cloud spend is continuous, silent, and everyone's-and-no-one's; without visibility and deliberate optimisation it drifts upward invisibly. FinOps makes cost a first-class design input — you *architect* for cost, attribute it to owners, and catch overruns before the bill, rather than discovering them after.
+
+**How it works** —
+
+| Lever | What it does | Best for |
+|---|---|---|
+| **Reservations / Savings Plans** | 1–3yr commit for a big discount | steady, predictable baseline |
+| **Spot** | deeply discounted, evictable | interruptible/stateless work |
+| **Right-sizing** | match SKU/replicas to real use | everything, continuously |
+| **Tagging + showback** | attribute spend to owners | accountability, chargeback |
+| **Budgets + alerts** | ceiling with threshold warnings | catching drift early |
+
+The discipline is a loop — **inform** (visibility, tagging), **optimise** (right-size, commit, spot), **operate** (budgets, alerts, iterate).
+
+**How AntKart uses it** — AntKart's cost architecture is **worked, not theoretical**, and it favours the levers that fit an intermittent dev platform:
+- **Budget with alerts, in code:** the governance module provisions an Azure **consumption budget** (`azurerm_consumption_budget_resource_group` — amount, threshold, `contact_emails`) so the environment has a spend ceiling that emails on breach ([Infrastructure Guide](guides/infrastructure-guide.md)) — though its hardcoded start date expired (**KI-010**), itself a FinOps lesson (derive dates, don't hardcode).
+- **Right-sizing + tier selection:** a `Free` control-plane tier in dev (no SLA cost) and a right-sized `2 × D2s_v3` node pool — "a deliberate Well-Architected cost-pillar pattern" ([ADR-018](adr/ADR-018-aks-workload-identity-base-image.md)).
+- **The dominant lever — stop-start discipline:** the biggest saving isn't a discount, it's **not running idle resources** — the AKS cluster and PostgreSQL are **stopped between sessions** and started only when needed ([PROJECT-STATE.md](PROJECT-STATE.md), [AKS Guide](guides/aks-guide.md)), and QA was **built, verified, and destroyed** rather than kept alive.
+- **What it doesn't use:** no **reservations** or **spot** — correctly, because an intermittent dev platform saves far more by *stopping* than by committing to always-on capacity. That's the right FinOps call for the workload, not a gap.
+
+**Alternatives and the trade-off** — Reservations/savings plans suit **steady** production baselines; spot suits **interruptible** work; neither fits an intermittent dev platform, where **ephemerality** (stop/destroy) beats any commitment discount — so AntKart's choice to skip them is correct, not a miss. Budgets and tagging are cheap insurance regardless. The meta-trade: FinOps effort (visibility, tagging, right-sizing) costs engineering time but prevents silent overspend; for a stopped-between-sessions platform the highest-leverage move is simply not leaving things running.
+
+**Gotchas** —
+- **The biggest lever is often "turn it off," not a discount** — reservations optimise *running* cost; stopping optimises *whether it runs at all*. For intermittent workloads, stopping wins by a mile — AntKart's actual strategy.
+- **Reservations are a commitment risk** — a 1–3yr commit on the wrong SKU is sunk cost; they suit *proven-steady* baselines only, which is why a dev platform shouldn't use them.
+- **Hardcoded cost config silently expires** — KI-010's budget start date passed and blocked provisioning; FinOps-as-code must derive time-sensitive values, not freeze them.
+- **A stopped Postgres restarts itself** — Azure auto-starts a stopped Flexible Server after 7 days ([PROJECT-STATE.md](PROJECT-STATE.md)); "stopped" isn't permanent, so the discipline needs a reminder.
+
+**Interview traps** —
+- *"How do you control cost here?"* — A budget-with-alerts in code, right-sized SKUs and the free dev control-plane tier, and above all stop-between-sessions plus build-verify-destroy for QA — not reservations or spot, because the workload's intermittent.
+- *"Why not reservations?"* — They discount always-on capacity; an intermittent dev platform saves more by stopping resources entirely. Right lever for the workload.
+- *"What's the single biggest cost lever for this platform?"* — Turning it off — stopping AKS and Postgres between sessions beats any discount on idle capacity.
+- *"Any FinOps bite you've hit?"* — Yes — a hardcoded budget start date expired and blocked provisioning (KI-010); derive time-sensitive config, don't hardcode it.
+
+**The 60-second answer** — "FinOps treats cloud cost as an architecture concern — making spend visible, attributable, and optimised continuously. The levers are reservations and savings plans for steady workloads, spot for interruptible work, right-sizing, tagging and showback for accountability, and budgets with alerts. AntKart's cost architecture is worked, not theoretical: a consumption budget with email alerts provisioned in code, a free dev control-plane tier and a right-sized node pool as a deliberate cost-pillar pattern, and above all a stop-between-sessions discipline — the cluster and Postgres are stopped when idle and QA was built, verified, and destroyed. We deliberately don't use reservations or spot, because for an intermittent dev platform stopping resources saves far more than committing to always-on capacity. The biggest FinOps lever here isn't a discount, it's turning it off — and a lesson learned the hard way was that a hardcoded budget start date expired and blocked provisioning, so cost-as-code must derive time-sensitive values."
+
+**Where this appears in AntKart** — The consumption budget in [`infrastructure/modules/governance/main.tf`](../infrastructure/modules/governance/main.tf) and its expired-date defect [KI-010](KNOWN_ISSUES.md); the `Free`-tier/right-sized cost-pillar pattern in [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md); the stop-between-sessions model in [PROJECT-STATE.md](PROJECT-STATE.md) and the [AKS Guide](guides/aks-guide.md); the WAF cost pillar in §9.7 and the §3 cost-management concept.
+
+**To reach 🟢** — Without notes, name the FinOps levers, explain why AntKart uses budgets + right-sizing + stop-start but not reservations/spot, identify "turn it off" as the biggest lever for an intermittent platform, and cite KI-010 as the derive-don't-hardcode lesson.
+
+---
+
+_End of syllabus. **One hundred and twenty-seven concepts** across nine sections, all written to the full template — the
+original seventy the platform runs on, the alternatives it chose against and adjacent technologies it doesn't use, the
+architecture-practice concepts that turn a builder into an architect, and now the enterprise-architecture concepts an
+Azure architect is examined on whether or not this platform contains them — Well-Architected, landing zones, HA/DR,
+sovereignty, compliance, and FinOps. Every tag starts 🟡 — the writing is done; the proving is yours. When you change
+the last one to 🟢, this platform is yours to explain to anyone — including everything you deliberately did **not**
+build, everything you would build for an enterprise, and why._
