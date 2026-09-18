@@ -33,6 +33,12 @@ a status tag changes only when the concept has been **proven**, never when it ha
   **Planned — and what it would change**, citing the roadmap entry, ADR, or known issue; where the
   concept only ever assesses the platform (most of **Section 9**), *Read the code* becomes **Where
   this appears in AntKart**. The rule never bends: no rationale is manufactured where none is recorded.
+- **The AI-workloads subsection (§9.14–9.21) describes concepts this platform does not implement at all** —
+  AntKart contains no model call, embedding, vector store or agent. They are here because an Azure
+  architect is now expected to reason about where AI fits, what it costs, how to secure it and how to
+  operate it — as a **design** topic, not a machine-learning tutorial. Those concepts adapt two template
+  sections: *How AntKart uses it* becomes **Where this would fit in a platform like AntKart**, and
+  *Read the code* becomes **Where you would see it**. No concept claims AntKart contains an AI capability.
 
 ## Status convention
 
@@ -56,19 +62,23 @@ Every concept heading carries exactly one tag. Everything starts 🟡 — a tag 
 | 6 | Observability | 10 | 0 | 0 | 10 |
 | 7 | GitOps | 8 | 0 | 0 | 8 |
 | 8 | DevOps | 12 | 0 | 0 | 12 |
-| 9 | Architecture practice | 13 | 0 | 0 | 13 |
-| | **Total** | **127** | **0** | **0** | **127** |
+| 9 | Architecture practice | 21 | 0 | 0 | 21 |
+| | **Total** | **135** | **0** | **0** | **135** |
 
-**Depth today.** All **127 concepts** are now written to the full template — *What it is*, *The problem
+Section 9 includes the **AI workloads** subsection (concepts 9.14–9.21) — a design topic AntKart does not contain but an architect is expected to reason about.
+
+**Depth today.** All **135 concepts** are now written to the full template — *What it is*, *The problem
 it solves*, *How it works* (with a table or diagram where it helps), *How AntKart uses it* (real type,
 file, and resource names), *Alternatives and the trade-off*, *Gotchas* (sourced to KNOWN_ISSUES / the
 runbook / ADRs), *Interview traps*, *The 60-second answer*, *Read the code*, and *To reach 🟢*. Nothing
 in the syllabus is a stub. The original **70** cover what the platform runs on; the next **41** cover
 alternatives it chose against, adjacent technologies it does not use, and the craft of architecture
-practice; and the latest **16** add the enterprise-architecture concepts an Azure architect is examined
+practice; the following **16** add the enterprise-architecture concepts an Azure architect is examined
 on regardless of this platform — Well-Architected, landing zones, HA/DR, multi-region and sovereignty,
-compliance, FinOps, and the security, DevOps and Kubernetes concepts that sit beside them. Every
-concept still starts 🟡 — the writing is done; the *proving* is yours.
+compliance, FinOps, and the security, DevOps and Kubernetes concepts that sit beside them; and the
+latest **8** add **AI workloads as an architectural concern** (§9.14–9.21) — a design topic this
+platform does not contain but an architect is now expected to reason about. Every concept still starts
+🟡 — the writing is done; the *proving* is yours.
 
 **A note on honesty.** Where an ADR's prose has drifted from the code as built, this document
 follows the **code** and says so. Where a concept in the syllabus is named but **not implemented**
@@ -112,6 +122,11 @@ interview-grade material.
 >    enterprise-architecture concepts (landing zones, multi-region, sovereign cloud, ISO 27001).
 >    Study these **last but not least**: they are what an interviewer uses to tell an architect
 >    from a senior engineer, and they tie every other section together.
+> 9. **AI workloads** (the §9.14–9.21 subsection) — **last, as breadth, not the first thing to study.**
+>    AntKart contains no AI, so there is nothing here to prove against the code; the value is being able
+>    to reason about where AI fits, its cost model, RAG, agents, and — highest-value — securing an AI
+>    workload as the same identity/networking/tracing/least-privilege discipline as the rest of the
+>    platform. If you do study one page here first, make it **Securing AI workloads (§9.19)**.
 >
 > Within each section, study the concepts the platform **uses** before the ones it deliberately
 > **does not** — the used concepts carry the original material; the not-used ones are the
@@ -7180,10 +7195,403 @@ The discipline is a loop — **inform** (visibility, tagging), **optimise** (rig
 
 ---
 
-_End of syllabus. **One hundred and twenty-seven concepts** across nine sections, all written to the full template — the
+## AI workloads — an architectural concern
+
+> **AntKart contains no AI workload — no model call, no embeddings, no vector store, no agent, nothing.** These
+> concepts are here because an Azure cloud architect is now expected to *reason* about where AI fits, what it costs,
+> how to secure it and how to operate it — even without having shipped a production AI system. The right interview
+> answer is to be clear about the line between **what you have built** and **what you understand**, and to show that
+> the platform concerns *underneath* an AI system are the same ones this playbook covers everywhere else. This is a
+> **design** topic throughout: the reader is an architect choosing approaches, weighing trade-offs, securing the
+> result and controlling its cost — not someone training models. Every concept below uses the not-used adaptation:
+> *How AntKart uses it* becomes **Where this would fit in a platform like AntKart**, and *Read the code* becomes
+> **Where you would see it**.
+
+**Answering "what AI work have you done?" honestly — a worked example.** *"I haven't shipped a production AI feature,
+and AntKart has no AI workload — I won't pretend otherwise. But an AI system is a cloud workload like any other, and
+the hard parts are the parts I have built. It authenticates with a **managed identity**, not an API key (§5.4); its
+secrets live in **Key Vault** reached through DefaultAzureCredential (§5.6); it talks to the model over a **private
+endpoint** so prompts never cross the public internet (§5.10); every model, retrieval and tool call is a **span with
+a correlation id** in distributed tracing (§6); and its **token spend is a budgeted, alerted cost line** like any
+other (§9.13). So the way I'd design a RAG or an agent system is that same discipline — identity, secrets, networking,
+tracing, cost — applied to a new shape of workload, and the one genuinely new artefact I'd insist on before claiming
+it works is an **evaluation** harness (§9.20)."* That answer shows architectural judgement and is stronger than a
+fabricated project — it demonstrates exactly the honesty this whole playbook is built on.
+
+### 14. Where AI fits in a cloud architecture 🟡
+
+**What it is** — The orientation decision: *how* to bring AI to a problem. There are four layers an architect chooses between, in rising order of cost, effort and maintenance — (1) **call a hosted model API** (Azure OpenAI: prompt in, answer out); (2) **retrieval-augmented generation (RAG)** — ground a hosted model in your private data at query time; (3) **fine-tuning** — adapt a base model's weights to a style or task; (4) **train from scratch** — build a model. Most enterprise "AI projects" are the first two.
+
+**The problem it solves** — "Add AI" is not a design. The architect's job is to match the *problem shape* to the *cheapest approach that solves it*, because each layer up multiplies cost, latency, data-governance surface and ongoing maintenance. Choosing "fine-tune" or "train" when RAG would do is the classic expensive mistake.
+
+**How it works** — the decision table:
+
+| Approach | Suits the problem shape | Cost / effort | Freshness | Data governance |
+|---|---|---|---|---|
+| Hosted API | general language tasks, no private data | lowest | model's training cut-off | prompt leaves the tenant |
+| RAG | answers grounded in *your* documents that change | low–medium | as fresh as the index | your data + prompt leave the tenant |
+| Fine-tuning | a fixed *style/format/task*, not new facts | medium–high; retrain to update | frozen at training time | training set leaves the tenant |
+| Train from scratch | a capability no existing model has (rare) | highest; a team | you own it | you own it |
+
+**Where this would fit in a platform like AntKart** — AntKart has no AI, but the shape maps cleanly. A "natural-language product search" or "explain this order" feature would be a **hosted-API** or **RAG** design — never fine-tuning, because the facts (catalogue, orders) change constantly and RAG keeps them fresh without retraining. The retrieval source would be the same Cosmos catalogue and Postgres orders the platform already owns, and the model call would authenticate with a managed identity like every other Azure call here.
+
+**Alternatives and the trade-off** — Within the four, the trade is always *cost/maintenance vs control/capability*. RAG vs fine-tuning is the sharpest: RAG injects **facts** at query time (cheap to keep fresh); fine-tuning bakes in **behaviour/format** (frozen until you retrain). Reaching for fine-tuning to teach a model new facts is a category error — you retrain forever and it still won't have the latest data.
+
+**Gotchas** —
+- **Most "AI projects" are an API call or RAG** — claiming a fine-tune or a trained model when you called a hosted API overstates the work and invites questions you can't answer.
+- **Fine-tuning does not add knowledge** — it shapes *how* a model responds, not *what facts* it knows; new or changing facts belong in RAG.
+- **Every layer up is a maintenance commitment** — a fine-tuned model must be retrained as the base model and your data evolve; a trained model is a standing team.
+- **The prompt still leaves your tenant** even for a hosted API — that's a data-governance decision, not a free lunch (§9.19, §9.21).
+
+**Interview traps** —
+- *"When is RAG the wrong answer?"* — When the task needs no private facts (a hosted API is enough), when you need a fixed *format or behaviour* rather than grounded facts (that's fine-tuning), or when the latency and cost of retrieval aren't justified by the accuracy gain.
+- *"When does fine-tuning actually make sense?"* — For a consistent style, tone or output format, or a narrow classification task — never to teach new or changing facts.
+- *"How do you keep a RAG system's answers current?"* — Re-index the source; the model doesn't change. That freshness is RAG's whole advantage over fine-tuning.
+- *"They asked for 'AI' — what do you build?"* — Start at the cheapest layer that fits the problem shape and escalate only when it demonstrably can't.
+
+**The 60-second answer** — "Bringing AI to a problem is a layered choice: call a hosted model API, do retrieval-augmented generation over your private data, fine-tune a base model, or train one from scratch — rising cost, effort and maintenance at each step, and most enterprise AI is the first two. The architect's job is matching the problem shape to the cheapest approach: a hosted API for general language tasks, RAG when answers must be grounded in your own documents that change, fine-tuning only for a fixed style or format — never to teach new facts — and training from scratch almost never. The classic mistakes are reaching for fine-tuning to add knowledge, which is what RAG is for, and treating 'add AI' as a design instead of a cost-and-governance decision. AntKart has no AI, but a natural-language product search would be RAG over the catalogue we already own, authenticated with the same managed identity as every other Azure call."
+
+**Where you would see it** — Any team adding an AI feature: a support-answer bot (RAG over docs), a summariser (hosted API), a domain-tone assistant (fine-tune), a foundation-model lab (train). The decision table is the first whiteboard an architect draws when "we want AI" lands.
+
+**To reach 🟢** — Without notes, name the four layers with their cost/freshness/governance trade-offs, state that most projects are an API call or RAG, and correctly answer when RAG is wrong and when fine-tuning is right.
+
+---
+
+### 15. Foundation models, tokens and context 🟡
+
+**What it is** — From an architect's chair, a large language model is a **stateless HTTP API** with four defining properties: it has a **context window** (a maximum number of tokens per request), it is **priced per token** (input and output, often at different rates), it is **non-deterministic** (the same prompt can return different text), and its **latency is proportional to output length** (it generates one token at a time). A *token* is a chunk of text (~¾ of a word). It holds no memory between calls — any "conversation" is you re-sending the history each time.
+
+**The problem it solves** — Understanding these properties is what lets you design *around* them. A service that's stateless, non-deterministic and per-token-priced breaks assumptions that hold for ordinary services — you can't cache it naively, you can't assume idempotency, and you can't test it with exact-match assertions.
+
+**How it works** —
+- **Context window** — the model sees only what's in this request (system message + user messages + retrieved data + history). Exceed it and content is truncated or rejected.
+- **System vs user messages** — the **system** message sets role and rules (trusted, author-controlled); **user** messages carry the request — and, in RAG or agents, may carry *untrusted* content (§9.19).
+- **Temperature** — a knob from near-deterministic (0) to creative (higher); even at 0, output isn't guaranteed identical.
+- **Prompt engineering is an interface concern** — the prompt is the API contract; changing it changes behaviour, so it is versioned and tested like code.
+
+**The cost model (the part that bites)** — you pay per **input token** *and* per **output token**. **Context length is the main cost driver**: every call re-sends the whole prompt — system message, history, retrieved chunks — so a design that stuffs twenty documents into every request pays for all of them on *every* turn. A naive design (long system prompts, unbounded history, retrieve-everything) grows its bill linearly with use.
+
+**Where this would fit in a platform like AntKart** — AntKart makes no model calls, but the discipline is familiar: a model API is an **outbound dependency** like the Razorpay or Discount calls, so it belongs behind a typed client with resilience — timeout, retry, circuit-break (§1 Polly); its **token spend is a metric** to trace and budget (§6, §9.13); and its **non-determinism** means the test is an evaluation harness (§9.20), not an equality assertion. The one thing that *doesn't* transfer is caching — you can't cache a non-deterministic call the way AntKart caches a cart in Redis.
+
+**Alternatives and the trade-off** — Smaller, cheaper models trade quality for cost and latency; larger models cost more per token and are slower. Shorter prompts and aggressive retrieval-trimming cut cost at some accuracy risk. The architect tunes model size, context length and temperature against an accuracy/cost/latency budget — there is no free setting.
+
+**Gotchas** —
+- **Non-determinism breaks caching, idempotency and exact-match tests** — the three assumptions ordinary services rely on; you design for a good *distribution* of outputs, not "the output".
+- **Context length, not call count, is the cost driver** — re-sending a huge prompt every turn is where bills explode.
+- **The model is stateless** — "memory" is you re-sending history, so longer conversations cost more each turn as the history grows.
+- **Latency grows with output length** — a 2,000-token answer is slower than a 200-token one; streaming hides it from the user but doesn't reduce it.
+
+**Interview traps** —
+- *"Why can't you just cache the LLM call?"* — It's non-deterministic and the prompt varies; you can cache *byte-identical* prompts, but naive caching of a creative call returns stale or wrong answers.
+- *"What drives LLM cost?"* — Tokens, and mostly *context length* — every call re-sends the whole prompt, so bloated prompts and unbounded history dominate the bill, not the number of calls.
+- *"How do you test something non-deterministic?"* — Not with equality; with an evaluation harness over a golden set, scoring quality, refusals and regression (§9.20).
+- *"System vs user message — why does it matter for security?"* — The system message is trusted author intent; user and retrieved content is untrusted and must never be treated as instructions (§9.19).
+
+**The 60-second answer** — "To an architect a foundation model is a stateless, per-token-priced HTTP API with a context window, non-deterministic, with latency proportional to output length. Those properties break the assumptions ordinary services rely on: you can't cache it naively, it isn't idempotent, and you can't exact-match test it — you need an evaluation harness. The cost model is the thing to get right: you pay for input and output tokens, and the dominant driver is context length, because every call re-sends the whole prompt — system message, history, retrieved chunks — so a design that stuffs everything into every request scales its bill linearly. It's stateless, so 'memory' is just you re-sending the conversation, which costs more each turn. I'd treat it like any outbound dependency — typed client, resilience, traced token spend, budgeted cost — the only thing that doesn't transfer is caching."
+
+**Where you would see it** — Any LLM-backed feature: the cost dashboard tracking input/output tokens per feature, the prompt-versioning repo, the resilience policy around the model client, and the eval suite standing in for unit tests.
+
+**To reach 🟢** — Without notes, list the four defining properties, explain why non-determinism breaks caching/idempotency/testing, and explain why context length (not call count) drives cost.
+
+---
+
+### 16. Embeddings and vector stores 🟡
+
+**What it is** — An **embedding** is a fixed-length vector of numbers that represents the *meaning* of a piece of text (or image), produced by an embedding model. Texts with similar meaning land near each other in the vector space, so **similarity search** finds "about the same thing" rather than "contains the same words". A **vector store** holds these vectors with their source text and metadata, and indexes them for fast **approximate nearest-neighbour (ANN)** search by a **distance metric** (cosine similarity is the common one).
+
+**The problem it solves** — Keyword search matches tokens; it misses synonyms and paraphrase ("refund" vs "money back") and drowns in exact-match noise. Embeddings let you retrieve by *meaning*, which is what RAG needs to find the right passages to ground an answer.
+
+**How it works — the ingest path:**
+
+```mermaid
+flowchart TD
+  D["Document · PDF, wiki, ticket"] --> C["Chunk · split with overlap"]
+  C --> E["Embed · text to a vector"]
+  E --> S["Store · vector plus source plus metadata"]
+  S --> I["Index · ANN for similarity search"]
+  classDef ext fill:#B4B2A9,stroke:#6b6a63,color:#111,stroke-dasharray:4 3
+  classDef svc fill:#1D9E75,stroke:#0E5C43,color:#fff
+  classDef ds fill:#185FA5,stroke:#0E3D6E,color:#fff
+  class D ext
+  class C,E svc
+  class S,I ds
+```
+
+**Dimensionality** — an embedding has a fixed size (hundreds to thousands of dimensions); more dimensions can capture more nuance but cost more to store and search. **Metadata** stored beside each vector (source id, tenant, ACL, timestamp) is what makes **filtering** possible — including filtering by *who is allowed to see it* (§9.17, §9.19).
+
+**Where this would fit in a platform like AntKart** — Azure gives an architect several homes for vectors, and the AntKart-shaped choice would be to *reuse an existing store* rather than add one: **PostgreSQL with `pgvector`** (AntKart already runs Postgres for Order/Payments/Discount — a vector column keeps embeddings next to relational data and its access rules), **Cosmos DB vector search** (AntKart already runs Cosmos for the catalogue), **Azure AI Search** (a dedicated retrieval layer with hybrid search built in), or a dedicated vector database. It is the same "reuse vs specialise" call the platform makes everywhere.
+
+**Alternatives and the trade-off** — `pgvector`/Cosmos reuse an operated store and keep vectors beside their data and ACLs (simplest governance) but rank and scale less powerfully than a dedicated engine; **Azure AI Search** adds hybrid (keyword + vector) ranking and scale at the cost of another service and another copy of the data; a dedicated vector database maximises recall and scale at maximum operational and cost overhead. Match the store to corpus size and retrieval-quality needs.
+
+**Gotchas** —
+- **Re-embedding when the model changes** — vectors from model A aren't comparable with model B, so upgrading the embedding model means **re-embedding the whole corpus** and rebuilding the index. Budget for it.
+- **Index size and cost are real** — millions of high-dimensional vectors are large, and the ANN index has memory and cost implications people forget until the bill arrives.
+- **Chunking strategy decides quality** — chunks too large dilute relevance, too small lose context; the split (and its overlap) is a design parameter, not a default.
+- **Metadata filtering is your access-control hook** — if you don't store tenant/ACL metadata at ingest, you cannot filter by identity at retrieval, and RAG leaks across users (§9.19).
+
+**Interview traps** —
+- *"How is similarity search different from keyword search?"* — Keyword matches tokens; embeddings match *meaning*, so paraphrase and synonyms retrieve and irrelevant exact-matches don't dominate.
+- *"What happens when you change the embedding model?"* — You must re-embed everything — old and new vectors aren't comparable — and rebuild the index. It's a migration, not a config flip.
+- *"Where do you store vectors on Azure?"* — pgvector or Cosmos to reuse an existing store beside the data, Azure AI Search for hybrid ranking at scale, or a dedicated vector DB — a reuse-vs-specialise trade.
+- *"How does access control reach the vector store?"* — Through metadata stored with each vector, filtered at retrieval time; without it there is no per-user isolation.
+
+**The 60-second answer** — "An embedding is a vector that captures the meaning of text, so similarity search retrieves by meaning instead of keyword — it finds 'refund' when you asked about 'money back'. You ingest by chunking a document, embedding each chunk, and storing the vector with its source and metadata in a store indexed for approximate nearest-neighbour search by cosine distance. On Azure I'd usually reuse an operated store — pgvector in Postgres or Cosmos vector search keep embeddings next to their data and access rules — or use Azure AI Search when I want hybrid keyword-plus-vector ranking at scale. The operational traps people miss are that changing the embedding model forces re-embedding the whole corpus, that the index has real size and cost, that chunking strategy decides retrieval quality, and that the metadata you store is your only hook for filtering by who's allowed to see a document."
+
+**Where you would see it** — Any RAG or semantic-search system: the ingestion pipeline that chunks and embeds, the vector column or index, and the metadata schema that carries tenancy and ACLs into retrieval.
+
+**To reach 🟢** — Without notes, explain meaning-vs-keyword search, sketch the ingest path, name the Azure storage options as a reuse-vs-specialise trade, and cite re-embedding-on-model-change and metadata-for-access-control as the missed operational concerns.
+
+---
+
+### 17. Retrieval-augmented generation (RAG) 🟡
+
+**What it is** — RAG grounds a foundation model in *your* data at query time: instead of hoping the model knows the answer, you **retrieve** relevant passages from a vector store and **inject** them into the prompt, so the model answers *from provided context* and can **cite** its sources. It is the dominant enterprise pattern because it keeps answers current (re-index, don't retrain) and reduces hallucination — without fine-tuning.
+
+**The problem it solves** — A base model's knowledge is frozen at training time and knows nothing private. RAG makes a model answer questions about your documents, policies and data — freshly and with citations — while the model itself stays a stateless hosted API.
+
+**How it works — the request path:**
+
+```mermaid
+flowchart TD
+  Q["User question · plus caller identity"] --> EQ["Embed the query"]
+  EQ --> R["Retrieve · vector search filtered by identity"]
+  R --> RR["Re-rank · order by true relevance"]
+  RR --> A["Assemble prompt · question plus top chunks"]
+  A --> G["Generate · foundation model"]
+  G --> ANS["Answer with citations"]
+  classDef svc fill:#1D9E75,stroke:#0E5C43,color:#fff
+  classDef ds fill:#185FA5,stroke:#0E3D6E,color:#fff
+  classDef paas fill:#0078D4,stroke:#054478,color:#fff
+  class Q,ANS svc
+  class EQ,R,RR,A ds
+  class G paas
+```
+
+**Architectural decisions** — **chunk size and overlap** (retrieval quality vs cost), **hybrid search** (vector + keyword, usually better than pure vector for names and codes), **top-k** (how many chunks to retrieve — more context, more cost, more noise), and **index freshness** (how ingestion keeps up with changing sources).
+
+**Where this would fit in a platform like AntKart** — A "search our help centre in natural language" or "explain this order's status" feature: retrieval over AntKart's own documents and orders, generation by a hosted model, citations back to the source. The retrieval store would be pgvector-in-Postgres or Cosmos (reusing operated stores), the model call would use a managed identity and a private endpoint, and the whole path would be traced with a correlation id — the same platform spine as everything else here.
+
+**Failure modes (be honest about these)** —
+- **Retrieval returns nothing relevant** — the model answers from its own (possibly wrong) knowledge; you need a "no good context → say I don't know" guard.
+- **The model ignores retrieved context** — it answers from priors instead of the provided passages; prompt design and re-ranking mitigate, never fully fix.
+- **Hallucinated citations** — the model fabricates a source that looks real; you verify every citation against what was actually retrieved.
+- **Stale index** — the source changed, the index didn't; the answer is confidently out of date.
+
+**Access control — the architect's critical point** — a naive RAG system **leaks data across users** because the vector store has no concept of *who is asking*; similarity search will happily return another tenant's document if it is the closest match. The fix is to **filter by identity at retrieval time**: store each chunk's tenant/ACL as metadata (§9.16) and pass a filter derived from the caller's token, so retrieval only ever *considers* documents that caller may see. This **must be enforced in the retrieval layer, not the prompt** — telling the model "only use documents this user can see" is not a control, because the model is non-deterministic and the sensitive text is already in the context by then. Identity-filtered retrieval is the same **least-privilege, filter-at-the-source** thinking as row-level security and AntKart's per-service token validation (§5.8).
+
+**Alternatives and the trade-off** — Pure-vector retrieval is simplest; **hybrid** (add keyword/BM25) usually retrieves better for names, SKUs and rare terms at a little more complexity. Bigger top-k and larger chunks raise recall and cost; a **re-ranker** improves precision at extra latency. "Just paste the whole corpus into a long context" avoids retrieval entirely but pays per token for everything on every call — RAG exists precisely to avoid that.
+
+**Gotchas** —
+- **Access control belongs in retrieval, not the prompt** — the single most important RAG security fact; a prompt instruction is not an authorisation boundary.
+- **Retrieval quality caps answer quality** — the model can't answer well from bad context; most "the AI is wrong" bugs are retrieval bugs.
+- **Citations must be verified** — a plausible-looking citation may be fabricated; check it against retrieved chunks before showing it.
+- **Freshness is an ingestion SLA** — "the answer is out of date" is usually a stale-index problem, not a model problem.
+
+**Interview traps** —
+- *"How does a RAG system avoid leaking one user's documents to another?"* — Identity-filtered retrieval: ACL metadata per chunk, a filter derived from the caller's token, enforced in the retrieval layer — never as a prompt instruction.
+- *"Why not just tell the model which documents the user can see?"* — Because the model is non-deterministic and the text is already in context; that's guidance, not a control.
+- *"Your RAG answers are wrong — where do you look first?"* — Retrieval: is the right chunk being returned at all? Answer quality is capped by retrieval quality.
+- *"Hybrid vs pure vector?"* — Hybrid usually wins for exact terms — names, SKUs, error codes — that pure semantic search blurs.
+
+**The 60-second answer** — "RAG grounds a model in your data at query time: embed the question, retrieve relevant chunks from a vector store, optionally re-rank, assemble them into the prompt, generate, and cite. It's the dominant enterprise pattern because you keep answers fresh by re-indexing instead of retraining. The decisions are chunk size and overlap, hybrid versus pure vector, how many chunks to retrieve, and how you keep the index current. The failure modes are honest ones — retrieval finding nothing, the model ignoring context, fabricated citations, stale indexes. And the critical architectural point is access control: a naive vector store has no idea who's asking and will return another user's document, so you filter by identity at retrieval time using ACL metadata, enforced in the retrieval layer, never as a prompt instruction — because a non-deterministic model told 'don't look at this' already has the text in context. It's the same filter-at-the-source least-privilege thinking as the rest of the platform."
+
+**Where you would see it** — Enterprise knowledge assistants, support bots over documentation, "chat with your data" features — every one of which lives or dies on retrieval quality and identity-filtered retrieval.
+
+**To reach 🟢** — Without notes, draw the request path, name the four design decisions and the four failure modes, and explain identity-filtered retrieval — why it is enforced in the retrieval layer, not the prompt.
+
+---
+
+### 18. Agents, tool calling and MCP 🟡
+
+**What it is** — An **agent**, past the marketing, is a **loop**: the model is given a goal and a set of **tools**; it decides whether to call a tool, the tool runs and returns an **observation**, the model sees the result and decides again — repeat until it produces an answer. **Tool (function) calling** is the mechanism: the model emits a structured request to invoke a named function with arguments, your code runs it, and the result goes back into context. The **Model Context Protocol (MCP)** is an open standard for *exposing* tools and data sources to models uniformly, so an agent can discover and call them without bespoke glue. **Orchestration frameworks** wire the loop; **multi-agent** patterns split work across specialised agents.
+
+**The problem it solves** — A bare model can only produce text. Tools let it *act* — query a database, call an API, run a calculation — so it can complete tasks rather than just describe them. MCP standardises how those tools are offered, the way a driver interface standardises data stores.
+
+**How it works — the agent loop:**
+
+```mermaid
+flowchart TD
+  U["Goal · user request"] --> M["Model · decide next step"]
+  M -->|"needs a tool"| T["Call tool · scoped identity"]
+  T --> O["Observation · tool result"]
+  O --> M
+  M -->|"done"| A["Answer"]
+  classDef svc fill:#1D9E75,stroke:#0E5C43,color:#fff
+  classDef paas fill:#0078D4,stroke:#054478,color:#fff
+  classDef edge fill:#7F77DD,stroke:#403A80,color:#fff
+  class U,A svc
+  class M paas
+  class T,O edge
+```
+
+**Where this would fit in a platform like AntKart** — AntKart has no agent, but its tools already exist as APIs: an "order concierge" agent might call `GET /orders/me`, the Products catalogue, and the Payments status — each an existing endpoint. The architecturally important part is *how the tools authenticate*: each tool call would use a **scoped managed identity** with only the data-plane role it needs (§5.4, §5.5), exactly as AntKart's services do — the agent gets no broad grant.
+
+**Architectural consequences (the hard part)** —
+- **Non-deterministic control flow** — the sequence of tool calls isn't fixed; you can't read the code to know what it will do, only bound what it *can* do.
+- **Unbounded loops and cost** — a loop with no cap can spin (call → observe → call …) burning tokens and money; you enforce a **step and spend budget**.
+- **Partial failure with side effects** — an agent may complete three of five side-effecting actions and then fail; unlike a saga (§1) there is **no transaction boundary** and no built-in compensation.
+- **No transaction boundary** — irreversible tool actions (refund, email, delete) need explicit guards because the loop will not roll them back.
+
+**Alternatives and the trade-off** — A fixed, deterministic workflow (you code the steps, the model only fills in blanks) is predictable and cheap but rigid; a free agent loop is flexible but non-deterministic, costlier and harder to secure. Most robust designs are **constrained agents** — a bounded loop, a small vetted tool set, and a human approval gate on irreversible actions — trading some autonomy for control. Multi-agent adds capability and coordination cost.
+
+**Gotchas** —
+- **The loop can run away** — always cap steps and spend; an uncapped agent is an open-ended bill and an open-ended blast radius.
+- **There is no rollback** — side effects mid-loop don't undo; irreversible actions need a human gate or a compensation you build (§9.19).
+- **Tools are the privilege surface** — an agent is exactly as dangerous as the tools and identities you give it (§9.19, "excessive agency").
+- **MCP is a tool-exposure standard, not a safety feature** — it makes tools *available*; scoping and trust are still your job.
+
+**Interview traps** —
+- *"What is an agent, really?"* — A loop of model → tool call → observation → repeat until done. Not magic; a control loop with a non-deterministic controller.
+- *"What's architecturally dangerous about an agent?"* — Non-deterministic control flow over real side effects with no transaction boundary, plus unbounded loop cost. You bound it and gate irreversible actions.
+- *"What is MCP?"* — An open standard for exposing tools and data to models uniformly, so agents discover and call them without bespoke integration. It standardises access, not safety.
+- *"An agent did three of five actions then failed — now what?"* — There's no automatic rollback; you designed compensation or a human gate, or you have inconsistent state. This is the saga problem without the saga.
+
+**The 60-second answer** — "An agent is a loop: give the model a goal and some tools, it decides whether to call a tool, the tool returns an observation, and it decides again until it answers. Tool calling is the mechanism, and MCP is an open standard for exposing tools and data to models uniformly. The architectural consequences are what matter: the control flow is non-deterministic, so you can't read the code to know what it'll do — only bound what it can do; the loop can run away and burn tokens, so you cap steps and spend; and it acts with real side effects but has no transaction boundary, so an agent that completes three of five actions and fails leaves inconsistent state with no rollback. The mitigations are the platform's own least-privilege discipline: a scoped managed identity per tool, a small vetted tool set, a bounded loop, and a human approval gate on anything irreversible."
+
+**Where you would see it** — Copilots that take actions, workflow automation over enterprise APIs, and multi-agent research or ops assistants — anywhere a model is given tools rather than just asked to write text.
+
+**To reach 🟢** — Without notes, draw the agent loop, name the four architectural consequences (non-deterministic flow, unbounded cost, partial failure, no transaction boundary), define MCP as a tool-exposure standard, and describe the constrained-agent mitigations.
+
+---
+
+### 19. Securing AI workloads 🟡
+
+> This is the highest-value concept in the subsection, written at depth: securing an agent is the whole rest of this playbook's security discipline pointed at a new, and newly dangerous, shape of workload.
+
+**What it is** — The set of controls that make an AI system — especially an *agent* with tools — safe to run inside a corporate environment. The threats are new in shape but the mitigations are familiar: least privilege, treat input as untrusted, keep data inside the boundary, trace everything, and monitor for abuse.
+
+**The problem it solves** — An AI system takes untrusted natural-language input, may *retrieve* untrusted content, and — as an agent — may *act* with real privileges. That combination creates threats ordinary services don't have; securing it is the difference between a demo and something you would let near production data.
+
+**The threats and their mitigations —**
+
+**1. Excessive agency.** An agent holding execution privileges inside a corporate environment is a **new threat vector**: whatever it is *allowed* to do, an attacker who can steer it (see prompt injection) can do. The mitigation is the same least-privilege thinking as the rest of this playbook — a **scoped managed identity per tool** (not one powerful identity for the whole agent — §5.4), **data-plane roles rather than broad grants** (Sender/Receiver, Secrets User — never Owner/Manage — §5.5), and a **human approval gate on irreversible actions** (refunds, deletes, external emails). You bound *capability*, because you cannot bound *behaviour*.
+
+**2. Prompt injection — direct and indirect.** A user can write "ignore your instructions and…" (**direct**); worse, a document the agent *retrieves* or a result a tool *returns* can contain instructions the model then follows (**indirect** — the malicious text rode in through RAG or a tool). The architectural rule: **content retrieved by RAG or returned by a tool is untrusted input and must never be executed as instructions.** The uncomfortable contrast with SQL injection: **there is no parameterisation that fully solves it** — you cannot cleanly separate "data" from "instructions" in a single natural-language context the way a prepared statement separates SQL from values. So you defend in depth: delimit untrusted content clearly, never grant the model authority it should not have *regardless of what it is told*, gate side effects, and treat every retrieved and tool-returned byte as hostile (§5.13 threat modelling).
+
+**3. Data boundaries.** Know **what leaves the tenant**: with a hosted model, the prompt and the RAG context are sent to the model service. On Azure, **Azure OpenAI behind a private endpoint** keeps that traffic off the public internet (§5.10); **customer-managed keys** control encryption of stored data (§5.14); and you must know **what the provider retains** — Azure OpenAI does not use your prompts to train the foundation models and offers configurable data-retention (down to none), which is a large part of why enterprises choose it over a public API. This is the same data-residency and network-isolation thinking as §9.11 (sovereignty) and §5.10.
+
+**4. Auditability.** Every **tool call** and every **retrieval** needs a **trace** — because the control flow is non-deterministic (§9.18), the *only* way to know what an agent did is the record of what it did. This is exactly the **distributed-tracing and correlation-id** discipline elsewhere in this playbook (§6): a span per model call, per retrieval and per tool invocation, joined by a correlation id, so an incident is reconstructable and a runaway loop is visible.
+
+**5. Content filtering and abuse monitoring** — a **platform concern**, not a per-feature afterthought: filter harmful inputs and outputs (Azure OpenAI's content filters), and monitor centrally for abuse patterns — prompt-injection attempts, cost spikes, jailbreak probes — the way you would monitor authentication failures.
+
+**Where this would fit in a platform like AntKart** — AntKart already has every primitive this needs: **workload identity** for per-tool scoping (§5.4), the **separate permission planes** for data-plane-only grants (§5.5), **private endpoints** — the platform's biggest named security gap to close anyway (§5.10) — **Key Vault + DefaultAzureCredential** for secrets (§5.6), **distributed tracing with correlation ids** for auditability (§6), and **threat modelling / STRIDE** to enumerate the new threats (§5.13). Securing an AntKart agent would be those exact controls pointed at a new workload, plus a human gate on anything that spends money or emails a customer.
+
+**Alternatives and the trade-off** — The lazy path (one broad identity, trust the prompt, a public model endpoint, no tracing) ships faster and is a breach waiting to happen. The disciplined path costs per-tool identities, a private-networking setup, an approval gate and a trace pipeline — the same cost as securing any workload, which is exactly why treating an agent as "just another workload to secure" is the right frame.
+
+**Gotchas** —
+- **You cannot fully parameterise prompt injection away** — unlike SQL injection there is no clean data/instruction separator; defence is layered (least privilege + untrusted-input handling + side-effect gates), never a single fix.
+- **Retrieved and tool content is untrusted** — indirect injection rides in through RAG and tools; "the document told me to" is a real attack.
+- **Excessive agency is a *design* choice** — an over-privileged agent is dangerous before any attacker shows up; scope the identities first.
+- **Non-deterministic flow makes tracing non-optional** — with no fixed code path, the trace is your only record of what happened.
+- **A prompt instruction is never a security control** — not for access (RAG, §9.17) and not for behaviour; controls live in identity, networking and gates.
+
+**Interview traps** —
+- *"What's the top security risk in an agentic system?"* — Excessive agency: an over-privileged agent that can be steered does whatever it is allowed to. Fix with scoped identities, data-plane-only roles, and human gates on irreversible actions.
+- *"How is prompt injection different from SQL injection?"* — Same idea (untrusted input treated as instructions), but **no parameterisation fully solves it** — you can't cleanly separate data from instructions in natural language, so you defend in depth.
+- *"Where does indirect prompt injection come from?"* — Content the model *retrieves* (RAG) or a *tool returns* — untrusted bytes that carry instructions. Treat every retrieved and tool byte as hostile.
+- *"How do you keep AI data inside the tenant on Azure?"* — Azure OpenAI behind a private endpoint (traffic off the internet), CMK for stored data, and knowing the provider's retention (Azure OpenAI doesn't train on your data). §5.10, §5.14, §9.11.
+- *"How do you audit a non-deterministic agent?"* — Trace every model call, retrieval and tool call with a correlation id — the same distributed-tracing discipline as the rest of the platform (§6).
+
+**The 60-second answer** — "Securing an AI workload, especially an agent, is the platform's own security discipline applied to a new shape. The headline threat is excessive agency: an agent with execution privileges that can be steered will do whatever it's allowed to, so you scope a managed identity per tool, grant data-plane roles not broad ones, and put a human gate on irreversible actions — you bound capability because you can't bound behaviour. Then prompt injection, direct and indirect: anything the model retrieves through RAG or gets back from a tool is untrusted input that must never be executed as instructions, and unlike SQL injection there's no parameterisation that fully solves it, so you defend in depth. Data boundaries: Azure OpenAI behind a private endpoint keeps traffic off the internet, customer-managed keys control encryption, and you know the provider's retention. Auditability: because control flow is non-deterministic, every tool call and retrieval is a traced span with a correlation id — the same tracing discipline as the rest of the platform. Plus content filtering and abuse monitoring as a platform concern. It's identity, networking, tracing and least privilege — the whole playbook — pointed at an agent."
+
+**Where you would see it** — Any enterprise agent or copilot with real tool access: the per-tool identity matrix, the private-endpoint model deployment, the approval workflow on risky actions, the trace pipeline over model/tool/retrieval calls, and the central content-filter and abuse monitor.
+
+**To reach 🟢** — Without notes, cover all five — excessive agency, prompt injection (and why it is not parameterisable), data boundaries, auditability, content filtering — and, for each, name the existing playbook concept whose discipline it reuses.
+
+---
+
+### 20. Evaluating and operating AI systems 🟡
+
+**What it is** — How you know an AI system works, and keeps working, in production. Two halves: **evaluation** (measuring answer quality against known-good expectations) and **operations** (running it reliably — versioning, quotas, fallback, cost). Because the system is non-deterministic (§9.15) you can't rely on exact-match tests; you measure *distributions of quality*, and you keep measuring after every model or prompt change.
+
+**The problem it solves** — Without evaluation an AI feature is **unfalsifiable** — you cannot tell whether a prompt tweak, a model upgrade or an index change made it *better or worse*. And because providers retire models and impose quotas, an AI system that isn't operated deliberately degrades or breaks on someone else's schedule.
+
+**How it works** —
+- **Offline evaluation** against a **golden dataset** — a curated set of representative inputs with known-good (or scored) expected outputs; you run candidates against it and score.
+- **LLM-as-judge** — use a model to grade outputs at scale (cheaper than humans), *with limits*: judges are biased, gameable and non-deterministic themselves, so you calibrate against human labels and never treat the judge as ground truth.
+- **Regression on model-version change** — a provider's "same" model at a new version can shift behaviour; you **re-run the eval suite** on every version bump *before* adopting it.
+- **Production monitoring** — latency, **token spend**, refusal and error rates, **retrieval hit rate** (for RAG), and **user feedback** (thumbs up/down) as a live signal.
+
+**Where this would fit in a platform like AntKart** — AntKart's operational spine already has the shape: an eval suite is the **CI gate** an AI feature would add next to build-test / Trivy / SonarCloud (§8); token spend and latency are **Application Insights** metrics and traces (§6) with **cost alerts** (§9.13); model-version pinning is the same **immutable-version discipline** as pinning image tags and providers (§2, §8). The one genuinely new artefact is the **golden dataset** — the AI equivalent of a test suite, and the thing that makes the feature falsifiable.
+
+**Operational realities the architect owns** —
+- **Model version pinning and deprecation** — pin to a specific model version; providers **retire** models on a deprecation schedule, so track it and plan migrations (re-run evals on the successor before switching).
+- **Quota and rate limits** — model endpoints have tokens-per-minute quotas; a design that ignores them throttles under load.
+- **Fallback when a model is unavailable** — a secondary model or region, a degraded response, or a queued retry — the model is an outbound dependency and needs the same resilience as any other (§1).
+- **Cost alerting** — token spend is a live cost line; budget and alert on it (§9.13), because a prompt change or a loop bug can multiply spend overnight.
+
+**Alternatives and the trade-off** — Human evaluation is most accurate but doesn't scale; LLM-as-judge scales but needs calibration; automated metrics (exact-match, overlap scores) are cheap but weak for open-ended text. Real programmes blend them — a small human-labelled golden set, an LLM-judge for scale, and production feedback closing the loop. Skipping evaluation "to move fast" trades a one-time setup cost for a permanent inability to tell whether you are improving.
+
+**Gotchas** —
+- **No evaluation → an unfalsifiable feature** — the core point: without a golden set you can't say a change helped, so you're flying blind on every tweak.
+- **LLM-as-judge is not ground truth** — it's biased and gameable; calibrate against humans and use it for scale, not verdict.
+- **A model "version" upgrade can regress you** — always re-run evals before adopting a new version; "latest" is not safe by default.
+- **Quota and deprecation are the provider's schedule, not yours** — pin versions, watch retirement dates, and design fallback, or the platform decides your uptime.
+
+**Interview traps** —
+- *"How do you know your AI feature works?"* — Offline evaluation against a golden dataset, scored (LLM-as-judge with human calibration), re-run on every model or prompt change, plus production monitoring of quality, cost and feedback. Without it the feature is unfalsifiable.
+- *"A provider upgrades your model version — what do you do?"* — Re-run the eval suite on the new version *before* adopting it; behaviour can regress even at the "same" model.
+- *"What do you monitor in production?"* — Latency, token spend, refusal and error rates, retrieval hit rate, user feedback — quality and cost, not just uptime.
+- *"What's the limit of LLM-as-judge?"* — It's non-deterministic and biased; calibrate against human labels and never treat it as ground truth.
+
+**The 60-second answer** — "Evaluation is how you know an AI system works, and it's non-negotiable because the system is non-deterministic — you can't exact-match test it, so without a golden dataset the feature is unfalsifiable and you can't tell whether any change helped. You evaluate offline against curated inputs with known-good outputs, score at scale with an LLM-as-judge calibrated against human labels, and — critically — re-run the suite whenever the model or prompt changes, because a provider's version bump can regress you. In production you monitor quality, token spend, refusal and error rates, retrieval hit rate for RAG, and user feedback. And you own the operational realities: pin the model version and track deprecation because providers retire models, respect quota and rate limits, design a fallback for when the model's unavailable, and alert on cost. In AntKart terms the eval suite is a CI gate, the telemetry is App Insights, and cost alerting is the FinOps discipline already there — the new artefact is the golden dataset."
+
+**Where you would see it** — Any serious AI feature: the eval harness in CI, the golden dataset in the repo, the token and latency dashboards, the model-deprecation tracker, and the fallback path in the model client.
+
+**To reach 🟢** — Without notes, explain why no-eval means unfalsifiable, describe golden datasets and LLM-as-judge with its limits, name the four production signals, and list the operational realities (version pinning and deprecation, quota, fallback, cost alerting).
+
+---
+
+### 21. Azure's AI platform services 🟡
+
+**What it is** — The Azure-specific building blocks an architect assembles an AI workload from: **Azure OpenAI Service** (hosted foundation models — GPT and embedding models — as deployments), **Azure AI Search** (a retrieval layer with vector and hybrid search, the common RAG index on Azure), **Azure AI Foundry** (the studio and SDK for building, evaluating and deploying AI apps and agents), and **Cosmos DB vector search** (vectors beside operational data). The point of this page is *integration* — how these plug into everything else in this playbook.
+
+**The problem it solves** — Knowing the *pattern* (RAG, agents) isn't enough in an Azure interview; you're expected to name the services, their key operational knobs, and — the differentiator — how they inherit the platform's identity, networking, secrets, telemetry and cost controls rather than reinventing them.
+
+**How it works** —
+- **Azure OpenAI Service** — you create **deployments** of specific models with a **quota** (tokens-per-minute); throughput is either **pay-as-you-go** (shared, quota-limited) or **provisioned (PTUs)** (reserved capacity for predictable latency and scale at a committed cost). **Model and region availability differ** — not every model is in every region.
+- **Azure AI Search** — indexes your chunks with vector plus keyword (hybrid) ranking; the managed retrieval layer for RAG.
+- **Azure AI Foundry** — the build/evaluate/deploy surface that ties models, data and evaluation together for apps and agents.
+- **Cosmos DB vector search** — native vectors for teams already on Cosmos (as AntKart is for its catalogue).
+
+**How they integrate with the rest of this playbook (the differentiator)** —
+- **Managed identity instead of API keys** — call Azure OpenAI with `DefaultAzureCredential` / workload identity, not a key in config (§5.4, §5.6) — the same secret-less model as everything AntKart does.
+- **Private endpoints** — put Azure OpenAI and AI Search on private endpoints so prompts and data never traverse the public internet (§5.10).
+- **Key Vault** — any real secret (a third-party key) is vaulted, never committed (§5.6).
+- **Application Insights** — token usage, latency and dependency traces flow into the same telemetry as the rest of the platform (§6), which is also the cost and quality signal (§9.20).
+- **Cost management** — token spend is budgeted and alerted like any Azure cost (§9.13); PTU vs pay-as-you-go is a FinOps decision — reserved vs on-demand, the same shape as reservations.
+
+**Where this would fit in a platform like AntKart** — An AntKart AI feature would be **Azure OpenAI (private endpoint, managed identity) + retrieval over Cosmos/pgvector or Azure AI Search + App Insights telemetry + a Consumption budget on tokens** — the platform's existing identity, networking, Key Vault, observability and FinOps patterns, with two new resources (a model deployment and a retrieval index) slotted in. Nothing about the *platform* discipline changes.
+
+**Region, residency and sovereignty** — **model availability differs by region**, and **data-residency requirements may constrain which region** a deployment can legally use, so region choice is a *compliance* decision, not just a latency one. In the **UAE** specifically (and other regulated geographies), the model you want may not be in the in-country region, forcing a trade between *residency* and *capability*; and a genuinely **sovereign** deployment is a separately-operated cloud, not a commercial region (§9.11) — calling a UAE North deployment "sovereign" is exactly the trap that concept flags.
+
+**Alternatives and the trade-off** — Azure OpenAI vs the public OpenAI API: Azure adds enterprise identity, private networking, regional control and enterprise data-handling terms at the cost of Azure-region availability lag (new models arrive later). Azure AI Search vs pgvector/Cosmos: a dedicated, powerful retrieval layer vs reusing an operated store (§9.16's reuse-vs-specialise trade). PTU vs pay-as-you-go: reserved predictable capacity vs on-demand flexibility — a FinOps call.
+
+**Gotchas** —
+- **Model and region availability are not uniform** — the model you designed around may not exist in your required region; check before committing, especially under residency constraints.
+- **Quota is real and low by default** — a naive load test hits the tokens-per-minute ceiling; request quota or use PTUs for predictable throughput.
+- **Keys are the anti-pattern** — Azure OpenAI supports managed identity; an API key in config throws away the platform's secret-less model.
+- **"Sovereign" ≠ "deployed in-region"** — residency (a commercial region) is not sovereignty (a separately-operated cloud); don't conflate them in a regulated-geography answer (§9.11).
+
+**Interview traps** —
+- *"How does an AI workload authenticate on Azure?"* — Managed identity via DefaultAzureCredential, not an API key — the same secret-less model as the rest of the platform.
+- *"Provisioned vs pay-as-you-go throughput?"* — PTUs reserve capacity for predictable latency and scale at a committed cost; pay-as-you-go is shared and quota-limited — a reserved-vs-on-demand FinOps choice.
+- *"You must keep data in the UAE — any constraint?"* — Model availability differs by region, so the model you want may not be in-country; residency can force a capability trade, and residency isn't sovereignty (§9.11).
+- *"How does the AI feature fit the existing platform?"* — Managed identity, private endpoints, Key Vault, App Insights telemetry, and a token budget — two new resources on the same platform spine.
+
+**The 60-second answer** — "On Azure I'd assemble an AI workload from Azure OpenAI for the models — created as deployments with a tokens-per-minute quota, either pay-as-you-go or provisioned PTUs for reserved throughput — Azure AI Search or Cosmos/pgvector as the retrieval layer, and Azure AI Foundry to build and evaluate. The differentiator in an interview is integration: it authenticates with managed identity, not an API key; it sits behind private endpoints so prompts never hit the public internet; secrets go in Key Vault; token and latency telemetry flow into Application Insights; and token spend is budgeted like any Azure cost, with PTU-versus-pay-as-you-go as a FinOps decision. Region matters twice — model availability differs by region, and data residency can constrain which region you're allowed to use — so in a place like the UAE you may face a residency-versus-capability trade, and a commercial in-region deployment is residency, not sovereignty. It's the platform's existing identity, networking, secrets, observability and cost discipline, with a model deployment and an index added."
+
+**Where you would see it** — Every Azure-hosted AI feature: an Azure OpenAI deployment behind a private endpoint, an AI Search or Cosmos index, App Insights dashboards for tokens and latency, and a budget on the spend — assembled by an architect from the same primitives as the rest of the estate.
+
+**To reach 🟢** — Without notes, name the four services and their key knobs (deployments and quota, PTU vs PAYG, hybrid search), explain how each ties into managed identity / private endpoints / Key Vault / App Insights / cost, and state the region-availability-and-residency (and sovereignty) constraint.
+
+---
+
+_End of syllabus. **One hundred and thirty-five concepts** across nine sections, all written to the full template — the
 original seventy the platform runs on, the alternatives it chose against and adjacent technologies it doesn't use, the
-architecture-practice concepts that turn a builder into an architect, and now the enterprise-architecture concepts an
-Azure architect is examined on whether or not this platform contains them — Well-Architected, landing zones, HA/DR,
-sovereignty, compliance, and FinOps. Every tag starts 🟡 — the writing is done; the proving is yours. When you change
-the last one to 🟢, this platform is yours to explain to anyone — including everything you deliberately did **not**
-build, everything you would build for an enterprise, and why._
+architecture-practice concepts that turn a builder into an architect, the enterprise-architecture concepts an Azure
+architect is examined on whether or not this platform contains them — Well-Architected, landing zones, HA/DR,
+sovereignty, compliance, and FinOps — and now **AI workloads as an architectural concern** (concepts 9.14–9.21), a
+subject AntKart does not contain but an architect is expected to reason about. Every tag starts 🟡 — the writing is
+done; the proving is yours. When you change the last one to 🟢, this platform is yours to explain to anyone —
+including everything you deliberately did **not** build, everything you would build for an enterprise, and why._
