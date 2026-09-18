@@ -1,16 +1,20 @@
 'use strict';
 /*
- * build.js — produces the two print-ready Architect's Playbook PDFs.
+ * build.js — produces ONE print-ready A4 PDF of the Architect's Playbook.
  *
- *   node build.js                 # build both books
+ *   node build.js                 # build the PDF
  *   node build.js --shots         # build + write inspection PNGs to ./_inspect/
  *
  * Route: markdown-it (MD→HTML) → mermaid (diagrams→SVG, in-browser) → Paged.js (CSS Paged
  * Media pagination) → headless Chrome (Chrome/Edge) prints to PDF. No LaTeX/pandoc needed.
+ *
+ * Single volume, standard (non-mirrored) 18mm margins, one TOC, sections start on a fresh
+ * page with no dedicated title page and no forced blanks, diagrams sized to their natural
+ * (readable) size capped to the page width.
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const MarkdownIt = require('markdown-it');
 const puppeteer = require('puppeteer-core');
 
@@ -22,6 +26,8 @@ const CSS = fs.readFileSync(path.join(__dirname, 'template.css'), 'utf8');
 const MERMAID_JS = fs.readFileSync(path.join(__dirname, 'node_modules', 'mermaid', 'dist', 'mermaid.min.js'), 'utf8');
 const PAGEDJS_JS = fs.readFileSync(path.join(__dirname, 'node_modules', 'pagedjs', 'dist', 'paged.polyfill.js'), 'utf8');
 const SHOTS = process.argv.includes('--shots');
+const OUT_FILE = 'ARCHITECT-PLAYBOOK.pdf';
+const SECTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 const CHROME = [
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
@@ -31,36 +37,19 @@ const CHROME = [
 ].find(p => fs.existsSync(p));
 if (!CHROME) { console.error('No Chrome/Edge found.'); process.exit(1); }
 
-const BOOKS = [
-  {
-    id: 1, out: 'Book1-Platform-and-Infrastructure.pdf', title: 'Platform and Infrastructure',
-    sections: [1, 2, 3, 4, 5],
-    names: ['Platform — architecture and patterns', 'Infrastructure as code', 'Azure services', 'Kubernetes', 'Security and identity'],
-    other: 'Book 2 — Delivery and Practice covers Observability, GitOps, DevOps, and Architecture practice (Sections 6–9).',
-  },
-  {
-    id: 2, out: 'Book2-Delivery-and-Practice.pdf', title: 'Delivery and Practice',
-    sections: [6, 7, 8, 9],
-    names: ['Observability', 'GitOps', 'DevOps', 'Architecture practice'],
-    other: 'Book 1 — Platform and Infrastructure covers Platform, Infrastructure as code, Azure services, Kubernetes, and Security and identity (Sections 1–5).',
-  },
-];
-
-const escapeHtml = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escapeHtml = s => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 function slugify(s) {
   return String(s).toLowerCase()
-    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u2190-\u21FF\u2B00-\u2BFF]/gu, '') // emoji/symbols
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u2190-\u21FF\u2B00-\u2BFF]/gu, '')
     .replace(/&[a-z]+;/g, '')
     .replace(/[^\w\s-]/g, '')
-    .trim().replace(/\s+/g, '-').replace(/-+/g, '-') || 'x';
+    .trim().replaceAll(/\s+/g, '-').replaceAll(/-+/g, '-') || 'x';
 }
 function uniqueSlug(text, map) {
-  // prefix so ids never start with a digit (invalid in querySelector, which Paged.js uses)
-  let base = 'pb-' + slugify(text), s = base, i = 2;
+  let base = 'pb-' + slugify(text), s = base, i = 2;         // never start an id with a digit
   while (map.has(s)) { s = `${base}-${i}`; i++; }
   map.set(s, true); return s;
 }
-// strip trailing status emoji + escape, for TOC/title display
 function cleanText(t) {
   return escapeHtml(t.replace(/\s*[\u{1F7E1}\u{1F535}\u{1F7E2}]\s*$/u, '').trim());
 }
@@ -76,7 +65,7 @@ function makeMd() {
   };
   md.renderer.rules.heading_open = (tokens, idx, opts, env, self) => {
     const tag = tokens[idx].tag;
-    const text = tokens[idx + 1] && tokens[idx + 1].type === 'inline' ? tokens[idx + 1].content : '';
+    const text = tokens[idx + 1]?.type === 'inline' ? tokens[idx + 1].content : '';
     const slug = uniqueSlug(text, env.slugs);
     tokens[idx].attrSet('id', slug);
     env.headings.push({ tag, text, slug });
@@ -87,13 +76,12 @@ function makeMd() {
 
 function splitSource() {
   const lines = fs.readFileSync(SRC, 'utf8').split(/\r?\n/);
-  // locate section header lines, skipping code fences
   const secLine = {};
   let inFence = false;
   for (let i = 0; i < lines.length; i++) {
     if (/^```/.test(lines[i])) inFence = !inFence;
     if (inFence) continue;
-    const m = lines[i].match(/^#\s+(\d+)\.\s/);
+    const m = /^#\s+(\d+)\.\s/.exec(lines[i]);
     if (m) secLine[+m[1]] = i;
   }
   const frontMatter = lines.slice(0, secLine[1]).join('\n');
@@ -105,62 +93,34 @@ function splitSource() {
   return { frontMatter, sectionBlock };
 }
 
-function buildFrontMatterHtml(book, srcFront) {
-  // Title page
-  const secList = book.sections.map((n, i) => `${n} &middot; ${escapeHtml(book.names[i])}`).join('<br>');
+function buildHtml(frontMatter, sectionBlock) {
+  // Front matter: title page + rendered source front matter (minus its top H1) + generated TOC.
   const titlePage = `<div class="titlepage">
-    <div class="kicker">The Architect's Playbook</div>
-    <div class="book-title">${escapeHtml(book.title)}</div>
-    <div class="book-sub">Book ${book.id} of 2</div>
-    <div class="sections">${secList}</div>
-    <div class="foot">AntKart &middot; a printable desk reference &middot; A4, double-sided, spiral-bound</div>
+    <div class="kicker">AntKart</div>
+    <div class="book-title">The Architect&rsquo;s Playbook</div>
+    <div class="book-sub">127 concepts across nine sections</div>
+    <div class="foot">A printable desk reference &middot; A4 &middot; single volume</div>
   </div>`;
+  const fmMd = makeMd();
+  const fmHtml = fmMd.render(frontMatter.replace(/^#\s+The Architect's Playbook.*$/m, ''), { slugs: new Map(), headings: [] });
 
-  // Render source front matter (drop its top H1 title; keep intro + how-to + status + progress + study order)
-  const md = makeMd();
-  const frontMd = srcFront.replace(/^#\s+The Architect's Playbook.*$/m, '');
-  const fmHtml = md.render(frontMd, { slugs: new Map(), headings: [] });
-
-  return { titlePage, fmHtml };
-}
-
-function buildBookHtml(book, srcFront, sectionBlock) {
-  const { titlePage, fmHtml } = buildFrontMatterHtml(book, srcFront);
-
-  // Render this book's body (all its sections) in one pass for stable ids + TOC order.
+  // Body: all nine sections, each a <section> with its H1 at the top (no dedicated title page).
   const md = makeMd();
   const env = { slugs: new Map(), headings: [] };
-  const bodyMd = book.sections.map(sectionBlock).join('\n\n');
-  const bodyHtml = md.render(bodyMd, env);
-
-  // Wrap each section: a title page (Section N + H1) then the body.
+  const bodyHtml = md.render(SECTIONS.map(sectionBlock).join('\n\n'), env);
   const chunks = bodyHtml.split(/(?=<h1\b)/).filter(c => c.trim());
-  const sectionsHtml = chunks.map((chunk, i) => {
-    const m = chunk.match(/^(<h1\b[^>]*>)([\s\S]*?)(<\/h1>)([\s\S]*)$/);
-    if (!m) return chunk;
-    const [, h1open, h1text, h1close, rest] = m;
-    const num = (h1text.match(/^\s*(\d+)\./) || [])[1] || '';
-    const first = i === 0 ? ' first' : '';   // first section resets the arabic page counter
-    return `<section class="section">
-  <div class="section-title${first}"><div class="snum">Section ${num}</div>${h1open}${h1text}${h1close}</div>
-  <div class="section-body">${rest}</div>
-</section>`;
-  }).join('\n');
+  const sectionsHtml = chunks.map(c => `<section class="section">\n${c}\n</section>`).join('\n');
 
-  // TOC from collected headings (sections = h1, concepts = h3).
-  let toc = `<nav class="toc"><h1>Contents</h1><p class="otherbook">${escapeHtml(book.other)}</p><ul>`;
+  // One TOC of every section (h1) and concept (h3), page numbers via target-counter.
+  let toc = `<nav class="toc"><h1>Contents</h1><ul>`;
   for (const h of env.headings) {
-    if (h.tag === 'h1')
-      toc += `<li class="sec"><a href="#${h.slug}"><span class="t">${cleanText(h.text)}</span><span class="leader"></span></a></li>`;
-    else if (h.tag === 'h3')
-      toc += `<li class="con"><a href="#${h.slug}"><span class="t">${cleanText(h.text)}</span><span class="leader"></span></a></li>`;
+    if (h.tag === 'h1') toc += `<li class="sec"><a href="#${h.slug}"><span class="t">${cleanText(h.text)}</span><span class="leader"></span></a></li>`;
+    else if (h.tag === 'h3') toc += `<li class="con"><a href="#${h.slug}"><span class="t">${cleanText(h.text)}</span><span class="leader"></span></a></li>`;
   }
   toc += `</ul></nav>`;
 
-  const css = CSS.replace(/__BOOK_TITLE__/g, book.title.replace(/"/g, '\\"'));
-
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(book.title)}</title>
-<style>${css}</style></head><body>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>The Architect's Playbook</title>
+<style>${CSS}</style></head><body>
 <div class="frontmatter">
 ${titlePage}
 <div class="fmbody">${fmHtml}</div>
@@ -185,41 +145,28 @@ ${sectionsHtml}
     }
     window.__mermaid = { total: nodes.length, ok, fail, failed };
     const result = await window.PagedPolyfill.preview();
-    // Strip furniture from any empty page (recto-forcing leaves blanks that Paged.js does not
-    // always classify as :blank), so no header or stray page number appears on a blank leaf.
-    let emptied = 0;
+    // Strip furniture from any empty page Paged.js may leave.
     document.querySelectorAll('.pagedjs_page').forEach(p => {
       const c = p.querySelector('.pagedjs_page_content');
       if (!c) return;
-      // structural wrappers (section/div/nav) can straddle a forced break as empty fragments;
-      // only real content elements count, so a recto-forcing blank is still detected as empty.
       const hasBlock = c.querySelector('h1,h2,h3,h4,h5,h6,p,ul,ol,li,table,pre,figure,svg,img,blockquote,code');
-      if (!hasBlock && c.textContent.trim() === '') { p.classList.add('ak-empty'); emptied++; }
+      if (!hasBlock && c.textContent.trim() === '') p.classList.add('ak-empty');
     });
-    window.__emptied = emptied;
-    // Footer page numbers: Paged.js's counter(page) in the margin box does not honour the
-    // main-matter counter-reset the way target-counter (the TOC) does, so the two disagree.
-    // Re-label the main-matter footers to match the TOC: arabic restarting at the main-matter
-    // start, blank on section-title pages and inserted blanks. Front matter (roman) is left as is.
-    // Paged.js renders counter(page) as a pseudo-element and does not reset it consistently.
-    // The CSS kills that pseudo; here we set every footer number ourselves: roman for the
-    // front matter, arabic restarting at the main matter, blank on title/section/empty pages.
+    // Footer page numbers: roman for the front matter, arabic restarting at the main matter.
     const allPages = Array.from(document.querySelectorAll('.pagedjs_page'));
     const firstMain = allPages.findIndex(p => p.querySelector('.mainmatter, .section'));
-    const roman = n => { const t = [[1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'], [50, 'l'], [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']]; let s = ''; for (const [v, sym] of t) { while (n >= v) { s += sym; n -= v; } } return s; };
-    let romanN = 0, arabicN = 0, relabelled = 0;
+    const roman = n => { const t=[[1000,'m'],[900,'cm'],[500,'d'],[400,'cd'],[100,'c'],[90,'xc'],[50,'l'],[40,'xl'],[10,'x'],[9,'ix'],[5,'v'],[4,'iv'],[1,'i']]; let s=''; for(const [v,sym] of t){ while(n>=v){ s+=sym; n-=v; } } return s; };
+    let romanN=0, arabicN=0;
     allPages.forEach((p, i) => {
       const empty = p.classList.contains('ak-empty');
       const isTitle = !!p.querySelector('.titlepage');
-      const isSecTitle = !!p.querySelector('.section-title');
       let label;
       if (firstMain < 0 || i < firstMain) { romanN++; label = (empty || isTitle) ? '' : roman(romanN); }
-      else { arabicN++; label = (empty || isSecTitle) ? '' : String(arabicN); }
+      else { arabicN++; label = empty ? '' : String(arabicN); }
       const box = p.querySelector('.pagedjs_margin-bottom-center .pagedjs_margin-content');
-      if (box) { box.textContent = label; relabelled++; }
+      if (box) box.textContent = label;
     });
-    window.__relabelled = relabelled;
-    window.__pages = result && result.total ? result.total : document.querySelectorAll('.pagedjs_page').length;
+    window.__pages = (result && result.total) ? result.total : allPages.length;
     window.__renderDone = true;
   } catch (e) { window.__error = String(e && e.stack || e); window.__renderDone = true; }
 })();
@@ -227,114 +174,65 @@ ${sectionsHtml}
 </body></html>`;
 }
 
-async function inspect(page, book) {
+async function inspect(page) {
   fs.mkdirSync(INSPECT_DIR, { recursive: true });
-  // front matter pages 1..6 + TOC, and the busiest-diagram page
-  const targets = await page.evaluate(() => {
-    const pages = Array.from(document.querySelectorAll('.pagedjs_page'));
-    const idxOf = el => { const p = el.closest('.pagedjs_page'); return pages.indexOf(p); };
-    // busiest diagram = svg with most descendants
-    let best = null, bestN = -1;
-    document.querySelectorAll('.pagedjs_page svg').forEach(svg => {
-      const n = svg.querySelectorAll('*').length;
-      if (n > bestN) { bestN = n; best = svg; }
-    });
-    const out = { total: pages.length, busy: best ? idxOf(best) : -1, busyN: bestN };
-    return out;
-  });
-  // locate the TOC page and measure mirrored margins on one odd + one even content page
-  const extra = await page.evaluate(() => {
+  const info = await page.evaluate(() => {
     const pages = Array.from(document.querySelectorAll('.pagedjs_page'));
     const idxOf = el => pages.indexOf(el.closest('.pagedjs_page'));
+    // diagram pages by svg node count: smallest, median, largest
+    const svgs = Array.from(document.querySelectorAll('.pagedjs_page svg'))
+      .map(s => ({ i: idxOf(s), n: s.querySelectorAll('*').length })).sort((a, b) => a.n - b.n);
+    const sample = svgs.length ? [svgs[0], svgs[Math.floor(svgs.length / 2)], svgs[svgs.length - 1]] : [];
+    // section opener pages
+    const secs = Array.from(document.querySelectorAll('.section > h1')).map(h => ({ idx: idxOf(h) + 1, right: h.closest('.pagedjs_page').classList.contains('pagedjs_right_page'), t: h.textContent.slice(0, 30) }));
     const tocEl = document.querySelector('nav.toc');
-    const tocPage = tocEl ? idxOf(tocEl) : -1;
-    const measure = i => {
-      const p = pages[i]; if (!p) return null;
-      const area = p.querySelector('.pagedjs_area') || p.querySelector('.pagedjs_page_content');
-      if (!area) return null;
-      const pr = p.getBoundingClientRect(), ar = area.getBoundingClientRect();
-      const mm = px => +(px / (96 / 25.4)).toFixed(1);
-      return { left: mm(ar.left - pr.left), right: mm(pr.right - ar.right) };
-    };
-    // pick a mid-book odd and even page (past front matter)
-    const oddIdx = 60, evenIdx = 61;
-    return { tocPage, oddIdx, evenIdx, oddMargins: measure(oddIdx), evenMargins: measure(evenIdx),
-             oddIsRight: pages[oddIdx] && pages[oddIdx].classList.contains('pagedjs_right_page'),
-             evenIsRight: pages[evenIdx] && pages[evenIdx].classList.contains('pagedjs_right_page') };
+    return { total: pages.length, sample, secs, toc: tocEl ? idxOf(tocEl) + 1 : -1,
+      // any fully blank pages left?
+      blanks: pages.map((p, i) => p.classList.contains('ak-empty') ? i + 1 : null).filter(Boolean) };
   });
-  console.log(`     margins: page${extra.oddIdx + 1} L=${extra.oddMargins && extra.oddMargins.left} R=${extra.oddMargins && extra.oddMargins.right} (right-page=${extra.oddIsRight}); page${extra.evenIdx + 1} L=${extra.evenMargins && extra.evenMargins.left} R=${extra.evenMargins && extra.evenMargins.right} (right-page=${extra.evenIsRight})`);
-
-  const secInfo = await page.evaluate(() => {
-    const pages = Array.from(document.querySelectorAll('.pagedjs_page'));
-    return Array.from(document.querySelectorAll('.section-title')).map(st => {
-      const p = st.closest('.pagedjs_page');
-      return { idx: pages.indexOf(p) + 1, right: p.classList.contains('pagedjs_right_page'), title: (st.querySelector('h1') || {}).textContent };
-    });
-  });
-  console.log('     section title pages: ' + secInfo.map(s => `p${s.idx}${s.right ? 'R' : 'L'}`).join(' '));
-  const allRight = secInfo.every(s => s.right);
-  console.log('     all sections on RIGHT-hand pages: ' + allRight);
-  const blanks = await page.evaluate(() => Array.from(document.querySelectorAll('.pagedjs_page')).map((p, i) => p.classList.contains('pagedjs_blank_page') ? i + 1 : null).filter(Boolean));
-  console.log('     blank pages: ' + JSON.stringify(blanks) + '; page-before-§1 class: ' + await page.evaluate(i => { const p = document.querySelectorAll('.pagedjs_page')[i]; return p ? p.className.replace(/pagedjs_/g, '') : ''; }, (secInfo[0] ? secInfo[0].idx - 2 : 7)));
-
+  console.log('     section openers: ' + info.secs.map(s => `p${s.idx}`).join(' '));
+  console.log('     empty pages: ' + JSON.stringify(info.blanks));
+  console.log('     diagram sample (idx:svgNodes): ' + info.sample.map(s => `${s.i + 1}:${s.n}`).join(' '));
   const want = new Set([0, 1, 2, 3, 4, 5]);
-  if (targets.busy >= 0) want.add(targets.busy);
-  if (extra.tocPage >= 0) { want.add(extra.tocPage); want.add(extra.tocPage + 1); }
-  want.add(extra.oddIdx); want.add(extra.evenIdx);
-  if (secInfo[0]) { want.add(secInfo[0].idx - 1); want.add(secInfo[0].idx - 2); want.add(secInfo[0].idx); }
-  for (const i of [...want].filter(i => i >= 0 && i < targets.total)) {
+  if (info.toc > 0) { want.add(info.toc - 1); want.add(info.toc); }
+  if (info.secs[0]) want.add(info.secs[0].idx - 1);
+  info.sample.forEach(s => want.add(s.i));
+  for (const i of [...want].filter(i => i >= 0 && i < info.total)) {
     const clip = await page.evaluate((i) => {
       const p = document.querySelectorAll('.pagedjs_page')[i];
       p.scrollIntoView();
       const r = p.getBoundingClientRect();
       return { x: r.x + window.scrollX, y: r.y + window.scrollY, width: r.width, height: r.height };
     }, i);
-    await page.screenshot({ path: path.join(INSPECT_DIR, `book${book.id}-page${String(i + 1).padStart(3, '0')}.png`), clip, captureBeyondViewport: true });
+    await page.screenshot({ path: path.join(INSPECT_DIR, `page${String(i + 1).padStart(3, '0')}.png`), clip, captureBeyondViewport: true });
   }
-  return targets;
-}
-
-async function buildBook(browser, book, srcFront, sectionBlock) {
-  const html = buildBookHtml(book, srcFront, sectionBlock);
-  const htmlPath = path.join(OUT_DIR, `_${book.out}.html`);
-  fs.writeFileSync(htmlPath, html, 'utf8');
-
-  const page = await browser.newPage();
-  await page.setViewport({ width: 900, height: 1400, deviceScaleFactor: SHOTS ? 2 : 1 });
-  page.on('console', m => { if (m.type() === 'error') console.log(`  [console.error] ${m.text()}`.slice(0, 200)); });
-  await page.goto('file:///' + htmlPath.replace(/\\/g, '/'), { waitUntil: 'load', timeout: 120000 });
-  await page.waitForFunction('window.__renderDone === true', { timeout: 900000 });
-
-  const stats = await page.evaluate(() => ({ m: window.__mermaid, pages: window.__pages, error: window.__error }));
-  if (stats.error) console.log(`  !! page error: ${stats.error}`);
-  console.log(`  Book ${book.id}: ${stats.pages} pages, diagrams ${stats.m ? stats.m.ok + '/' + stats.m.total + ' ok, ' + stats.m.fail + ' failed' : 'n/a'}`);
-  if (stats.m && stats.m.failed && stats.m.failed.length) console.log(`     failed: ${JSON.stringify(stats.m.failed)}`);
-
-  let insp = null;
-  if (SHOTS) { insp = await inspect(page, book); console.log(`     busiest diagram on page ${insp.busy + 1} (${insp.busyN} svg nodes)`); }
-
-  const pdfPath = path.join(OUT_DIR, book.out);
-  await page.pdf({ path: pdfPath, printBackground: true, preferCSSPageSize: true,
-    margin: { top: 0, right: 0, bottom: 0, left: 0 }, displayHeaderFooter: false, timeout: 0 });
-  const sizeMB = (fs.statSync(pdfPath).size / 1048576).toFixed(2);
-  console.log(`     wrote ${book.out} (${sizeMB} MB)`);
-  fs.unlinkSync(htmlPath);
-  await page.close();
-  return { pages: stats.pages, mermaid: stats.m };
 }
 
 (async () => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const { frontMatter, sectionBlock } = splitSource();
+  const html = buildHtml(frontMatter, sectionBlock);
+  const htmlPath = path.join(OUT_DIR, `_${OUT_FILE}.html`);
+  fs.writeFileSync(htmlPath, html, 'utf8');
+
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--font-render-hinting=none'] });
-  const summary = [];
-  for (const book of BOOKS) {
-    console.log(`Building Book ${book.id} — ${book.title} ...`);
-    summary.push({ book, ...(await buildBook(browser, book, frontMatter, sectionBlock)) });
-  }
+  const page = await browser.newPage();
+  await page.setViewport({ width: 900, height: 1400, deviceScaleFactor: SHOTS ? 2 : 1 });
+  await page.goto('file:///' + htmlPath.replace(/\\/g, '/'), { waitUntil: 'load', timeout: 120000 });
+  await page.waitForFunction('window.__renderDone === true', { timeout: 900000 });
+
+  const stats = await page.evaluate(() => ({ m: window.__mermaid, pages: window.__pages, error: window.__error }));
+  if (stats.error) console.log(`  !! page error: ${stats.error}`);
+  console.log(`  ${stats.pages} pages; diagrams ${stats.m ? stats.m.ok + '/' + stats.m.total + ' ok, ' + stats.m.fail + ' failed' : 'n/a'}`);
+  if (stats.m?.failed?.length) console.log(`     failed: ${JSON.stringify(stats.m.failed)}`);
+
+  if (SHOTS) await inspect(page);
+
+  const pdfPath = path.join(OUT_DIR, OUT_FILE);
+  await page.pdf({ path: pdfPath, printBackground: true, preferCSSPageSize: true, margin: { top: 0, right: 0, bottom: 0, left: 0 }, displayHeaderFooter: false, timeout: 0 });
   await browser.close();
-  console.log('\n=== SUMMARY ===');
-  for (const s of summary)
-    console.log(`Book ${s.book.id} (${s.book.title}): ${s.pages} pages; diagrams ${s.mermaid ? s.mermaid.ok + '/' + s.mermaid.total : '?'} rendered.`);
-  console.log(`Output: ${OUT_DIR}`);
+  fs.unlinkSync(htmlPath);
+
+  const sizeMB = (fs.statSync(pdfPath).size / 1048576).toFixed(2);
+  console.log(`\nWrote ${OUT_FILE} (${stats.pages} pages, ${sizeMB} MB, ${stats.m ? stats.m.ok : 0} diagrams) to ${OUT_DIR}`);
 })().catch(e => { console.error(e); process.exit(1); });
