@@ -394,3 +394,7 @@ override.tf.json
 # Personal working tracker — never committed
 JOB-SEARCH.local.md
 *.local.md
+
+# Architect's Playbook printable PDFs — build artefacts, not source (see scripts/build-playbook-pdf/)
+/build/playbook-pdf/
+scripts/build-playbook-pdf/_inspect/

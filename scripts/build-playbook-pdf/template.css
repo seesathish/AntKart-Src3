@@ -1,0 +1,200 @@
+/*
+ * Print stylesheet for The Architect's Playbook (Paged.js / CSS Paged Media).
+ * __BOOK_TITLE__ is substituted per book by build.js.
+ *
+ * Binding: double-sided, spiral. Margins are MIRRORED — the inner (binding) edge is 25mm
+ * on every page, the outer edge 15mm, so odd/even pages swap which physical side binds.
+ */
+
+/* ---------- Page geometry: A4, mirrored 25mm inner / 15mm outer ---------- */
+@page {
+  size: A4 portrait;
+  margin-top: 20mm;
+  margin-bottom: 20mm;
+  /* default (recto) spread — overridden by :left/:right below */
+  margin-left: 25mm;
+  margin-right: 15mm;
+
+  @top-left     { content: none; }
+  @top-right    { content: none; }
+  @bottom-center{ content: none; }
+}
+
+/* Recto (right-hand, odd): binding on the LEFT → inner margin left. */
+@page:right {
+  margin-left: 25mm;   /* inner / binding */
+  margin-right: 15mm;  /* outer */
+  @top-left     { content: "__BOOK_TITLE__"; font-size: 8.5pt; color: #555; }
+  @top-right    { content: string(sectionname); font-size: 8.5pt; color: #555; }
+  @bottom-center{ content: counter(page); font-size: 9pt; color: #333; }
+}
+
+/* Verso (left-hand, even): binding on the RIGHT → inner margin right. */
+@page:left {
+  margin-left: 15mm;   /* outer */
+  margin-right: 25mm;  /* inner / binding */
+  @top-left     { content: "__BOOK_TITLE__"; font-size: 8.5pt; color: #555; }
+  @top-right    { content: string(sectionname); font-size: 8.5pt; color: #555; }
+  @bottom-center{ content: counter(page); font-size: 9pt; color: #333; }
+}
+
+/* ---------- Front matter: roman numerals, no running head ---------- */
+.frontmatter { page: front; }
+@page front {
+  @top-left { content: none; }
+  @top-right{ content: none; }
+  @bottom-center { content: counter(page, lower-roman); font-size: 9pt; color: #333; }
+}
+@page front:left  { margin-left: 15mm; margin-right: 25mm; }
+@page front:right { margin-left: 25mm; margin-right: 15mm; }
+
+/* Title page & section title pages: NO furniture at all. */
+.titlepage { page: blank; break-after: page; }
+@page blank {
+  @top-left { content: none; } @top-right { content: none; } @bottom-center { content: none; }
+}
+@page blank:left  { margin-left: 15mm; margin-right: 25mm; }
+@page blank:right { margin-left: 25mm; margin-right: 15mm; }
+
+/* Auto-inserted blank pages (from break-before:right) carry no furniture. */
+@page:blank {
+  @top-left { content: none; } @top-right { content: none; } @bottom-center { content: none; }
+}
+/* Belt-and-braces: some Paged.js builds don't honour @page:blank, so also hide the rendered
+ * margin boxes on any page it marks blank, or that build.js flags empty after pagination. */
+.pagedjs_blank_page [class*="pagedjs_margin"],
+.pagedjs_page.ak-empty [class*="pagedjs_margin"] { visibility: hidden !important; }
+
+/* Paged.js renders the footer counter(page) as a pseudo-element and does not reset it in step
+ * with target-counter (the TOC). Kill the pseudo; build.js writes the real number as text. */
+.pagedjs_margin-bottom-center .pagedjs_margin-content::before,
+.pagedjs_margin-bottom-center .pagedjs_margin-content::after { content: none !important; }
+
+/* ---------- Main matter: arabic, restart at 1 ---------- */
+/* The wrapper resets the page counter (Paged.js honours counter-reset on a block that opens a
+ * page); the empty page its opening may leave before Section 1's recto is cleaned by ak-empty. */
+.mainmatter { counter-reset: page 1; }
+
+/* Each section begins on a new right-hand page, its title alone, no furniture. */
+.section-title {
+  page: sectiontitle;
+  break-before: right;   /* forces a blank verso if needed → section opens recto */
+  break-after: page;     /* section body starts on the following page */
+}
+@page sectiontitle {
+  @top-left { content: none; } @top-right { content: none; } @bottom-center { content: none; }
+}
+@page sectiontitle:left  { margin-left: 15mm; margin-right: 25mm; }
+@page sectiontitle:right { margin-left: 25mm; margin-right: 15mm; }
+
+/* The section heading feeds the running header for the pages that follow. */
+.section-title h1 { string-set: sectionname content(text); }
+
+/* ---------- Base typography ---------- */
+:root {
+  --ink: #1a1a1a; --muted: #555; --line: #c9ccd1; --accent: #0E5C43; --codebg: #f4f6f8;
+}
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body {
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.5;
+  color: var(--ink);
+  margin: 0; padding: 0;
+  hyphens: auto;
+}
+
+p { margin: 0 0 .5em; orphans: 3; widows: 3; }
+a { color: #0b5cad; text-decoration: none; }
+strong { font-weight: 700; }
+em { font-style: italic; }
+ul, ol { margin: .35em 0 .55em 1.4em; padding: 0; }
+li { margin: .16em 0; }
+
+h1, h2, h3, h4 { line-height: 1.25; font-weight: 700; break-after: avoid; }
+h2 { font-size: 16pt; color: var(--accent); margin: 1.1em 0 .5em; border-bottom: 1px solid var(--line); padding-bottom: .2em; break-before: avoid; }
+h3 { font-size: 14pt; margin: 1.15em 0 .4em; break-after: avoid; break-inside: avoid; }
+h3 + p, h3 + blockquote, h2 + p { break-before: avoid; }
+h4 { font-size: 11.5pt; margin: .85em 0 .3em; }
+
+blockquote {
+  margin: .6em 0; padding: .45em .9em;
+  border-left: 4px solid #c7a03a; background: #fdf8ec; color: #4a4433;
+  border-radius: 3px; break-inside: avoid;
+}
+
+/* ---------- Code ---------- */
+code {
+  font-family: "Cascadia Code", "Consolas", monospace; font-size: 9pt;
+  background: var(--codebg); padding: .06em .3em; border-radius: 3px; color: #92310a;
+}
+pre {
+  background: var(--codebg); border: 1px solid var(--line); border-radius: 4px;
+  padding: .55em .8em; font-size: 9.5pt; line-height: 1.4;
+  break-inside: avoid;              /* keep whole where it fits; long ones may still break */
+  white-space: pre-wrap; word-break: break-word;
+}
+pre code { background: none; padding: 0; color: #24292e; font-size: 9.5pt; }
+
+/* ---------- Tables: 10pt, shaded header, visible borders, no split header ---------- */
+table { border-collapse: collapse; width: 100%; margin: .6em 0; font-size: 10pt; break-inside: auto; }
+thead { break-after: avoid; }
+tr { break-inside: avoid; }
+th, td { border: 1px solid #b9bdc3; padding: .32em .5em; text-align: left; vertical-align: top; }
+th { background: #e7ecf0; font-weight: 700; }
+tr:nth-child(even) td { background: #f7f9fb; }
+
+hr { border: none; border-top: 1px solid var(--line); margin: 1em 0; }
+
+/* ---------- Diagrams: full text width, never split, whole-to-next-page ---------- */
+figure.diagram {
+  break-inside: avoid;            /* move the WHOLE diagram to the next page if it won't fit */
+  text-align: center;
+  margin: 1em 0;
+  page-break-inside: avoid;
+}
+figure.diagram pre.mermaid { background: none; border: none; padding: 0; margin: 0; display: block; }
+figure.diagram svg {
+  width: 100% !important;         /* fill the available text width — do not shrink */
+  max-width: 100% !important;
+  height: auto !important;
+  max-height: 240mm;              /* may occupy nearly a full page if legibility needs it */
+  display: block; margin: 0 auto;
+}
+
+/* ---------- Title page ---------- */
+.titlepage {
+  height: 247mm;                  /* A4 minus top+bottom margins, so it fills the page */
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  text-align: center;
+}
+.titlepage .kicker { font-size: 12pt; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+.titlepage .book-title { font-size: 30pt; font-weight: 800; color: var(--accent); margin: .35em 0 .1em; }
+.titlepage .book-sub { font-size: 14pt; color: var(--ink); }
+.titlepage .sections { font-size: 11pt; color: var(--muted); margin-top: 1.6em; line-height: 1.7; }
+.titlepage .foot { font-size: 9.5pt; color: var(--muted); margin-top: 2.4em; }
+
+/* Front-matter H1 (title page uses .book-title, so suppress stray H1 sizing) */
+.fmbody h1 { font-size: 20pt; color: var(--accent); border-bottom: 2px solid var(--accent); padding-bottom: .2em; margin: .2em 0 .5em; }
+
+/* ---------- Table of contents ---------- */
+.toc { break-before: right; }
+.toc h1 { font-size: 20pt; color: var(--accent); border-bottom: 2px solid var(--accent); padding-bottom: .2em; margin: 0 0 .6em; }
+.toc .otherbook { font-style: italic; color: var(--muted); font-size: 10pt; margin: 0 0 1em; }
+.toc ul { list-style: none; margin: 0; padding: 0; }
+.toc li.sec { font-weight: 700; margin: .7em 0 .15em; font-size: 11.5pt; break-after: avoid; }
+.toc li.con { margin: .08em 0 .08em 1.2em; font-size: 10.5pt; }
+.toc a { color: var(--ink); display: flex; align-items: baseline; }
+.toc a .t { flex: 0 1 auto; }
+.toc a .leader { flex: 1 1 auto; border-bottom: 1px dotted #aab; margin: 0 .4em; transform: translateY(-.18em); }
+.toc a::after { content: target-counter(attr(href), page); flex: 0 0 auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.toc a .t .status { color: #b8860b; font-size: 9pt; }
+
+/* Section title page contents */
+.section-title { height: 247mm; display: flex; flex-direction: column; justify-content: center; }
+.section-title h1 { font-size: 22pt; color: var(--accent); border: none; margin: 0; }
+.section-title .snum { font-size: 13pt; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin-bottom: .3em; }
+
+/* Concept status marker fallback styling (used only if emoji is unavailable) */
+.status-fallback { display: inline-block; border: 1.5px solid #b8860b; color: #7a5a00; font-size: 8pt; font-weight: 700; padding: 0 .35em; border-radius: 3px; vertical-align: middle; }
