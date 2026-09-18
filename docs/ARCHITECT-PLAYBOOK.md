@@ -17,6 +17,14 @@ a status tag changes only when the concept has been **proven**, never when it ha
   a claim you can defend under questioning, not a claim that you have read the section.
 - The **Interview traps** and **The 60-second answer** subsections are the drill. If you can
   answer the traps cold and deliver the 60-second answer without hesitation, the concept is 🟢.
+- **Some concepts are things this platform deliberately does *not* use** (Prometheus, a service
+  mesh, Bicep, private endpoints, event sourcing, and more). They are here because interviewers
+  ask about the alternatives that were *not* chosen — and explaining *why something was not
+  chosen* is as valuable as explaining what was. Each such concept is marked in its heading with
+  a one-line note, and adapts two subsections: *How AntKart uses it* becomes **Why AntKart does
+  not use it** (the honest reason, citing the ADR — or stating plainly that the choice was never
+  formally recorded), and *Read the code* becomes **Where you would see it** (the kind of platform
+  where it is the right call). Everything else about the template is identical.
 
 ## Status convention
 
@@ -32,26 +40,34 @@ Every concept heading carries exactly one tag. Everything starts 🟡 — a tag 
 
 | # | Section | 🟡 To start | 🔵 In progress | 🟢 Proven | Total |
 |---|---------|:-----------:|:--------------:|:---------:|:-----:|
-| 1 | Platform — architecture and patterns | 15 | 0 | 0 | 15 |
-| 2 | Infrastructure as code | 8 | 0 | 0 | 8 |
-| 3 | Azure services | 11 | 0 | 0 | 11 |
-| 4 | Kubernetes | 11 | 0 | 0 | 11 |
-| 5 | Security and identity | 9 | 0 | 0 | 9 |
-| 6 | Observability | 6 | 0 | 0 | 6 |
-| 7 | GitOps | 5 | 0 | 0 | 5 |
-| 8 | DevOps | 5 | 0 | 0 | 5 |
-| | **Total** | **70** | **0** | **0** | **70** |
+| 1 | Platform — architecture and patterns | 20 | 0 | 0 | 20 |
+| 2 | Infrastructure as code | 12 | 0 | 0 | 12 |
+| 3 | Azure services | 17 | 0 | 0 | 17 |
+| 4 | Kubernetes | 16 | 0 | 0 | 16 |
+| 5 | Security and identity | 13 | 0 | 0 | 13 |
+| 6 | Observability | 10 | 0 | 0 | 10 |
+| 7 | GitOps | 8 | 0 | 0 | 8 |
+| 8 | DevOps | 9 | 0 | 0 | 9 |
+| 9 | Architecture practice | 6 | 0 | 0 | 6 |
+| | **Total** | **111** | **0** | **0** | **111** |
 
-**Depth today.** All **70 concepts** are now written to the full template — *What it is*, *The problem
+**Depth today.** All **111 concepts** are now written to the full template — *What it is*, *The problem
 it solves*, *How it works* (with a table or diagram where it helps), *How AntKart uses it* (real type,
 file, and resource names), *Alternatives and the trade-off*, *Gotchas* (sourced to KNOWN_ISSUES / the
 runbook / ADRs), *Interview traps*, *The 60-second answer*, *Read the code*, and *To reach 🟢*. Nothing
-in the syllabus is a stub. Every concept still starts 🟡 — the writing is done; the *proving* is yours.
+in the syllabus is a stub. The original **70** cover what the platform runs on; the remaining **41** cover
+alternatives it chose against, adjacent technologies it does not use, and — in the new **Section 9,
+Architecture practice** — the craft of deciding, documenting, and reasoning about trade-offs. Every
+concept still starts 🟡 — the writing is done; the *proving* is yours.
 
 **A note on honesty.** Where an ADR's prose has drifted from the code as built, this document
 follows the **code** and says so. Where a concept in the syllabus is named but **not implemented**
-(network policies, storage, autoscaling), it says that plainly rather than pretending — knowing
-what a platform deliberately left out is itself interview-grade material.
+(network policies, storage, autoscaling — and the whole class of deliberately-not-used technologies
+in this edition: Prometheus, a service mesh, private endpoints, event sourcing, and more), it says
+that plainly rather than pretending. For a not-used concept, it gives the honest reason — citing the
+ADR that rejected it, or stating that **the choice was never formally recorded** rather than inventing
+a rationale after the fact. Knowing what a platform deliberately left out, and why, is itself
+interview-grade material.
 
 ### Where to start
 
@@ -66,10 +82,20 @@ what a platform deliberately left out is itself interview-grade material.
 > 3. **GitOps** — Argo CD architecture, what Argo does not watch, sync and self-heal.
 > 4. **Kubernetes** — the reconciliation loop, ConfigMaps and Secrets, Helm and what it
 >    is not.
-> 5. **Observability** — OpenTelemetry, trace correlation.
-> 6. **Platform** — the outbox, the saga, CQRS.
+> 5. **Observability** — OpenTelemetry, trace correlation; then the not-used metrics stack
+>    (Prometheus, Grafana, ELK) and metrics-vs-logs-vs-traces.
+> 6. **Platform** — the outbox, the saga, CQRS; then the alternatives it chose against
+>    (choreography, event sourcing, Dapr, BFF, 2PC).
 > 7. **DevOps**, then **Azure services** — broadest, and the easiest to speak to from
 >    existing experience.
+> 8. **Architecture practice** (Section 9) — ADRs, C4, NFRs, CAP/PACELC, trade-off analysis,
+>    documenting for a reader who is not you. Study these **last but not least**: they are what
+>    an interviewer uses to tell an architect from a senior engineer, and they tie every other
+>    section together.
+>
+> Within each section, study the concepts the platform **uses** before the ones it deliberately
+> **does not** — the used concepts carry the original material; the not-used ones are the
+> "why not this alternative?" follow-ups an interviewer reaches for next.
 >
 > A concept moves to 🟢 only after it has been explained aloud, without notes, with its
 > gotchas recalled and its code located. Reading it does not move the tag.
@@ -1149,6 +1175,193 @@ namespaced so MassTransit's `"ready"`-tagged bus check can't leak onto readiness
 
 ---
 
+### 16. Choreography versus orchestration 🟡
+
+**What it is** — The two ways independent services coordinate a multi-step business flow. In **orchestration** one component (an orchestrator/saga) holds the flow logic and tells each service what to do next. In **choreography** there is no central brain — each service reacts to events and emits its own, and the flow **emerges** from those reactions.
+
+**The problem it solves** — A distributed transaction can't hold a lock across services, so the multi-step flow (reserve stock → take payment → confirm order) has to be coordinated somehow. This is the choice of *where the flow logic lives*: in one place, or spread across the participants.
+
+**How it works** —
+
+```mermaid
+flowchart TB
+  subgraph O["Orchestration - one brain"]
+    S["Saga orchestrator"] --> A1["Order"]
+    S --> A2["Payment"]
+    S --> A3["Stock"]
+  end
+  subgraph C["Choreography - no brain"]
+    E1["Order"] -->|event| E2["Payment"]
+    E2 -->|event| E3["Stock"]
+    E3 -->|event| E1
+  end
+  classDef service fill:#1D9E75,stroke:#0E5C43,color:#fff
+  class S,A1,A2,A3,E1,E2,E3 service
+```
+
+Orchestration centralises the state machine (easy to see the whole flow, one place to change it); choreography couples services only through events (no central dependency, but the flow is implicit in who-listens-to-what).
+
+**How AntKart uses it** — AntKart uses **orchestration**: an explicit MassTransit **saga state machine** in `AK.Order` drives the order flow, consuming and emitting integration events over Azure Service Bus, with a transactional **outbox** so the state change and the message commit atomically ([ADR-005](adr/ADR-005-saga-orchestration.md)). The flow is a single readable state machine, not an emergent property of scattered event handlers. Choreography was rejected precisely because the flow would be invisible.
+
+**Alternatives and the trade-off** — Choreography suits simple, few-step flows where the coupling is genuinely just "A happened"; it fails as steps grow because no one place describes the whole transaction and cyclic event dependencies emerge. Orchestration costs a central component but buys a visible, debuggable, single-owner flow — the right trade for a saga with compensation.
+
+**Gotchas** —
+- **Orchestration ≠ synchronous.** The orchestrator coordinates via async messages; it does not block-call each service. People wrongly equate "orchestration" with "chatty synchronous calls."
+- **Choreography's flow is invisible** — to understand it you must trace every publisher/subscriber; there's no one file that shows the transaction.
+- **The orchestrator is a single point of *logic*, not necessarily failure** — it's just another replicated service, but all flow changes funnel through it.
+
+**Interview traps** —
+- *"Which did you choose and why?"* — Orchestration (ADR-005): the saga is an explicit state machine because the order flow has compensation and needs to be visible in one place.
+- *"When is choreography better?"* — Few steps, loose coupling, no compensation — the coordination is genuinely just event-follows-event.
+- *"Isn't a central orchestrator a bottleneck/SPOF?"* — It's a normal replicated service; the concern is centralised *logic*, and that's a feature here (one owner of the flow).
+- *"How do you compensate in each model?"* — Orchestration: the saga issues explicit compensating commands. Choreography: each service must emit compensation events — much harder to reason about.
+
+**The 60-second answer** — "Orchestration puts the flow logic in one place — a saga that tells each service what to do next; choreography has no brain, each service reacts to events and the flow emerges. We orchestrate: AK.Order runs an explicit MassTransit saga state machine over Service Bus with a transactional outbox, per ADR-005, because the order flow has compensation and we wanted it visible and debuggable in one file rather than scattered across event handlers. Choreography is fine for a few loosely-coupled steps, but as steps grow no single place describes the transaction. And orchestration isn't synchronous — the saga still coordinates through async messages."
+
+**Read the code** — The saga state machine and outbox wiring in `AK.Order/AK.Order.Infrastructure`; the saga integration tests in `AK.IntegrationTests`; the decision in [ADR-005](adr/ADR-005-saga-orchestration.md); §1's saga/outbox concepts for the mechanics.
+
+**To reach 🟢** — Without notes, define both models, state AntKart's choice and the ADR-005 reason, correct the "orchestration is synchronous" trap, and explain how compensation differs between the two.
+
+---
+
+### 17. Event sourcing 🟡
+
+> **Not used in AntKart.** No ADR names it — the choice was never formally recorded; AntKart persists current state, not an event log. It's here because it's constantly confused with the event-driven saga and outbox the platform *does* use, and being able to draw the distinction is the point.
+
+**What it is** — Event sourcing is a persistence pattern where the **source of truth is an append-only log of events**, not the current state. You never UPDATE a row; you append `OrderPlaced`, `PaymentTaken`, `OrderShipped`, and reconstruct current state by **replaying** those events. It usually pairs with **CQRS** (a separate read model projected from the log).
+
+**The problem it solves** — Perfect auditability and time-travel: because every change is an immutable fact, you can rebuild state at any past point, derive new read models retroactively, and never lose *why* the state is what it is.
+
+**How it works** — Writes append events to an event store; the current state of an aggregate is a **left-fold** over its events. Read models are **projections** built by subscribing to the event stream. **Snapshots** avoid replaying millions of events. It is *not* the same as "publishing events" — the distinction is whether the event log is the **system of record** or merely a notification side-channel.
+
+**Why AntKart does not use it** — AntKart stores **current state** in each service's database (Cosmos documents, EF-mapped Postgres rows) and updates it in place. It emits **domain and integration events** and has a **transactional outbox**, but those events are a *communication* mechanism — the row is still the source of truth. Reconstructing an order by replaying its events is not possible; there is no event store. **No ADR rejected event sourcing** — it was simply never the model, so the honest statement is that the choice was never formally made, not that it was weighed and declined.
+
+**Alternatives and the trade-off** — State-oriented persistence with an outbox (AntKart's model) is far simpler and is what most systems need; event sourcing buys audit/time-travel at a steep cost in complexity (versioning events forever, rebuilding projections, eventual-consistency reads). For an e-commerce saga, the outbox gives reliable messaging without the event-store burden.
+
+**Gotchas** —
+- **Outbox ≠ event sourcing.** The outbox reliably *publishes* events after a state change; event sourcing makes the event log *the state*. Conflating them is the classic error — and AntKart does the former.
+- **Event schema is forever.** Once an event is in the log you must be able to replay it years later; you can never "migrate" history the way you'd alter a table.
+- **Reads are eventually consistent** — projections lag the write log, which surprises teams expecting read-after-write.
+
+**Interview traps** —
+- *"Do you use event sourcing?"* — No — we persist current state with a transactional outbox for messaging. Being precise here (not claiming it because you "use events") is the credibility test.
+- *"Outbox vs event sourcing — the difference?"* — Outbox: reliably publish a message in the same transaction as a state change. Event sourcing: the event log *is* the state. Different problems.
+- *"When is event sourcing worth it?"* — Hard audit/temporal requirements (finance, ledgers) where replay and full history justify the complexity.
+- *"What's the hardest part in practice?"* — Event versioning and rebuilding projections — the log is immutable and permanent.
+
+**The 60-second answer** — "Event sourcing makes an append-only event log the source of truth — you never update state, you append facts and replay them to get current state, usually with CQRS projections for reads. We don't use it: each service stores current state in its database and updates in place. We do emit events and run a transactional outbox, but that's a communication mechanism — the row is still the record — so it's constantly confused with event sourcing and it isn't. No ADR rejected it; it was simply never our model. Event sourcing earns its complexity when you truly need audit and time-travel, like a ledger; for an e-commerce saga the outbox gives reliable messaging without an event store to version forever."
+
+**Where you would see it** — Ledgers, trading and banking systems, anywhere a complete immutable audit trail and the ability to reconstruct past state are hard requirements, or where you want to derive new read models retroactively from history.
+
+**To reach 🟢** — Without notes, distinguish event sourcing from AntKart's outbox precisely, name event-versioning as the hard part, and state honestly that the choice was never formally recorded.
+
+---
+
+### 18. Dapr 🟡
+
+> **Not used in AntKart.** No ADR names it — the choice was never formally recorded. It's here because Dapr is a common "how do you do microservice building-blocks on Kubernetes" answer, and AntKart deliberately solves the same problems with in-process libraries instead.
+
+**What it is** — **Dapr** (Distributed Application Runtime) is a portable, sidecar-based runtime that gives every service a set of standard **building-block APIs** — service invocation, pub/sub, state store, secrets, bindings — over HTTP/gRPC, backed by pluggable **components** (Service Bus, Redis, Key Vault, …). Your code calls a local `http://localhost:3500/...` sidecar instead of a vendor SDK.
+
+**The problem it solves** — It decouples application code from specific infrastructure SDKs and languages: swap the pub/sub component from Redis to Service Bus in config, not code, and get consistent building blocks across polyglot services without each team re-implementing them.
+
+**How it works** — A **sidecar** container runs beside each app pod; the app calls the sidecar's local API, and the sidecar talks to the configured backing component. **Components** are declarative YAML (which broker, which state store); features like retries and mTLS live in the sidecar, not your code.
+
+**Why AntKart does not use it** — AntKart gets the same building blocks from **in-process .NET libraries in `AK.BuildingBlocks`**: MassTransit for pub/sub over Service Bus, the Key Vault config provider for secrets, typed `HttpClient`s (with resilience pipelines) for service calls, and Redis via StackExchange. Because the platform is **single-language (.NET)**, Dapr's cross-language portability buys little, and a sidecar per pod adds latency, resource cost, and an operational surface the library approach avoids. **No ADR weighed Dapr** — the library approach was the default from the start, so the honest position is that the choice was never formally made.
+
+**Alternatives and the trade-off** — In-process libraries (AntKart's model) are simplest and fastest for a single-language stack but re-implement building blocks per language; Dapr shines for **polyglot** fleets that want uniform building blocks and infra-swappability at the cost of a sidecar and its runtime. A service mesh overlaps on mTLS/retries but not on state/pub-sub APIs.
+
+**Gotchas** —
+- **A sidecar is not free** — it's an extra container per pod: memory, a network hop, and a component to secure and upgrade.
+- **Dapr's value is polyglot/portability** — in a single-language shop, most of its benefit is already covered by good libraries.
+- **Components are config, and config is a supply-chain surface** — a mis-scoped Dapr secret component can widen access just like any other credential path.
+
+**Interview traps** —
+- *"Why not Dapr here?"* — Single-language .NET stack; BuildingBlocks libraries already provide pub/sub, secrets, state, and service invocation, so the sidecar's portability buys little for real cost. No ADR — it was the default.
+- *"What does Dapr actually give you?"* — Standard building-block APIs over swappable components via a sidecar — infra decoupling and polyglot uniformity.
+- *"Dapr vs a service mesh?"* — Mesh handles L7 networking (mTLS, traffic, retries) transparently; Dapr gives application-level building blocks (state, pub/sub) you call explicitly. They can coexist.
+- *"When would AntKart adopt it?"* — If it went polyglot, or wanted to swap brokers/state stores by config across many teams.
+
+**The 60-second answer** — "Dapr is a sidecar runtime that gives every service standard building-block APIs — service invocation, pub/sub, state, secrets — backed by swappable components, so your code calls a local sidecar instead of a vendor SDK. We don't use it: AntKart is single-language .NET, and BuildingBlocks already provides those blocks in-process — MassTransit over Service Bus, the Key Vault provider, typed HttpClients, Redis — so Dapr's polyglot portability buys little against the cost of a sidecar per pod. No ADR weighed it; the library approach was the default. Where Dapr earns its keep is a polyglot fleet that wants uniform building blocks and infra you can swap by config."
+
+**Where you would see it** — Polyglot microservice fleets (Go + Java + .NET + Python) wanting one consistent set of building blocks, teams that value swapping brokers/state stores by configuration, or edge/multi-cloud setups where infra portability is a first-class goal.
+
+**To reach 🟢** — Without notes, explain the sidecar/component model, give AntKart's single-language reason for not needing it, contrast it with a service mesh, and state the choice was never formally recorded.
+
+---
+
+### 19. Backend-for-frontend and API composition 🟡
+
+> **Not used in AntKart.** No ADR names the BFF pattern — the choice was never formally recorded; AntKart has one Ocelot gateway ([ADR-006](adr/ADR-006-ocelot-api-gateway.md)) that routes but does not compose. Here because "how does your UI avoid chatty calls / N+1 to microservices" expects a BFF or an aggregation layer.
+
+**What it is** — A **Backend-for-Frontend (BFF)** is a per-client edge service (one for web, one for mobile) that **composes** and reshapes data from several downstream services into exactly what that UI needs. **API composition** is the general act of a gateway/aggregator fanning out to multiple services and merging the responses, so the client makes one call instead of many.
+
+**The problem it solves** — Microservices split data by ownership, so a single screen ("order detail with product images and payment status") would otherwise force the client into many round-trips and cross-service joins. A BFF/composition layer does that fan-out server-side, over the fast internal network, tailored per client.
+
+**How it works** — The BFF receives one client request, calls Products, Order, and Payments concurrently, merges and trims the results into a client-shaped DTO, and returns it. It's coupled to the *UI's* needs (not a service's domain), which is why each frontend gets its own BFF rather than sharing one general aggregator.
+
+**Why AntKart does not use it** — AntKart's edge is a **routing** gateway (Ocelot), not a composing one: it forwards `/products/...` to Products, `/orders/...` to Order, validating the JWT and rate-limiting, but it does **not** fan out and merge. There is no client-specific BFF; a UI would call each service's endpoint itself. **No ADR considered a BFF** — ADR-006 chose Ocelot as a single-entry routing gateway, and composition was simply never designed, so the honest statement is the choice was never formally made. (The Order service *does* do one server-side call to Products for price revalidation — but that's domain logic inside a service, not edge composition.)
+
+**Alternatives and the trade-off** — A routing gateway (AntKart) is simple and keeps the edge dumb, pushing any aggregation to clients; a BFF removes client chattiness and tailors payloads but adds an edge service to build and own per client; **GraphQL** is a composition alternative that lets clients specify the shape. The trade is client round-trips versus an extra server-side layer.
+
+**Gotchas** —
+- **A BFF is per-client, not one shared aggregator** — the whole point is UI-specific shaping; a single "one BFF for everything" recreates a chatty general gateway.
+- **Composition hides partial failure** — if one downstream is down, the BFF must decide to degrade or fail the whole response; that policy is easy to forget.
+- **Routing ≠ composing.** Ocelot has request-aggregation features, but AntKart uses it purely to route — don't claim composition the platform doesn't do.
+
+**Interview traps** —
+- *"Does your gateway compose responses?"* — No — Ocelot routes, validates the token, and rate-limits; it doesn't fan out and merge. Precision here matters.
+- *"How would a UI get an order-detail screen then?"* — Today, multiple calls to Products/Order/Payments; a BFF or GraphQL layer would be the fix, and none exists (no ADR).
+- *"BFF vs API gateway — the difference?"* — A gateway is a shared routing/cross-cutting edge; a BFF is a per-frontend composition/shaping layer. Conflating them is the tell.
+- *"Where's the risk in composition?"* — Partial-failure handling and the BFF becoming a fat coupling point.
+
+**The 60-second answer** — "A backend-for-frontend is a per-client edge service that composes several downstream services into exactly the shape one UI needs, so the client makes one call instead of many; API composition is that server-side fan-out and merge in general. We don't have one: our edge is Ocelot, which routes, validates the JWT, and rate-limits, but doesn't compose — a UI would call each service itself. No ADR weighed a BFF; ADR-006 chose Ocelot as a routing gateway and composition was never designed. If chattiness became a problem, a per-client BFF or a GraphQL layer would be the answer, and the honest note is that partial-failure handling is the thing people forget when they add one."
+
+**Where you would see it** — Products with distinct web and mobile clients that need different payload shapes, screens that aggregate many services, or organisations using GraphQL/BFFs to keep clients thin and decouple UI evolution from service APIs.
+
+**To reach 🟢** — Without notes, distinguish a BFF from a routing gateway, explain why it's per-client, name partial-failure handling as the gotcha, and state that AntKart routes-not-composes with no ADR on the matter.
+
+---
+
+### 20. Distributed transactions and why 2PC is avoided 🟡
+
+**What it is** — A **distributed transaction** spans more than one independent resource (two databases, or a database and a broker) and needs them to commit or roll back **together**. The classic mechanism is **two-phase commit (2PC)**: a coordinator asks every participant to *prepare* (phase 1), and only if all vote yes does it tell them to *commit* (phase 2). The alternative, for microservices, is a **saga** — a sequence of local transactions with **compensating** actions instead of one atomic commit.
+
+**The problem it solves** — Business flows cross service boundaries (take payment *and* place the order), but each service owns its own database. You need *some* consistency guarantee across them without a shared transaction — and 2PC is the "strong" option that microservices deliberately avoid.
+
+**How it works** —
+
+| | 2PC | Saga (AntKart) |
+|---|---|---|
+| Consistency | strong, atomic across resources | eventual; each step commits locally |
+| Coordinator | blocks participants between prepare and commit | orchestrator drives, never holds locks |
+| Failure of coordinator | participants **stuck holding locks** (blocking) | each step already committed; compensate forward |
+| Coupling | tight — all participants must support XA/prepare | loose — services exchange events |
+| Fit for microservices | poor (availability + coupling cost) | the standard answer |
+
+**How AntKart uses it** — AntKart **avoids 2PC** and uses a **saga** ([ADR-005](adr/ADR-005-saga-orchestration.md)): the order flow is a sequence of local transactions (reserve stock, take payment, confirm order), each committing in its own service, coordinated by the orchestrator, with **compensating actions** on failure (e.g. cancel the order on payment failure). Reliable messaging between steps comes from the **transactional outbox** — the state change and the outgoing event commit in one local transaction — which is how AntKart gets atomicity *within* a service without needing it *across* services. (The missing stock-release compensation on payment failure is tracked as **KI-005**.)
+
+**Alternatives and the trade-off** — 2PC gives true cross-service atomicity but at the price of blocking locks, a coordinator that can wedge participants, and tight coupling — unacceptable for available, loosely-coupled microservices. The saga trades strong consistency for **eventual** consistency and the burden of writing compensations, which is the right trade when availability and autonomy matter more than instantaneous global consistency.
+
+**Gotchas** —
+- **2PC's real cost is blocking** — between prepare and commit, participants hold locks; if the coordinator dies, they're stuck. That availability hit, not "slowness," is why it's avoided.
+- **Sagas need compensation, and compensation is business logic** — "undo the payment" may be a refund, not a delete. Forgetting a compensation leaks state (exactly KI-005).
+- **The outbox solves the *dual-write*, not the distributed transaction** — it makes "update row + publish event" atomic within one service; it does not make two services commit together.
+
+**Interview traps** —
+- *"Why not just use 2PC across services?"* — Blocking locks + a coordinator that can wedge participants + tight XA coupling; it trades availability for consistency, the wrong way round for microservices.
+- *"How do you get consistency without it?"* — A saga: local transactions plus compensations, coordinated by an orchestrator, with an outbox for reliable messaging (ADR-005).
+- *"What does the outbox actually guarantee?"* — Atomic write-and-publish *within one service* — the dual-write problem — not a cross-service transaction. A very common conflation.
+- *"What breaks if you forget a compensation?"* — Leaked/inconsistent state — e.g. AntKart's un-released reserved stock on payment failure (KI-005).
+
+**The 60-second answer** — "A distributed transaction needs multiple independent resources to commit together; the strong mechanism is two-phase commit, where a coordinator has everyone prepare then commit. We avoid 2PC because its real cost is blocking — participants hold locks between the two phases, and a dead coordinator leaves them stuck — plus tight coupling. Instead AntKart uses a saga, per ADR-005: each step is a local transaction that commits in its own service, the orchestrator coordinates, and failures are handled by compensating actions. Reliable messaging between steps comes from a transactional outbox, which makes the row-update and the event-publish atomic *within* a service — that's the dual-write problem, not a cross-service transaction. The trade is eventual consistency and having to write compensations, and forgetting one is exactly our KI-005 stock-release gap."
+
+**Read the code** — The saga and compensation paths in `AK.Order`; the outbox configuration in `AK.Order.Infrastructure`; [ADR-005](adr/ADR-005-saga-orchestration.md); the missing-compensation defect in [KI-005](KNOWN_ISSUES.md); §1's saga and outbox concepts for mechanics.
+
+**To reach 🟢** — Without notes, explain 2PC's blocking as the reason it's avoided, describe the saga+compensation alternative, and correctly scope what the outbox guarantees (dual-write within a service, not cross-service atomicity).
+
+---
+
 # 2. Infrastructure as code
 
 ### 1. Declarative infrastructure and the plan/apply model 🟡
@@ -1789,6 +2002,145 @@ flowchart TD
 
 ---
 
+### 9. Bicep and ARM templates 🟡
+
+> **Not used in AntKart.** Both were **explicitly rejected** in [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md) in favour of Terraform + Terragrunt. Here because they're the Azure-native IaC default, and "why Terraform over Bicep" is a near-certain question for an Azure platform.
+
+**What it is** — **ARM templates** are Azure's original native IaC: large JSON documents describing resources, deployed by the Azure Resource Manager. **Bicep** is a friendlier DSL that **transpiles to ARM** — same engine underneath, far less verbose, with modules and type-checking. Both are **Azure-only** and deploy through ARM.
+
+**The problem it solves** — Declarative, repeatable provisioning of Azure resources with first-party support, no state file to manage (ARM tracks deployment state in the resource group itself), and day-one coverage of new Azure features.
+
+**How it works** — You author Bicep (or ARM JSON); `az deployment` submits it to ARM, which computes the changes and applies them. There is **no separate state file** — ARM reads current resource state from Azure at deploy time. Bicep is compiled to ARM before submission.
+
+**Why AntKart does not use it** — [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md) chose **Terraform + Terragrunt** and rejected ARM (Option B: too verbose, JSON-noisy) and Bicep (Option A: cleaner, but **Azure-only** — no portability, and it wanted to demonstrate the cloud-agnostic, industry-standard tool with an explicit state model and a DRY multi-environment story via Terragrunt). The decision was deliberate and recorded, not incidental.
+
+**Alternatives and the trade-off** — Bicep/ARM give the tightest Azure integration and no state file to secure, but lock you to Azure and lack Terraform's ecosystem and multi-cloud reach. Terraform (AntKart's choice) is cloud-agnostic with a huge provider ecosystem, at the cost of managing remote state and occasionally lagging brand-new Azure features. For a portfolio platform demonstrating industry-standard IaC, Terraform won.
+
+**Gotchas** —
+- **Bicep still deploys ARM** — "Bicep vs ARM" is authoring ergonomics, not two different engines; both go through Resource Manager.
+- **No state file is a double-edged sword** — ARM reads live state, so there's nothing to lock or leak, but you also lose Terraform's explicit plan-against-recorded-state model.
+- **Azure-only** — the moment a second cloud or an off-Azure resource enters, Bicep can't describe it.
+
+**Interview traps** —
+- *"Why Terraform over Bicep for an Azure platform?"* — Cloud-agnostic + ecosystem + explicit state and a DRY multi-env story via Terragrunt; ADR-012. Not "Bicep is bad" — a deliberate portability/standardisation trade.
+- *"Does Bicep have a state file?"* — No — ARM tracks state in Azure; that's a genuine difference from Terraform, not a gap to hand-wave.
+- *"Is Bicep a different engine from ARM?"* — No — it transpiles to ARM. Getting this wrong signals surface knowledge.
+- *"When would Bicep be the better call?"* — All-in on Azure, wanting first-party support and newest-feature day-one coverage without managing state.
+
+**The 60-second answer** — "ARM templates are Azure's native JSON IaC; Bicep is a cleaner DSL that transpiles to ARM — same engine, and neither has a separate state file because ARM reads live state from Azure. We rejected both in ADR-012 and chose Terraform with Terragrunt: Bicep is Azure-only, and we wanted the cloud-agnostic, industry-standard tool with an explicit state model and a DRY multi-environment story. The honest framing is a portability and standardisation trade — Bicep would be the better call if you were permanently all-in on Azure and wanted first-party support and no state to manage."
+
+**Where you would see it** — Azure-only shops that value first-party support and newest-feature coverage, teams that don't want to secure a remote state store, or organisations standardised on Microsoft tooling end to end.
+
+**To reach 🟢** — Without notes, explain that Bicep transpiles to ARM and neither keeps a state file, give the ADR-012 portability reason for Terraform, and say when Bicep would actually be the right choice.
+
+---
+
+### 10. Pulumi 🟡
+
+> **Not used in AntKart.** **Explicitly rejected** in [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md) (Option D). Here because it's the leading "IaC in a real programming language" alternative, and contrasting it with Terraform's declarative HCL is a common probe.
+
+**What it is** — **Pulumi** is IaC where you describe infrastructure in a **general-purpose programming language** (TypeScript, Python, Go, C#) instead of a declarative DSL. It uses the same provider model as Terraform under the hood and keeps a **state file**, but your definitions are real code — loops, functions, classes, `if`.
+
+**The problem it solves** — For teams who find HCL limiting, Pulumi brings full language power (abstraction, testing with normal frameworks, reuse) and lets application developers use the language they already know for infrastructure.
+
+**How it works** — You write a program that constructs resource objects; Pulumi's engine diffs the desired graph against recorded **state** (in Pulumi's service or a self-managed backend) and applies changes through providers — the same declarative apply model as Terraform, but the *desired state* is produced by executing your code.
+
+**Why AntKart does not use it** — [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md) rejected Pulumi (Option D): Terraform/HCL is the **industry-standard, most widely recognised** IaC, with the largest ecosystem and the clearest declarative-review story (a `plan` is easy to read); Pulumi's "infrastructure as real code" was judged a liability for reviewability here — imperative code can hide what actually gets provisioned — and it's a smaller ecosystem to demonstrate. Recorded, deliberate.
+
+**Alternatives and the trade-off** — Pulumi buys real-language power and testability but at the cost of reviewability (arbitrary code between you and the resource graph) and a smaller community; Terraform's declarative HCL is more constrained but its plans are transparent and its ecosystem is dominant. AntKart valued the transparent, standard, reviewable path.
+
+**Gotchas** —
+- **Pulumi still has state** — it's not stateless just because it's code; same locking/drift concerns as Terraform.
+- **Real code cuts both ways** — a `for` loop that generates 50 resources is powerful and also harder to review than 50 explicit HCL blocks; the plan is where you catch it.
+- **Same providers underneath** — Pulumi and Terraform both wrap the cloud providers, so capability is similar; the difference is the authoring model, not what they can provision.
+
+**Interview traps** —
+- *"Terraform or Pulumi — why?"* — Terraform (ADR-012): industry-standard, largest ecosystem, declarative and easy to review. Pulumi's real-language power was judged a reviewability liability here.
+- *"Is Pulumi stateless because it's code?"* — No — it keeps state like Terraform; the code produces the desired graph, the engine still diffs against state.
+- *"When is Pulumi genuinely better?"* — Teams who want to unit-test infra with normal frameworks, need heavy abstraction/reuse, or want app devs on one language.
+- *"What's the reviewability concern?"* — Imperative code can obscure the resulting resources; you rely on the preview/plan to see reality.
+
+**The 60-second answer** — "Pulumi is IaC in a real programming language — TypeScript, Python, C#, Go — using the same provider model as Terraform and keeping a state file, but your definitions are actual code. We rejected it in ADR-012, Option D: Terraform with HCL is the industry standard with the biggest ecosystem and the most transparent, reviewable plans, and Pulumi's 'real code' was judged a reviewability liability — imperative loops can hide what actually gets provisioned. It's not stateless just because it's code, and it wraps the same providers, so the real difference is the authoring model. Pulumi genuinely wins when you want to unit-test infrastructure with normal frameworks or keep app developers in one language."
+
+**Where you would see it** — Engineering-heavy teams that want to unit-test infrastructure, need strong abstraction and reuse across many stacks, or prefer app developers to define infra in the language they already use.
+
+**To reach 🟢** — Without notes, explain that Pulumi is real code over the same provider/state model as Terraform, give the ADR-012 reviewability/standardisation reason, and correct the "code means stateless" trap.
+
+---
+
+### 11. Terraform workspaces versus directory-per-environment 🟡
+
+**What it is** — Two ways to manage multiple environments (dev/qa/prod) with Terraform. **Workspaces** keep one codebase and one backend, switching an internal *state namespace* (`terraform workspace select qa`) so the same code produces a differently-named state. **Directory-per-environment** gives each environment its **own directory and its own state**, composing shared modules with per-environment inputs — which is what AntKart does with Terragrunt.
+
+**The problem it solves** — You need dev and qa to be the same infrastructure with different inputs, without one being able to accidentally clobber the other's state or resources. The choice is *how strongly you isolate* the environments.
+
+**How it works** —
+
+| | Workspaces | Directory-per-env (AntKart) |
+|---|---|---|
+| State | one backend, namespaced by workspace | **separate state per environment/unit** |
+| Isolation | weak — same code, easy to target the wrong workspace | strong — different directory, different backend key |
+| Config differences | via `terraform.workspace` conditionals in code | via explicit per-env input files (`environments/qa/`) |
+| Blast radius | a wrong `select` can apply to prod | you're physically in the env's directory |
+
+**How AntKart uses it** — AntKart uses **directory-per-environment**: `infrastructure/environments/dev/` and `environments/qa/`, each a tree of Terragrunt units composing the **same shared modules** with that environment's inputs, and each unit writing **isolated state** (one leased blob per unit) via the DRY `root.hcl` backend config ([ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md)). Environments differ by **input files**, not by `terraform.workspace` conditionals in code. (ADR-012 records the Terraform/Terragrunt choice; the workspaces-vs-directory framing is the reasoning that follows from it — the directory model is what was built, not a separately-minuted decision.)
+
+**Alternatives and the trade-off** — Workspaces are lighter (one directory, no duplication) but isolation is weak — the same code path can target the wrong environment with a single mis-`select`, and per-env differences leak into `workspace`-conditional code. Directory-per-env costs a little more structure (which Terragrunt removes by generating the shared backend/provider DRY) and buys strong isolation and explicit, readable per-env inputs. AntKart chose isolation.
+
+**Gotchas** —
+- **The state key is the unit path** — so a new environment **must** use a distinct backend container or key prefix, or it silently overwrites another environment's state (called out for qa in the README).
+- **Workspaces hide the environment in a CLI flag** — `terraform apply` looks identical whether you're on dev or prod; the safety is one `workspace select` away from wrong.
+- **`terraform.workspace` conditionals rot** — per-env `if` logic in shared code is where drift and surprises breed; explicit input files keep differences visible.
+
+**Interview traps** —
+- *"Workspaces or directories — which and why?"* — Directories (per-env isolation): separate state, separate backend key, differences as explicit inputs. Workspaces' weak isolation makes wrong-environment applies too easy.
+- *"What's the danger with workspaces?"* — One `terraform workspace select` from applying to the wrong environment, with identical-looking commands.
+- *"How do your environments differ if the modules are the same?"* — Per-environment **input files**, not code conditionals — dev and qa run the same modules with different values.
+- *"What's the one thing a new environment must not get wrong?"* — Its state key/container must be distinct, or it overwrites another env's state (the qa caveat).
+
+**The 60-second answer** — "Terraform workspaces keep one codebase and one backend, switching an internal state namespace, so dev and prod share code and differ by `terraform.workspace` conditionals. Directory-per-environment gives each environment its own directory and its own state, composing shared modules with per-env inputs — which is what we do: `environments/dev` and `environments/qa`, each a Terragrunt tree over the same modules with isolated per-unit state via a DRY root config. We chose it for strong isolation — with workspaces you're one wrong `select` from applying to prod, and per-env conditionals rot in shared code. The critical rule is that a new environment must use a distinct state key or it silently overwrites another environment's state."
+
+**Read the code** — `infrastructure/environments/dev/` and `environments/qa/` (parallel unit trees), `root.hcl` (DRY backend/provider generation), the modules under `infrastructure/modules/`; [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md); the state-key caveat in the [README](../README.md) and §2's state concepts.
+
+**To reach 🟢** — Without notes, contrast the two isolation models, state that AntKart uses directory-per-env with per-env inputs, name the distinct-state-key rule as the critical caveat, and explain why workspace conditionals rot.
+
+---
+
+### 12. State locking, drift, and import 🟡
+
+**What it is** — Three operational realities of Terraform's state file. **Locking** prevents two applies from corrupting state by mutating it concurrently. **Drift** is when the real infrastructure diverges from what state records (someone changed it in the portal). **Import** brings an already-existing resource under Terraform's management by writing it into state. All three follow from state being Terraform's *memory* of what it provisioned.
+
+**The problem it solves** — State is a single shared file that describes reality; without locking it races, without drift-detection it lies, and without import you can't adopt resources Terraform didn't create. These are the day-two problems the §2 "state as memory" concept sets up.
+
+**How it works** —
+- **Locking:** the backend takes an exclusive lock for the duration of an apply. AntKart's **Azure Storage** backend uses a **blob lease** per state blob — one unit's apply leases its blob, so a second concurrent apply on the same unit blocks rather than corrupting.
+- **Drift:** `terraform plan` refreshes state against the real world and shows the diff; an out-of-band portal change appears as a plan that wants to "correct" it back.
+- **Import:** `terraform import` (or an `import` block) writes an existing resource's real id into state so future plans manage it instead of trying to recreate it.
+
+**How AntKart uses it** — AntKart's remote state lives in an **Azure Storage** account (`stantkarttfstate`, container `tfstate`, resource group `rg-antkart-tfstate`), configured DRY via `root.hcl`, with **one leased blob per Terragrunt unit** — so locking is automatic and per-unit (two units can apply in parallel; the same unit can't). Drift is surfaced by running `plan`; the platform's stance is that the running system is the source of truth, so a portal change shows up as drift to be reconciled in code. Import is the mechanism used to adopt any pre-existing resource into a unit's state.
+
+**Alternatives and the trade-off** — Other backends lock differently (S3 + DynamoDB, Terraform Cloud); Azure Storage's blob-lease is simple and needs no extra service. The per-unit-blob design trades a little more state files for **parallelism and blast-radius isolation** — a lock on one unit never blocks another. Drift could be caught continuously (a scheduled `plan` in CI) rather than on-demand; AntKart detects it on run.
+
+**Gotchas** —
+- **A crashed apply can leave a stale lock** — the blob lease stays held; you may have to break the lease (`force-unlock`) deliberately, which is itself dangerous if an apply really is running.
+- **Drift is silent until you plan** — nothing tells you the portal changed something; only `plan` reveals it, and the platform's KI-010 budget-date and lock-file issues are cousins of "state vs reality diverging."
+- **Import doesn't write your config** — it populates *state*, not HCL; you must hand-author matching resource config or the next plan will want to change/destroy it.
+- **Per-unit state means per-unit keys** — the same distinct-key rule as environments; a key collision corrupts a unit's memory.
+
+**Interview traps** —
+- *"How does your Terraform state lock?"* — Azure Storage backend, one **blob lease per unit**; concurrent applies on the same unit block, different units run in parallel.
+- *"What is drift and how do you detect it?"* — Real infra diverging from state (a portal edit); `terraform plan` refreshes and shows it. It's silent until you plan.
+- *"A resource already exists — how do you bring it under Terraform?"* — `terraform import` writes it into state; then you must author matching config or the next plan will try to fix the mismatch.
+- *"What's dangerous about force-unlock?"* — If an apply genuinely holds the lock, breaking it invites concurrent state writes and corruption.
+
+**The 60-second answer** — "These are the day-two facts of Terraform state. Locking stops two applies corrupting state — our Azure Storage backend takes a blob lease per Terragrunt unit, so the same unit can't apply twice at once but different units run in parallel. Drift is when reality diverges from state, say a portal edit; `terraform plan` refreshes and shows it, and it's silent until you plan. Import brings an existing resource under management by writing its id into state — but it doesn't write your HCL, so you must author matching config or the next plan will fight it. The gotchas are stale locks after a crashed apply, drift being invisible until a plan, and import populating state not config."
+
+**Read the code** — The backend config generated by `infrastructure/environments/dev/root.hcl` (`state_storage_account = "stantkarttfstate"`, container `tfstate`, RG `rg-antkart-tfstate`); the per-unit `terragrunt.hcl` files; the lock-file drift defect [KI-012](KNOWN_ISSUES.md); §2's "state as memory" and "remote state and key collisions" concepts.
+
+**To reach 🟢** — Without notes, explain blob-lease-per-unit locking, define drift and how `plan` reveals it, explain that import writes state not config, and name stale-lock/force-unlock as the danger.
+
+---
+
 # 3. Azure services
 
 ### 1. Azure Kubernetes Service (AKS) 🟡
@@ -2415,6 +2767,217 @@ flowchart TD
 [ADR-019](adr/ADR-019-serverless-notification-functions-eventgrid.md).
 
 **To reach 🟢** — Without notes, explain managed-identity email auth, the Contributor-role coarseness, and the safe no-op. Then trace one email from `AcsEmailSender` to ACS, predicting which auth path fires in the cluster vs locally.
+
+---
+
+### 12. Azure Front Door and Application Gateway 🟡
+
+> **Not used in AntKart.** No ADR names either — the choice was never formally recorded; today the public entry is DNS → ingress-nginx, with API Management planned ([ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md)) as the managed edge. Here because "what's at your edge — Front Door or App Gateway?" is a standard Azure question.
+
+**What it is** — Two Azure L7 entry services. **Application Gateway** is a **regional** L7 load balancer with a Web Application Firewall (WAF), TLS termination, and path-based routing — it lives inside a VNet. **Azure Front Door** is a **global**, edge/CDN-based L7 entry: anycast, global load balancing, caching, and WAF at Microsoft's edge POPs, in front of one or more regions.
+
+**The problem it solves** — A production public edge usually wants a managed WAF, TLS offload, and (for Front Door) global routing and caching *before* traffic reaches the cluster — offloading those concerns from the app and giving a single hardened front door.
+
+**How it works** — Front Door (global) terminates TLS at the nearest edge POP, applies WAF, and routes to the healthiest regional backend; App Gateway (regional) sits in the VNet, terminates TLS, applies WAF, and load-balances to backend pools (which could be the AKS ingress). They compose: Front Door → App Gateway → cluster is a common layered edge.
+
+**Why AntKart does not use it** — AntKart's public edge today is **DNS (`api.antkart.in`) → the cluster's ingress-nginx**, with cert-manager terminating Let's Encrypt TLS in-cluster; the planned managed edge is **Azure API Management** ([ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md)), chosen for token validation and API management, **not** Front Door or App Gateway. Neither of those was weighed in an ADR — the platform is single-region dev and didn't need global routing or a separate WAF tier, so the honest position is the choice was never formally made. This is a real production gap: there is **no WAF** in front of the cluster today.
+
+**Alternatives and the trade-off** — Ingress-nginx (AntKart) is free, in-cluster, and simple but offers no managed WAF and no global routing; App Gateway adds a regional managed WAF at a per-hour cost; Front Door adds global anycast, caching, and edge WAF for a global footprint. APIM (planned) overlaps on the "managed edge" role but focuses on API management/token validation rather than WAF/global LB. For single-region dev, in-cluster ingress was enough.
+
+**Gotchas** —
+- **Regional vs global is the whole distinction** — App Gateway is one region inside a VNet; Front Door is global at the edge. Mixing them up is the classic tell.
+- **They're often layered, not either/or** — Front Door for global + WAF, App Gateway/ingress for regional routing.
+- **No WAF today is a genuine gap** — say so; ingress-nginx does not give you the managed WAF either of these would.
+
+**Interview traps** —
+- *"Front Door or Application Gateway — what's the difference?"* — Global edge (Front Door) vs regional in-VNet (App Gateway); both L7 with WAF and TLS. The regional/global axis is the answer.
+- *"What's at AntKart's edge?"* — DNS → ingress-nginx with cert-manager TLS today; APIM planned. Neither Front Door nor App Gateway — and no managed WAF.
+- *"Where's your WAF?"* — Honest answer: there isn't one in front of the cluster today; App Gateway or Front Door would provide it. Owning the gap beats inventing one.
+- *"Can they be combined?"* — Yes — Front Door in front of App Gateway/ingress is a standard layered edge.
+
+**The 60-second answer** — "Application Gateway is a regional L7 load balancer with a WAF that lives in a VNet; Azure Front Door is the global edge version — anycast, caching, and WAF at Microsoft's POPs in front of one or more regions. The distinction is regional versus global, and they're often layered. AntKart uses neither: today the public edge is DNS to the cluster's ingress-nginx with cert-manager TLS, and the planned managed edge is API Management for token validation, per ADR-020 — not Front Door or App Gateway. No ADR weighed them because we're single-region dev, so the honest note is the choice was never made, and a real consequence is there's no managed WAF in front of the cluster today."
+
+**Where you would see it** — App Gateway for a regional workload wanting a managed WAF inside its VNet; Front Door for a multi-region, globally-distributed app needing edge caching, anycast, and global failover; frequently both layered for a hardened production edge.
+
+**To reach 🟢** — Without notes, give the regional-vs-global distinction, state AntKart's actual edge (ingress-nginx, APIM planned), own the no-WAF gap honestly, and note they're often layered.
+
+---
+
+### 13. Azure API Management 🟡
+
+> **Planned, not yet deployed.** [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md) chose APIM as AntKart's future managed edge; it does not run today. Here because it's the Azure answer to "managed API gateway," and the platform has a *recorded decision* to adopt it — a strong thing to speak to.
+
+**What it is** — **Azure API Management (APIM)** is a managed API gateway and management plane: a hardened front door that does **token validation**, rate limiting, request/response transformation, product/subscription management, and a developer portal, sitting in front of your backend APIs. It's the "policy and governance" layer over an API estate.
+
+**The problem it solves** — You want cross-cutting API concerns — auth enforcement, throttling, versioning, analytics — handled at a managed edge rather than re-implemented in every service, plus a governed way to expose APIs to consumers.
+
+**How it works** — APIM sits at the edge; inbound requests pass through a **policy pipeline** (validate JWT against Entra, rate-limit, transform) before being routed to the backend. Policies are declarative XML applied per API/operation; it integrates with Entra for token validation and with App Insights for analytics.
+
+**How AntKart uses it** — **It will be the managed edge**, per [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md): APIM validates the Entra token **before** traffic reaches the cluster, then forwards to ingress-nginx and the in-cluster Ocelot gateway. **Today it is not deployed** — the request reaches ingress-nginx directly and the gateway plus each service validate the JWT themselves (defence in depth). So APIM is a documented *intended* layer, and every service still validating the token independently means adding APIM strengthens rather than replaces the existing checks. The README and Azure-services diagram both mark it explicitly as **planned**.
+
+**Alternatives and the trade-off** — The in-cluster Ocelot gateway (present) does routing, JWT passthrough, and rate limiting for free but isn't a managed edge or a governance plane; APIM adds managed token validation, products/subscriptions, analytics, and a developer portal at a real monthly cost. AntKart's current design leans on per-service validation so the missing APIM tier doesn't create an auth hole — it's additive.
+
+**Gotchas** —
+- **APIM is planned, not running** — never describe it as live; the honest state is "recorded decision, not deployed" (ADR-020).
+- **Edge validation doesn't excuse per-service validation** — AntKart keeps each service validating the token so a bypass of the edge still meets a closed door; APIM adds a layer, it doesn't let services trust the edge.
+- **APIM has real cost and cold-start/scale characteristics** — the consumption/developer/premium tiers differ sharply; "just add APIM" is a budget decision.
+
+**Interview traps** —
+- *"Is APIM in the platform?"* — No — it's the planned managed edge (ADR-020); today ingress-nginx is the entry and services validate tokens themselves. Precision on planned-vs-live is the test.
+- *"What would APIM do that Ocelot doesn't?"* — Managed edge token validation, products/subscriptions, analytics, a developer portal, policy governance — a management plane, not just routing.
+- *"If APIM validates the token, why also validate per service?"* — Defence in depth — a request bypassing the edge still meets a closed door; the edge is not a trust boundary you lean the whole system on.
+- *"Cost concern?"* — Yes — APIM tiers carry a standing cost and differ in scale/features; adoption is a deliberate spend.
+
+**The 60-second answer** — "API Management is Azure's managed API gateway and governance plane — token validation, rate limiting, transformation, products and subscriptions, a developer portal — sitting in front of your backends. In AntKart it's the *planned* managed edge per ADR-020: it would validate the Entra token before traffic reaches the cluster, then forward to ingress and the Ocelot gateway. It's not deployed today — requests hit ingress-nginx directly and every service validates the JWT itself, defence in depth — so adding APIM is additive, not a replacement for those checks. The honest framing is a recorded decision we haven't spent on yet, and its tiers carry real cost."
+
+**Read the code** — There is no APIM code yet (that's the point); the decision is [ADR-020](adr/ADR-020-api-management-managed-edge-gateway.md); the planned-edge framing is in the [README](../README.md) Azure-services section and the AzureServices diagram; the per-service validation it complements is `AK.BuildingBlocks/.../Authentication/AuthenticationExtensions.cs`.
+
+**To reach 🟢** — Without notes, describe APIM as a managed edge/governance plane, state it's planned-not-live (ADR-020), explain why per-service validation still stands, and name cost as the adoption gate.
+
+---
+
+### 14. Networking fundamentals — VNet, subnets, NSGs, private and service endpoints 🟡
+
+**What it is** — The Azure networking primitives. A **VNet** is a private IP address space; **subnets** partition it; **Network Security Groups (NSGs)** are stateful allow/deny rules on subnets/NICs; a **private endpoint** gives a PaaS service a **private IP inside your VNet** (traffic never touches the public internet); a **service endpoint** keeps traffic on the Azure backbone but the service still has a public endpoint restricted to your subnet. Private endpoints are the stronger isolation.
+
+**The problem it solves** — Controlling who can reach what at the network layer: keeping the cluster's internal traffic private, restricting which subnets can reach a database, and (with private endpoints) removing PaaS services from the public internet entirely.
+
+**How it works** —
+
+```mermaid
+flowchart TB
+  VNet["VNet - private address space"] --> Sub1["Subnet - AKS nodes"]
+  VNet --> Sub2["Subnet - other"]
+  Sub1 --> NSG["NSG - stateful allow/deny rules"]
+  PE["Private endpoint = PaaS gets a private IP in the VNet"]
+  SE["Service endpoint = public IP, restricted to subnet"]
+  classDef paas fill:#0078D4,stroke:#054478,color:#fff
+  classDef service fill:#1D9E75,stroke:#0E5C43,color:#fff
+  class VNet,Sub1,Sub2 service
+  class PE,SE,NSG paas
+```
+
+NSGs are **stateful** (return traffic is allowed automatically). Private endpoint = the PaaS resource is reachable only via its private IP; the public endpoint can be disabled. Service endpoint = cheaper, keeps the public endpoint but locks it to named subnets.
+
+**How AntKart uses it** — AntKart provisions a **VNet with subnets and NSGs** via `infrastructure/modules/networking` (`azurerm_virtual_network`, `azurerm_subnet`, `azurerm_network_security_group`), and the AKS cluster runs **Azure CNI Overlay** on that network. What it does **not** broadly use is **private endpoints** — most PaaS data services (Cosmos, Postgres, Service Bus, Key Vault) are reached over their public endpoints secured by **Entra tokens / workload identity**, not network isolation. That's the deliberate boundary: AntKart's security model is **identity-first**, and network-level private-endpoint isolation is the tracked gap (see the Security section's "private endpoints" concept — the platform's biggest network-security gap).
+
+**Alternatives and the trade-off** — Public endpoints + Entra auth (AntKart) are simple and need no private DNS or endpoint plumbing, but the service is *reachable* (if not usable) from the internet; private endpoints remove that reachability at the cost of private DNS zones, more subnets, and complexity. Service endpoints are a middle ground. AntKart traded network isolation for identity-based security and simplicity — defensible for dev, a real gap for production.
+
+**Gotchas** —
+- **NSGs are stateful** — you allow inbound; the return path is automatic. Writing explicit return rules signals a misunderstanding.
+- **Private endpoint ≠ service endpoint.** Private endpoint = private IP, public endpoint can be off; service endpoint = still public, restricted to subnets. The strength difference is the point.
+- **Private endpoints need private DNS** — the classic breakage is the record still resolving to the public IP; forgetting the private DNS zone silently defeats the endpoint.
+- **Identity-secured ≠ network-isolated** — a public endpoint with a good token is still *reachable*; AntKart's model secures use, not reachability.
+
+**Interview traps** —
+- *"Private endpoint vs service endpoint?"* — Private endpoint gives a private IP in your VNet and lets you disable the public endpoint; service endpoint keeps the public endpoint but restricts it to named subnets. Strength vs simplicity.
+- *"Are your databases on private endpoints?"* — No — public endpoints secured by Entra/workload identity; network isolation is the tracked gap. Owning it is the credible answer.
+- *"Are NSGs stateful?"* — Yes; return traffic is automatic.
+- *"What breaks a private endpoint most often?"* — Private DNS — the hostname still resolving to the public IP.
+
+**The 60-second answer** — "A VNet is a private address space, subnets partition it, NSGs are stateful allow/deny rules, and for PaaS you have two isolation options: a private endpoint gives the service a private IP inside your VNet so you can turn its public endpoint off, while a service endpoint keeps the public endpoint but restricts it to named subnets. We provision a VNet, subnets, and NSGs in the networking module and run AKS on Azure CNI Overlay, but we deliberately don't put the data services behind private endpoints — Cosmos, Postgres, Service Bus and Key Vault are reached over public endpoints secured by Entra tokens and workload identity. That's identity-first security, and network isolation is our tracked gap: a public endpoint with a good token is still reachable, just not usable."
+
+**Read the code** — `infrastructure/modules/networking/main.tf` (`azurerm_virtual_network`, `azurerm_subnet`, `azurerm_network_security_group`); the AKS CNI Overlay config in `infrastructure/modules/aks`; the identity-first model in §5; the private-endpoint gap in the Security section's dedicated concept.
+
+**To reach 🟢** — Without notes, define VNet/subnet/NSG and the private-vs-service-endpoint distinction, state that AntKart secures PaaS by identity not network isolation, name private DNS as the endpoint gotcha, and distinguish reachable from usable.
+
+---
+
+### 15. Storage accounts and Blob storage 🟡
+
+**What it is** — An Azure **Storage account** is the container for Azure's core storage services; **Blob storage** is its object store (unstructured data — files, images, backups, state). Two axes define it: **redundancy** (LRS local, ZRS zone, GRS geo — how many copies and how far apart) and **access tiers** (Hot/Cool/Archive — cost vs retrieval-latency trade). **SAS (shared access signature)** tokens grant scoped, time-limited access to blobs.
+
+**The problem it solves** — Durable, cheap, massively-scalable storage for anything that isn't a database row: static assets, backups, and — critically for AntKart — **Terraform remote state** and Azure Functions' runtime storage.
+
+**How it works** — A storage account has a globally-unique name and endpoints; blobs live in **containers**. Redundancy is chosen at account creation (LRS = 3 copies in one datacentre; ZRS = across zones; GRS = replicated to a paired region). Tiers move a blob's cost/latency (Hot = frequent, Cool = infrequent, Archive = rare, slow to rehydrate). Access is via Entra RBAC or SAS tokens.
+
+**How AntKart uses it** — Storage accounts are load-bearing infrastructure, not app data. The **Terraform state backend** is a storage account — `stantkarttfstate`, container `tfstate`, in `rg-antkart-tfstate` — with **one leased blob per Terragrunt unit** (this is where the state-locking blob lease from §2.12 lives). **Azure Functions** (the serverless notification app) also require a backing storage account for their runtime. AntKart does **not** use Blob as an application data store — product data is in Cosmos, not blobs — and it authenticates to storage via **Entra/workload identity**, not SAS keys where avoidable (consistent with the secret-less model).
+
+**Alternatives and the trade-off** — For state, the alternative backends (S3+DynamoDB, Terraform Cloud) do the same job; Azure Storage is the natural Azure choice and gives blob-lease locking for free. For app assets, Blob vs a CDN vs a database BLOB column is a cost/latency/queryability trade. AntKart keeps app data in purpose-built stores and uses Blob only where it's the right tool (state, Functions runtime).
+
+**Gotchas** —
+- **Account names are globally unique and DNS-visible** — `stantkarttfstate.blob.core.windows.net`; a name clash or a leaked name is a reconnaissance surface.
+- **Archive tier is not instant** — rehydrating an Archive blob takes hours; using it for anything latency-sensitive is a trap.
+- **SAS tokens are bearer credentials** — a leaked SAS URL is access until it expires or is revoked; prefer Entra RBAC (AntKart's stance). One of AntKart's dormant KI-011 secrets was a bypass-style credential.
+- **Redundancy is a durability choice, not a backup** — GRS replicates *including* your mistakes; it's not versioning or point-in-time recovery.
+
+**Interview traps** —
+- *"LRS vs ZRS vs GRS?"* — Copies and blast radius: LRS three copies one datacentre; ZRS across zones in a region; GRS replicated to a paired region. Durability vs cost/latency.
+- *"Where does AntKart use Blob?"* — Terraform state (leased blob per unit) and Functions runtime storage — not application data.
+- *"SAS or RBAC?"* — Prefer Entra RBAC; SAS is a bearer token, a leak is live access. Matches the secret-less model.
+- *"Is GRS a backup?"* — No — it replicates data including corruption/deletes; backup/versioning is separate.
+
+**The 60-second answer** — "A storage account holds Azure's storage services; Blob is the object store, defined by redundancy — LRS local, ZRS zonal, GRS geo — and access tiers — Hot, Cool, Archive — for cost versus retrieval latency, with SAS tokens for scoped time-limited access. In AntKart, storage is infrastructure, not app data: the Terraform state backend is a storage account with a leased blob per Terragrunt unit — that's where our state locking lives — and the Functions app needs a backing storage account. Product data lives in Cosmos, not blobs, and we authenticate with Entra RBAC rather than SAS where we can, matching the secret-less model. The traps are that Archive isn't instant, GRS isn't a backup, and a SAS URL is a live credential until it expires."
+
+**Read the code** — The state backend in `infrastructure/environments/dev/root.hcl` (`stantkarttfstate` / `tfstate` / `rg-antkart-tfstate`); the Functions storage in `infrastructure/modules` and the notification deployment; the SAS-style dormant secret in [KI-011](KNOWN_ISSUES.md); §2.12 for the blob-lease locking.
+
+**To reach 🟢** — Without notes, give the LRS/ZRS/GRS and Hot/Cool/Archive axes, state where AntKart actually uses Blob (state + Functions, not app data), explain SAS-vs-RBAC, and correct "GRS is a backup."
+
+---
+
+### 16. Azure SQL versus PostgreSQL Flexible Server 🟡
+
+> **Partly recorded.** [ADR-004](adr/ADR-004-polyglot-persistence.md) records the positive choice of **PostgreSQL Flexible Server** for the relational services; it does **not** minute Azure SQL as a weighed-and-rejected option. So the honest framing is: Postgres was chosen deliberately; Azure SQL was simply not the path, not formally compared.
+
+**What it is** — The two managed relational databases on Azure. **Azure SQL Database** is managed Microsoft SQL Server (T-SQL, the Azure-native, tightly-integrated relational PaaS). **PostgreSQL Flexible Server** is managed open-source PostgreSQL with fine-grained control over compute/storage, maintenance windows, and zone-redundant HA. AntKart's Order, Payments, and Discount services use the latter.
+
+**The problem it solves** — The services that need ACID transactions, relational integrity, and EF Core migrations (orders, payments, coupons) need a managed relational store; the choice is *which* engine, weighing portability, ecosystem, cost, and Azure integration.
+
+**How it works** — Both are managed PaaS: automated patching, backups, HA, and point-in-time restore. Azure SQL uses the SQL Server engine and T-SQL and integrates most tightly with the Microsoft stack; Postgres Flexible Server uses the Postgres engine with Npgsql/EF Core and is portable to any Postgres anywhere. AntKart reaches its Postgres servers with **Npgsql + EF Core 9 code-first migrations**, authenticating via Entra where configured.
+
+**How AntKart uses it** — **PostgreSQL Flexible Server** backs `AKOrdersDb`, `AKPaymentsDb`, and `AKDiscountDb` — chosen in [ADR-004](adr/ADR-004-polyglot-persistence.md) as part of the polyglot-persistence story (Cosmos for the catalogue, Redis for the cart, Postgres for the transactional relational data). The ADR justifies Postgres on **open-source portability, EF Core support, and cost**, and pairs it with the other stores per workload. **Azure SQL is not compared in the ADR** — so if asked "why not Azure SQL," the accurate answer is that Postgres was the deliberate positive choice for portability/cost/ecosystem, and Azure SQL was never formally weighed against it, rather than pretending there was a head-to-head.
+
+**Alternatives and the trade-off** — Azure SQL would give the tightest Microsoft-stack integration, T-SQL, and features like SQL-native elastic pools, but ties you to SQL Server and (often) higher cost; Postgres is portable, open-source, cheaper at the low end, and has excellent EF Core support. AntKart valued portability and cost and the consistency of one relational engine across three services. Cosmos and Redis cover the non-relational workloads (ADR-004).
+
+**Gotchas** —
+- **"Flexible Server" is a specific deployment model** — it superseded Single Server and gives you maintenance-window and zone-redundant-HA control; naming it precisely signals current knowledge.
+- **Region placement matters** — AntKart's Postgres is in East US 2 while the cluster is elsewhere, so those calls **cross a region boundary** (latency the README calls out); a database's region is a real design variable.
+- **Cross-engine migration is not free** — T-SQL and PL/pgSQL differ; "we could switch to Azure SQL" understates the EF-provider and SQL-dialect work.
+- **Don't claim a comparison that isn't recorded** — ADR-004 chose Postgres; it didn't reject Azure SQL on the record.
+
+**Interview traps** —
+- *"Why Postgres over Azure SQL?"* — Portability (open-source), EF Core support, cost, and one relational engine across services (ADR-004). And honestly: Azure SQL wasn't formally compared — Postgres was the deliberate choice.
+- *"What's 'Flexible Server'?"* — The current Postgres deployment model with maintenance-window and zone-redundant-HA control, superseding Single Server.
+- *"Any latency concern in your DB design?"* — Yes — Postgres is in East US 2, so those service→DB calls cross a region boundary.
+- *"Could you swap to Azure SQL easily?"* — Not trivially — SQL dialect and EF provider differ; it's a real migration, not a config flip.
+
+**The 60-second answer** — "Azure SQL is managed SQL Server with T-SQL and the tightest Microsoft-stack integration; PostgreSQL Flexible Server is managed open-source Postgres with fine control over compute, maintenance windows, and zone-redundant HA. AntKart uses Postgres Flexible Server for Order, Payments, and Discount, chosen in ADR-004 for portability, EF Core support, and cost, as part of a polyglot story with Cosmos and Redis. I'd be honest that the ADR records the positive Postgres choice and doesn't formally compare Azure SQL — so 'why not Azure SQL' is really 'Postgres was the deliberate pick,' not a documented head-to-head. Worth noting our Postgres sits in East US 2, so those calls cross a region boundary, and switching engines isn't a config flip — the SQL dialect and EF provider differ."
+
+**Read the code** — The Npgsql/EF Core setup in `AK.Order.Infrastructure`, `AK.Payments.Infrastructure`, `AK.Discount.Infrastructure`; the Postgres modules in `infrastructure/modules/postgresql`; [ADR-004](adr/ADR-004-polyglot-persistence.md); the region-boundary note in the [README](../README.md) Azure-services section.
+
+**To reach 🟢** — Without notes, contrast the two engines, state Postgres was chosen in ADR-004 for portability/cost while Azure SQL wasn't formally compared, define Flexible Server, and name the cross-region latency as a real design point.
+
+---
+
+### 17. Cost management — reservations, spot, autoscaling economics, budgets and alerts 🟡
+
+**What it is** — The FinOps side of the platform: **reservations** (commit to 1–3 years for a big discount on steady workloads), **spot** instances (deeply-discounted evictable capacity for interruptible work), **autoscaling economics** (scale-to-load so you pay for what you use, including scale-to-zero), and **budgets with alerts** (a spend ceiling that fires notifications at thresholds). Together they're how you keep a cloud platform's bill deliberate.
+
+**The problem it solves** — Cloud cost is silent and continuous; without commitment discounts, right-sizing, and budget alerts, spend drifts. This is the discipline that makes a demonstrable platform affordable — and AntKart's whole "stopped between sessions" operating model is a cost decision.
+
+**How it works** — Reservations and Savings Plans trade flexibility for a discount on predictable baseline capacity. Spot nodes cost a fraction of on-demand but can be evicted with short notice (fine for stateless/batch). Autoscaling (HPA for pods, cluster autoscaler / scale-to-zero for nodes, serverless consumption plans) matches capacity to demand. **Budgets** (an Azure Consumption budget) set a monthly amount with **threshold alerts** that email when spend crosses, say, 80%.
+
+**How AntKart uses it** — AntKart's cost control is **operational and budgeted**. A **Consumption budget** is provisioned in code — `infrastructure/modules/governance` (`azurerm_consumption_budget_resource_group` with `amount`, `threshold`, and `contact_emails`) — so the environment has a spend ceiling with email alerts. The dominant lever, though, is **stop-between-sessions**: the AKS cluster and PostgreSQL are **started only when needed and stopped afterward** (PROJECT-STATE.md), and qa was **built, verified, and destroyed** — reproducible-on-demand from Terraform rather than kept running. The serverless notification path (Functions consumption) is **scale-to-zero** by nature. AntKart does **not** currently use reservations or spot nodes — the workload is intermittent dev, where stop/destroy beats commitment discounts. (The budget's hardcoded `start_date` has expired — **KI-010** — so the budget itself is a live defect worth naming.)
+
+**Alternatives and the trade-off** — Reservations/spot suit **steady or interruptible production** workloads; they're the wrong tool for an intermittent dev platform, where **stopping** resources saves more than any discount on always-on capacity. Budgets+alerts are cheap insurance regardless. AntKart's trade is maximum cost control via ephemerality at the price of start-up latency and the operational discipline of remembering to stop.
+
+**Gotchas** —
+- **A stopped PostgreSQL Flexible Server auto-starts after 7 days** — leaving it stopped isn't permanent; PROJECT-STATE.md flags setting a reminder.
+- **Spot is evictable** — never put stateful or latency-critical pods on spot; the discount comes with an eviction SLA, not a guarantee.
+- **A hardcoded budget date silently expires** — exactly KI-010: the budget's `start_date` passed, and dev could no longer be provisioned from its own Terraform. Derive dates, don't hardcode them.
+- **Reservations lock you in** — a 3-year commit on the wrong VM family is a sunk cost; they suit *proven-steady* baselines only.
+
+**Interview traps** —
+- *"How do you control cost here?"* — Budget-with-alerts in code plus an ephemeral operating model: stop AKS/Postgres between sessions, build-verify-destroy qa. Not reservations/spot — the workload's intermittent.
+- *"Why not reservations?"* — They discount always-on capacity; an intermittent dev platform saves more by stopping resources entirely. Right tool for the workload.
+- *"What's the risk with spot?"* — Eviction — only for stateless/interruptible work.
+- *"Anything bite you on cost tooling?"* — Yes — a hardcoded budget start date expired (KI-010) and blocked provisioning; the fix is to derive the date.
+
+**The 60-second answer** — "Cost management is reservations for steady workloads, spot for interruptible ones, autoscaling so you pay for load, and budgets with threshold alerts as a ceiling. AntKart provisions a Consumption budget in code — amount, threshold, contact emails, in the governance module — but its dominant lever is ephemerality: we stop AKS and Postgres between sessions and we built, verified, and destroyed qa rather than keep it running, because for an intermittent dev platform stopping resources beats any commitment discount. So we don't use reservations or spot. Two honest notes: a stopped Postgres auto-starts after seven days, and our budget's hardcoded start date actually expired — KI-010 — which blocked provisioning, so the lesson is derive dates, don't hardcode them."
+
+**Read the code** — `infrastructure/modules/governance/main.tf` (`azurerm_consumption_budget_resource_group`); the expired-date defect in `infrastructure/environments/dev/governance/terragrunt.hcl` and [KI-010](KNOWN_ISSUES.md); the stop/destroy operating model in [PROJECT-STATE.md](PROJECT-STATE.md); the scale-to-zero Functions path in §1's serverless concept.
+
+**To reach 🟢** — Without notes, name the four levers, explain why AntKart uses budgets + ephemerality rather than reservations/spot, cite the 7-day Postgres auto-start and the KI-010 expired-budget defect, and say when reservations/spot are actually right.
 
 ---
 
@@ -3146,6 +3709,190 @@ comment.
 
 ---
 
+### 12. StatefulSets, DaemonSets, Jobs, and CronJobs 🟡
+
+> **Not used by AntKart's own workloads.** AntKart's six services are all **Deployments**; no ADR discusses the other workload controllers because the services are stateless. Here because "when would you use a StatefulSet instead of a Deployment?" is a standard Kubernetes question, and knowing why AntKart *doesn't* need them is the answer.
+
+**What it is** — The Kubernetes workload controllers beyond Deployment. **StatefulSet** — stable identity and storage per pod (`pod-0`, `pod-1`), for stateful clustered apps. **DaemonSet** — exactly one pod per node, for node-level agents. **Job** — run-to-completion work. **CronJob** — a Job on a schedule. Each exists because a plain Deployment (interchangeable, stateless replicas) is the wrong shape for that workload.
+
+**The problem it solves** — Not every workload is a fungible stateless replica. A database needs stable identity and per-pod disks; a log collector needs to run on every node; a migration needs to run once and stop. These controllers give the right lifecycle for each.
+
+**How it works** —
+
+| Controller | Guarantee | Typical use |
+|---|---|---|
+| Deployment | interchangeable stateless replicas | AntKart's services |
+| StatefulSet | stable network id + persistent per-pod volume, ordered rollout | databases, Kafka, Zookeeper |
+| DaemonSet | one pod per node | log/metrics agents, CNI, node exporters |
+| Job | runs to completion, then stops | one-off migration, batch |
+| CronJob | a Job on a cron schedule | nightly cleanup, scheduled seed |
+
+**Why AntKart does not use them** — AntKart's services are **stateless by design** — all state lives in **managed Azure PaaS** (Cosmos, Postgres, Redis), not in the pods — so every service is a plain **Deployment** with interchangeable replicas. There is **no StatefulSet** because the platform runs no databases *in* the cluster; **no DaemonSet** because node-level agents (the Azure Monitor agent) are managed by AKS, not deployed by AntKart; **no Job/CronJob** because seeding and migrations are run **out-of-band** as console tools (`AK.Tools.*SeedLoader`) and EF migrations at startup, not as in-cluster scheduled work. No ADR discusses them — the stateless-Deployment shape was the default, so the choice was never separately recorded.
+
+**Alternatives and the trade-off** — Running databases in-cluster (StatefulSets) trades managed-PaaS simplicity for control and portability; AntKart chose managed data services, so the StatefulSet complexity (persistent volumes, ordered rollout, backup) never applies. In-cluster CronJobs vs out-of-band console tools is a real choice — AntKart keeps seeding an explicit, run-when-needed operation rather than scheduled cluster work.
+
+**Gotchas** —
+- **A stateless service in a StatefulSet is an anti-pattern** — you'd pay the ordered-rollout and identity cost for nothing. Deployment is correct for stateless.
+- **DaemonSets you didn't write still exist** — AKS runs system DaemonSets (CNI, monitoring); "we have no DaemonSets" means *we* deploy none, not that the cluster has none.
+- **CronJob time zones and missed runs** — CronJobs historically ran in UTC and can pile up missed runs; a classic footgun if AntKart ever added one.
+
+**Interview traps** —
+- *"When a StatefulSet over a Deployment?"* — When pods need stable identity and persistent per-pod storage — databases, clustered brokers. AntKart doesn't, because state is in managed PaaS.
+- *"Do you run any StatefulSets?"* — No — services are stateless Deployments; databases are managed Azure services, not in-cluster.
+- *"How do you run migrations/seeding?"* — Out-of-band console tools and startup EF migrations, not in-cluster Jobs/CronJobs.
+- *"What's a DaemonSet for, and do you have any?"* — One pod per node for node agents; AntKart deploys none, but AKS system DaemonSets exist.
+
+**The 60-second answer** — "Beyond Deployment there are four controllers: StatefulSet for pods needing stable identity and per-pod storage — databases, brokers; DaemonSet for one pod per node — node agents; Job for run-to-completion work; CronJob for a scheduled Job. AntKart uses none of them for its own workloads because the services are stateless — all state is in managed Azure PaaS, Cosmos, Postgres, Redis — so every service is a plain Deployment with interchangeable replicas. No in-cluster databases means no StatefulSets, node agents are managed by AKS not us, and seeding and migrations run out-of-band as console tools rather than CronJobs. The anti-pattern to avoid is putting a stateless service in a StatefulSet and paying for identity you don't need."
+
+**Where you would see it** — StatefulSets wherever a database or clustered broker runs *in* Kubernetes; DaemonSets for log/metric agents and CNI on every node; Jobs/CronJobs for batch pipelines, scheduled cleanups, and in-cluster migrations.
+
+**To reach 🟢** — Without notes, give the guarantee each controller provides, explain that AntKart is all-Deployment because state lives in managed PaaS, name the "stateless in a StatefulSet" anti-pattern, and say how AntKart actually runs seeding/migrations.
+
+---
+
+### 13. Operators and CRDs 🟡
+
+**What it is** — A **Custom Resource Definition (CRD)** extends the Kubernetes API with a new object type (a `Certificate`, an `Application`), and an **Operator** is a controller that watches those custom resources and drives real-world state to match them — encoding operational knowledge (how to issue a cert, how to sync an app) as a reconciliation loop. Together they're how you teach Kubernetes new nouns and verbs. AntKart runs operators it didn't write.
+
+**The problem it solves** — The built-in Kubernetes objects can't express everything ("keep this app in sync with Git," "obtain and renew this TLS certificate"). CRDs add the vocabulary; operators add the automation, so those higher-level intents become declarative, self-healing resources like any other.
+
+**How it works** — A CRD registers a new kind; you create instances of it (a `Certificate` object); the operator's controller **reconciles** — observes the custom resource, compares to reality, acts, repeats — exactly the same control-loop model as core Kubernetes, extended to domain-specific objects.
+
+**How AntKart uses it** — AntKart is a **consumer** of operators and CRDs, not an author of them:
+- **Argo CD** — its `Application` (and `ApplicationSet`, `AppProject`) CRDs *are* the GitOps interface; the Argo controllers are operators reconciling cluster state to Git (`deploy/argocd/`).
+- **cert-manager** — its `Certificate` and `ClusterIssuer` CRDs drive automated Let's Encrypt issuance and renewal (`deploy/cert-manager/`); the cert-manager controller is the operator.
+- (Had the removed Prometheus stack stayed, its `ServiceMonitor` CRDs and the Prometheus Operator would be a third — see §6.7.)
+
+So AntKart's declarative delivery and TLS both *are* operators-and-CRDs in action; the platform never wrote a custom operator because the operational knowledge it needs (sync, cert issuance) already ships as mature ones.
+
+**Alternatives and the trade-off** — You could script these concerns imperatively (a pipeline that runs `kubectl apply`, a cron that renews certs) — simpler to start, but not self-healing and not declarative. Operators cost the complexity of another controller in the cluster but buy continuous reconciliation. Writing your *own* operator is a big investment justified only when no existing one encodes your operational knowledge — AntKart never crossed that line.
+
+**Gotchas** —
+- **CRDs are cluster-scoped API surface** — a CRD version bump or a mismatched operator version can break every custom resource of that kind; upgrades are a real operation.
+- **An operator is just a reconciliation loop** — if it's down, your `Certificate`/`Application` objects still exist but stop being acted on; "Argo is Synced" means nothing if the Argo controller is unhealthy.
+- **Consuming ≠ authoring** — using cert-manager doesn't mean you wrote an operator; be precise about which you've done.
+
+**Interview traps** —
+- *"What's the difference between a CRD and an operator?"* — CRD adds a new API type; the operator is the controller that reconciles instances of it. One is the noun, one is the verb.
+- *"Do you use operators?"* — Yes — Argo CD and cert-manager are operators with CRDs; the GitOps `Application` and the TLS `Certificate` are both custom resources. We consume, we didn't author.
+- *"Why not just script cert renewal?"* — No self-healing, no declarative desired state; the operator reconciles continuously.
+- *"What breaks when an operator is down?"* — The custom resources persist but stop being reconciled — silent staleness, not a loud error.
+
+**The 60-second answer** — "A CRD extends the Kubernetes API with a new kind of object, and an operator is a controller that watches those objects and reconciles reality to match them — the same control-loop model as core Kubernetes, applied to domain-specific nouns. AntKart consumes two: Argo CD, whose Application CRD is our GitOps interface, and cert-manager, whose Certificate and ClusterIssuer CRDs drive automated Let's Encrypt renewal. Both our declarative delivery and our TLS are literally operators-and-CRDs at work. We never wrote a custom operator because the operational knowledge we needed already ships as mature ones. The gotcha is that an operator is just a loop — if its controller is down, the custom resources still exist but stop being acted on."
+
+**Read the code** — Argo CD's `Application`/`ApplicationSet`/`AppProject` in `deploy/argocd/`; cert-manager's `ClusterIssuer`/`Certificate` in `deploy/cert-manager/`; §4's reconciliation-loop concept and §7's Argo CD concepts for the same idea applied.
+
+**To reach 🟢** — Without notes, define CRD vs operator, name Argo CD and cert-manager as the two AntKart consumes with their specific CRDs, explain that a down operator means silent staleness, and be precise that AntKart consumes rather than authors.
+
+---
+
+### 14. Service mesh — Istio and Linkerd 🟡
+
+> **Not used in AntKart.** No ADR discusses a mesh — the choice was never formally recorded. Here because "how do you do mTLS / traffic management / retries between services?" often expects a mesh, and AntKart answers those concerns without one.
+
+**What it is** — A **service mesh** (Istio, Linkerd) is an infrastructure layer that injects a **sidecar proxy** beside every pod and routes all service-to-service traffic through it, giving **mutual TLS**, fine-grained **traffic management** (canary, retries, timeouts, circuit-breaking), and **L7 observability** — all transparently, without changing application code.
+
+**The problem it solves** — In a large fleet you want encryption-in-transit, consistent retry/timeout policy, and traffic-shaping between services without every team re-implementing them. The mesh moves those concerns into the platform layer.
+
+**How it works** — A sidecar proxy (Envoy for Istio, a purpose-built micro-proxy for Linkerd) is injected into each pod; a control plane configures the proxies. Traffic between services goes pod → local sidecar → remote sidecar → pod, and the sidecars enforce mTLS, apply routing/retry rules, and emit L7 metrics — the app is unaware.
+
+**Why AntKart does not use it** — AntKart handles those concerns **without a mesh**:
+- **Resilience** (retries, timeouts, circuit-breaking) lives **in code** via `AK.BuildingBlocks/Resilience` (Polly pipelines: `AddHttpResilienceWithCircuitBreaker`, `AddOptionalDependencyResilience`, data-store retries) — applied per-dependency with criticality tiers, which a blanket mesh policy can't express as precisely.
+- **Encryption**: services talk over the cluster network; the security model is **identity-first** (Entra tokens validated per service), and public edges use TLS via cert-manager — but there is **no in-cluster mTLS** between services. That's a genuine gap a mesh would close.
+- **Observability**: OpenTelemetry gives L7 traces from the SDK, so the mesh's telemetry value is largely already covered.
+
+No ADR weighed a mesh — for six services the sidecar-per-pod cost (latency, resource, operational complexity, another control plane) outweighed the benefit, so the choice was never formally made. Say plainly: **no service-to-service mTLS today** is the honest gap.
+
+**Alternatives and the trade-off** — In-code resilience + OTel + identity-first auth (AntKart) is simpler and precise per-dependency but leaves **no automatic mTLS** and pushes policy into each service; a mesh gives transparent mTLS and uniform traffic policy at the cost of a proxy on every pod and a control plane to run. Linkerd is lighter than Istio and would be the pragmatic pick if a mesh were adopted. For six services, no-mesh was the right trade — but mTLS is the thing given up.
+
+**Gotchas** —
+- **A sidecar per pod is real overhead** — latency on every hop, memory per pod, and a control plane; meshes earn their keep at scale, not at six services.
+- **The mesh's mTLS is the feature AntKart lacks** — don't claim in-cluster encryption the platform doesn't have; identity validation isn't transport encryption.
+- **Mesh retries can amplify failures** — blanket retry policy at the mesh layer can turn a blip into a retry storm; per-dependency in-code policy (AntKart's) is more controllable.
+- **Istio is heavy** — its complexity is a common regret; Linkerd exists precisely as the lighter answer.
+
+**Interview traps** —
+- *"How do services encrypt traffic between each other?"* — Honestly: they don't do in-cluster mTLS today — that's the gap a mesh would fill. We secure by identity (per-service token validation), not transport encryption.
+- *"Why no service mesh?"* — Six services; the sidecar-per-pod and control-plane cost outweighs the benefit, and resilience/observability are handled in code and OTel. No ADR — it was never needed.
+- *"Istio vs Linkerd?"* — Istio (Envoy) is feature-rich and heavy; Linkerd is lighter and simpler — the pragmatic choice if a mesh were adopted.
+- *"What would a mesh give you that you lack?"* — Transparent mTLS between services, chiefly — the honest missing piece.
+
+**The 60-second answer** — "A service mesh puts a sidecar proxy beside every pod and routes all service-to-service traffic through it, giving transparent mTLS, traffic management, and L7 observability without app changes. AntKart doesn't use one: resilience — retries, timeouts, circuit-breaking — lives in code via Polly pipelines in BuildingBlocks, tuned per dependency with criticality tiers, and observability comes from OpenTelemetry. No ADR weighed a mesh because for six services the sidecar-per-pod and control-plane cost outweighs the benefit. The honest gap is encryption: we secure by identity — each service validates the token — but there's no in-cluster mTLS between services, and that's exactly what a mesh, probably Linkerd for its lightness, would close."
+
+**Where you would see it** — Large fleets wanting uniform mTLS and traffic policy without touching app code, teams doing sophisticated canary/traffic-shifting at the platform layer, or zero-trust networks mandating encryption between every service.
+
+**To reach 🟢** — Without notes, explain the sidecar/control-plane model, state that AntKart does resilience in code and observability via OTel, own the no-mTLS gap plainly, and give the Istio-vs-Linkerd contrast.
+
+---
+
+### 15. KEDA — event-driven autoscaling 🟡
+
+> **Not used in AntKart.** No ADR discusses it — the choice was never formally recorded. Here because "how do you autoscale on queue depth?" expects KEDA, and AntKart's scaling story (or absence of one) is worth being able to state.
+
+**What it is** — **KEDA** (Kubernetes Event-Driven Autoscaling) extends the Horizontal Pod Autoscaler to scale on **external event sources** — queue length, Service Bus message count, Kafka lag, cron — not just CPU/memory, and crucially can scale a Deployment **to zero** when there's no work and back up on the first event.
+
+**The problem it solves** — CPU/memory are poor proxies for how much work a message-driven consumer has; a queue with 10,000 messages may show low CPU. KEDA scales on the *actual backlog*, and scale-to-zero removes the cost of idle consumers.
+
+**How it works** — KEDA runs as an operator with **scalers** for many sources; a `ScaledObject` custom resource ties a Deployment to a source and a target (e.g. "scale ak-order on Service Bus queue length, 0–10 replicas"). KEDA feeds the metric to the HPA and manages the scale-to-zero activation the HPA can't do alone.
+
+**Why AntKart does not use it** — AntKart's services scale (if at all) on the **default HPA / static replicas**, not on Service Bus backlog — even though the saga is message-driven and would be a textbook KEDA fit (scale `ak-order`/consumers on queue depth). The **serverless notification path already gets scale-to-zero for free** from the Azure Functions consumption plan, which covers the one genuinely bursty, event-driven workload — so the in-cluster services never needed KEDA badly enough to add it. No ADR weighed it; the choice was never formally made. It's a natural future enhancement, not a considered rejection.
+
+**Alternatives and the trade-off** — Default HPA (CPU/memory) is built-in and simple but blind to queue depth and can't scale to zero; KEDA adds event-driven scaling and scale-to-zero at the cost of another operator and `ScaledObject` tuning. The serverless consumption plan (Functions) gives scale-to-zero natively for the notification workload. AntKart leaned on Functions for the bursty path and left the saga consumers on default scaling — adequate for dev load, a KEDA opportunity at real scale.
+
+**Gotchas** —
+- **The default HPA can't scale to zero** — that's KEDA's signature capability; claiming HPA does it is wrong.
+- **CPU is a bad proxy for queue work** — a backed-up consumer can look idle; that mismatch is exactly why KEDA exists.
+- **Scale-from-zero has a cold-start** — the first message waits for a pod to start; KEDA's activation isn't instant, a trade for the idle-cost saving.
+- **KEDA is another operator + CRD** — more cluster surface to run and secure.
+
+**Interview traps** —
+- *"How would you autoscale the saga consumers?"* — On Service Bus queue depth with KEDA, scaling to zero when idle — which we don't do today; the in-cluster services use default HPA/static replicas.
+- *"Can the standard HPA scale to zero?"* — No — that's a KEDA capability; the HPA floors at one.
+- *"Where do you already get scale-to-zero?"* — The Functions consumption plan for the notification path — the one bursty workload — which is why KEDA wasn't pressing.
+- *"Why isn't KEDA in the platform?"* — No formal decision; dev load didn't demand it and Functions covered the bursty path. A future enhancement, not a rejection.
+
+**The 60-second answer** — "KEDA extends the Kubernetes HPA to scale on external event sources — queue length, Service Bus messages, Kafka lag — and can scale a Deployment to zero and back on the first event, which the default HPA can't. Our saga consumers would be a textbook fit — scale ak-order on queue depth — but we don't use it: the in-cluster services run on default HPA or static replicas, and the one genuinely bursty, event-driven workload, notifications, already gets scale-to-zero free from the Azure Functions consumption plan. So no ADR weighed KEDA; it's a natural future enhancement rather than a considered rejection. The key facts are that the plain HPA floors at one replica and CPU is a poor proxy for queue backlog — which is exactly the gap KEDA fills."
+
+**Where you would see it** — Message-driven consumers scaling on queue depth, workloads bursty enough that scale-to-zero saves real money, or any Service-Bus/Kafka-fed processing where CPU is a poor scaling signal.
+
+**To reach 🟢** — Without notes, explain event-driven scaling and scale-to-zero, note the saga would be a fit but runs on default HPA, cite Functions consumption as the existing scale-to-zero, and state that the plain HPA can't reach zero.
+
+---
+
+### 16. Pod security and admission control 🟡
+
+> **Partly present.** Container/base-image hardening is recorded ([ADR-018](adr/ADR-018-aks-workload-identity-base-image.md)); cluster-level **admission control** (Pod Security Standards, admission webhooks, policy engines like Gatekeeper/Kyverno) is **not** configured and no ADR discusses that part. So: image-level hardening yes; admission-level enforcement, the choice was never formally made.
+
+**What it is** — Two layers of "what is a pod allowed to do." **Pod security** at the workload — non-root users, read-only root filesystem, dropped capabilities, a locked `securityContext`. **Admission control** at the cluster — a gate that inspects every object *before* it's persisted and can reject or mutate it: built-in **Pod Security Standards/Admission** (privileged/baseline/restricted), or policy engines (**Gatekeeper**, **Kyverno**) enforcing custom rules via admission webhooks.
+
+**The problem it solves** — Defence in depth for the runtime: pod-level settings shrink each container's blast radius if compromised; admission control enforces those settings *fleet-wide* so a non-compliant pod (privileged, root, host-mounted) can't even be created.
+
+**How it works** — Pod security is declared in the pod spec's `securityContext` (`runAsNonRoot`, `readOnlyRootFilesystem`, `capabilities: drop: [ALL]`). Admission control runs in the API-server request path: validating webhooks reject non-compliant objects, mutating webhooks patch them, and Pod Security Admission applies a namespace-labelled standard — all *before* the object is stored, so enforcement is preventive, not detective.
+
+**How AntKart uses it — and doesn't** — AntKart does the **workload half**: every Dockerfile runs as **non-root** (`USER $APP_UID`, the .NET 9 base image UID 1654), and the AKS/base-image hardening is recorded in [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md). What it does **not** have is **cluster admission control** — no Pod Security Standards labels enforced, no Gatekeeper/Kyverno policy engine, no admission webhooks validating that pods are non-root/non-privileged. Nothing *prevents* a non-compliant pod from being admitted; the non-root posture is a convention followed in the Dockerfiles, not enforced at the gate. No ADR discusses admission control — that half of the choice was never formally made, and it's an honest hardening gap.
+
+**Alternatives and the trade-off** — Convention-only pod hardening (AntKart) is simple and needs no extra components but is unenforced — a future manifest could regress it silently; Pod Security Admission is built-in and free to switch on (namespace labels); Gatekeeper/Kyverno add powerful custom policy at the cost of another operator and policy authoring. AntKart got the per-pod posture right and skipped the enforcement layer — fine for a controlled dev repo, a gap for a multi-team cluster.
+
+**Gotchas** —
+- **Non-root in the Dockerfile is not enforcement** — nothing stops a pod spec from overriding or a new service from shipping root; admission control is what makes it a guarantee.
+- **PSP is gone** — PodSecurityPolicy was removed in Kubernetes 1.25; the current built-in is **Pod Security Admission**. Citing PSP dates you.
+- **Admission webhooks are in the critical path** — a failing/slow webhook can block all object creation; misconfigured `failurePolicy` can wedge the cluster.
+- **Mutating vs validating** — mutating admission changes objects (inject sidecars, defaults), validating only accepts/rejects; conflating them is a common slip.
+
+**Interview traps** —
+- *"Are your pods non-root?"* — Yes — every Dockerfile uses `USER $APP_UID` (UID 1654), per ADR-018. But it's a convention, not admission-enforced.
+- *"What enforces that cluster-wide?"* — Honestly, nothing today — no Pod Security Admission, no Gatekeeper/Kyverno. That's the gap; the posture is per-Dockerfile, not gated.
+- *"PSP?"* — Removed in 1.25; the replacement is Pod Security Admission. Naming the right mechanism matters.
+- *"Mutating vs validating admission?"* — Mutating patches objects (e.g. sidecar injection), validating accepts/rejects; both run before the object is persisted.
+
+**The 60-second answer** — "There are two layers: pod security at the workload — non-root, read-only root FS, dropped capabilities in the securityContext — and admission control at the cluster, a gate that inspects every object before it's stored and can reject or mutate it, whether built-in Pod Security Admission or a policy engine like Gatekeeper or Kyverno. AntKart does the workload half well: every Dockerfile runs non-root as UID 1654, recorded in ADR-018. It doesn't have the cluster half — no Pod Security Admission, no policy engine, no admission webhooks — so the non-root posture is a Dockerfile convention, not enforced at the gate, and that's an honest gap. Worth noting PodSecurityPolicy was removed in 1.25; the current built-in is Pod Security Admission."
+
+**Read the code** — The non-root `USER $APP_UID` lines in each service's Dockerfile; the base-image/hardening decision in [ADR-018](adr/ADR-018-aks-workload-identity-base-image.md); the absence of admission policy under `deploy/` (there is none — that's the point); §5's defence-in-depth concepts.
+
+**To reach 🟢** — Without notes, separate pod-level securityContext from cluster admission control, state AntKart has the non-root Dockerfile half but no admission enforcement, correct the PSP→Pod Security Admission point, and distinguish mutating from validating webhooks.
+
+---
+
 # 5. Security and identity
 
 ### 1. Entra ID, OAuth2 and PKCE 🟡
@@ -3843,6 +4590,145 @@ is ClusterIP-only services + subnet NSGs; the networking primer is
 
 ---
 
+### 10. Private endpoints and network isolation 🟡
+
+> **Not used in AntKart — and this is the platform's biggest security gap. Say so plainly.** No ADR discusses private endpoints; the choice was never formally recorded. The platform's PaaS data services are reached over **public endpoints** secured by Entra tokens, not removed from the internet.
+
+**What it is** — A **private endpoint** gives an Azure PaaS service (Cosmos, Postgres, Key Vault, Service Bus) a **private IP inside your VNet**, so it's reachable only from your network and its **public endpoint can be disabled** — the service disappears from the internet entirely. Network isolation is the practice of putting your data plane behind private endpoints (and private DNS) rather than exposing public endpoints at all.
+
+**The problem it solves** — Defence in depth at the network layer: even if a token were stolen or an auth check were flawed, a service on a private endpoint simply **cannot be reached** from outside the VNet. It removes reachability, not just usability — a second, independent barrier beneath identity.
+
+**How it works** — You create a private endpoint for the resource, which projects a NIC with a private IP into a subnet; a **private DNS zone** makes the resource's hostname resolve to that private IP inside the VNet; you then **disable public network access** on the resource. Traffic now never leaves the Azure backbone/VNet, and there is no public IP to attack.
+
+**Why AntKart does not use it** — AntKart's security model is **identity-first**: Cosmos, PostgreSQL, Service Bus, Event Grid, and Key Vault are reached over their **public endpoints**, authenticated by **Entra tokens via workload identity** with no stored secrets. There are **no private endpoints** and the public network paths are **not disabled**. This is the honest, load-bearing gap: a public endpoint secured by a token is still *reachable* from the internet — the token is the only barrier, where production would want network isolation *and* identity. **No ADR weighed private endpoints** — the secret-less identity model was the security story, and network isolation was never formally decided, so the platform states it as a known gap rather than a considered trade. (It compounds other gaps: Discount's unverified token, KI-002, is worse without network isolation.)
+
+**Alternatives and the trade-off** — Public endpoint + Entra auth (AntKart) is simple, needs no private DNS or extra subnets, and is fine to *use* — but leaves the service reachable; private endpoints remove reachability at the cost of private DNS zones, more networking, and complexity; service endpoints are a cheaper middle ground (public IP restricted to subnets). AntKart traded network isolation for simplicity and an identity-only barrier — defensible for stop-between-sessions dev, a genuine gap for production.
+
+**Gotchas** —
+- **Identity-secured is not network-isolated** — the single most important point: a good token on a public endpoint is still an internet-reachable service. Don't conflate "no stored secrets" with "not exposed."
+- **Private endpoints live or die by private DNS** — the classic failure is the hostname still resolving to the public IP, silently defeating the endpoint.
+- **You must also disable public access** — adding a private endpoint but leaving the public endpoint enabled achieves little; both steps are required.
+- **It compounds with auth gaps** — network isolation would contain a flawed auth check (like KI-002); without it, identity is the only line.
+
+**Interview traps** —
+- *"Are your data services on private endpoints?"* — No — public endpoints secured by Entra/workload identity; no private endpoints, public access not disabled. It's our biggest network-security gap, and I'd say so.
+- *"Isn't secret-less enough?"* — No — no stored credentials protects the *keys*, but the service is still internet-reachable; identity and network isolation are different barriers.
+- *"How would you close it?"* — Private endpoints + private DNS for each data service, then disable public network access; add it to the VNet the networking module already provisions.
+- *"What makes this gap worse?"* — It compounds auth gaps like Discount's unverified token (KI-002) — network isolation would contain what a weak check lets through.
+
+**The 60-second answer** — "A private endpoint gives a PaaS service a private IP inside your VNet so you can disable its public endpoint and take it off the internet entirely — network isolation as a second barrier beneath identity. This is AntKart's biggest security gap, and I'll say it plainly: our model is identity-first, so Cosmos, Postgres, Service Bus, Event Grid, and Key Vault are reached over public endpoints secured by Entra tokens and workload identity, with no private endpoints and public access not disabled. Secret-less protects the credentials, but a public endpoint with a good token is still reachable from the internet — identity is the only line. No ADR weighed it; it was never formally decided, and it compounds gaps like Discount's unverified token. The fix is private endpoints plus private DNS, then disabling public access."
+
+**Where you would see it** — Any production platform handling real data: regulated workloads mandating no public data-plane exposure, zero-trust networks, or any system where "reachable but token-protected" isn't an acceptable posture for a database.
+
+**To reach 🟢** — Without notes, explain private endpoint + private DNS + disable-public-access, state plainly that this is AntKart's biggest gap and that identity-secured ≠ network-isolated, and describe how you'd close it on the existing VNet.
+
+---
+
+### 11. Secrets rotation and lifecycle 🟡
+
+> **Partly present.** AntKart holds secrets in **Key Vault** and prefers **secret-less workload identity**, but **automated rotation** is not configured and no ADR discusses a rotation lifecycle. So: strong secret *avoidance* and storage; no automated *rotation*, and two dormant secrets are a tracked defect (KI-011).
+
+**What it is** — The full life of a secret: **creation**, secure **storage**, controlled **access**, periodic **rotation** (replacing it on a schedule or after exposure without downtime), and **retirement**. Rotation matters because a credential's value to an attacker grows the longer it's valid; short-lived or regularly-rotated secrets shrink the exposure window. The strongest form is **not having a secret at all** — a short-lived token from a trusted identity.
+
+**The problem it solves** — Long-lived static secrets are the classic breach vector: they leak, they linger in configs and logs, and they rarely change. A lifecycle — ideally eliminating secrets, otherwise rotating them automatically — limits how long any leaked credential is useful.
+
+**How it works** — Secrets live in **Key Vault** (encrypted, access-controlled, audited); apps read them by **managed identity** rather than embedding them. Rotation can be manual, event-driven (Key Vault emits near-expiry events), or automated (Key Vault's managed rotation for supported secret types, or a rotation function). The **best rotation is none**: workload identity exchanges a projected ServiceAccount token for a short-lived Azure token per session — nothing to rotate.
+
+**How AntKart uses it** — AntKart's strongest move is **secret elimination**: workload identity means the platform holds **no connection strings or client secrets** in the cluster — each pod exchanges a short-lived, auto-rotated ServiceAccount token for an Entra token (§5's workload-identity concepts). Where real secrets exist (Razorpay sandbox keys, some connection strings), they live in **Key Vault**, read at runtime via `DefaultAzureCredential`, never committed (`appsettings` hold placeholders). What AntKart does **not** have is **automated rotation** of those vaulted secrets — no rotation schedule, no near-expiry automation; rotating the Razorpay keys would be a manual vault update. And **two Key Vault secrets are dormant with no consumer** — one a Service Bus SAS string that *bypasses* workload identity — tracked as **KI-011**, exactly the kind of lifecycle residue a rotation/retirement discipline would catch. No ADR covers the rotation lifecycle.
+
+**Alternatives and the trade-off** — Secret-less workload identity (AntKart's default) is the ideal — nothing to rotate — but not everything can be secret-less (third-party API keys like Razorpay); for those, automated rotation is the next-best and AntKart hasn't wired it. Manual rotation (current) is simple but relies on human discipline and leaves secrets static between rare updates. The trade AntKart made was to eliminate secrets aggressively and accept manual handling for the few that remain.
+
+**Gotchas** —
+- **The best-rotated secret is no secret** — workload identity's short-lived tokens are auto-rotated by design; lead with elimination, not rotation.
+- **Dormant secrets are a live risk** — a no-consumer secret (KI-011) still grants access if leaked; retirement is part of the lifecycle, not an afterthought.
+- **A SAS/connection-string secret bypasses your identity model** — KI-011's Service Bus SAS string would sidestep workload identity entirely; such credentials undermine the whole secret-less posture.
+- **Placeholder ≠ secret in config** — `appsettings` intentionally hold empty placeholders; the real values come from Key Vault at runtime. Confusing the two suggests a leaked-secret risk that isn't there.
+
+**Interview traps** —
+- *"How do you rotate secrets?"* — Mostly by not having them — workload identity issues short-lived auto-rotated tokens; for the few real secrets (Razorpay) they're in Key Vault, but automated rotation isn't wired — that's a gap.
+- *"Where are secrets stored, and are any in the repo?"* — Key Vault; the repo holds only placeholders. Real values are read at runtime via managed identity.
+- *"Any secret-lifecycle debt?"* — Yes — two dormant vault secrets with no consumer (KI-011), one a SAS string bypassing workload identity; they should be retired.
+- *"What's the strongest secrets posture?"* — Eliminating secrets via short-lived identity tokens — nothing to leak or rotate.
+
+**The 60-second answer** — "A secret's lifecycle is create, store, access, rotate, retire, and rotation matters because a credential's value grows the longer it's valid. AntKart's strongest move is eliminating secrets: workload identity means no connection strings or client secrets in the cluster — each pod exchanges a short-lived, auto-rotated ServiceAccount token for an Entra token, so there's nothing to rotate. The few real secrets, like Razorpay keys, live in Key Vault and are read at runtime via managed identity, never committed. What we don't have is automated rotation of those vaulted secrets — that's manual today — and we have two dormant secrets with no consumer, one a Service Bus SAS string that bypasses workload identity, tracked as KI-011. So: excellent secret avoidance and storage, no automated rotation, and some lifecycle residue to retire."
+
+**Read the code** — The secret-less config wiring `AddAzureKeyVaultConfiguration` in the Products/Payments/Discount hosts; the Razorpay vaulted keys (`Razorpay--KeyId`/`--KeySecret`) with placeholder `appsettings`; workload identity in §5; the dormant-secret defect in [KI-011](KNOWN_ISSUES.md).
+
+**To reach 🟢** — Without notes, lead with secret elimination via short-lived identity tokens, state that vaulted secrets aren't auto-rotated (a gap), explain why KI-011's dormant SAS secret undermines the model, and distinguish config placeholders from real secrets.
+
+---
+
+### 12. Zero trust as an architecture principle 🟡
+
+**What it is** — **Zero trust** is the principle of **"never trust, always verify"** — no implicit trust from network location. Every request is authenticated and authorised on its own merits, whether it comes from the internet or from inside the cluster; there is no soft interior behind a hard perimeter. Its pillars: verify explicitly, least-privilege access, and assume breach.
+
+**The problem it solves** — The old "castle and moat" model trusts anything inside the network, so one breached host owns the interior. Zero trust removes that assumption: an attacker who gets inside still faces authentication and authorisation at every hop, and every identity has only the privileges it needs.
+
+**How it works** — Each service validates the caller's token itself rather than trusting an upstream; identities (users and workloads) get least-privilege, resource-scoped permissions; credentials are short-lived; and the design **assumes breach**, so barriers are layered (defence in depth) rather than concentrated at the edge.
+
+**How AntKart uses it** — AntKart embodies several zero-trust tenets:
+- **Every service re-validates the token** — the gateway validates the Entra JWT *and* each service validates it again, so a request that bypassed the edge still meets a closed door (README's "the workload's chain"). No service trusts another by network position.
+- **Least-privilege workload identity** — each service's managed identity carries **resource-scoped** data-plane roles (Secrets User on Key Vault, sender/receiver only on the topics it uses — never Manage), so a compromised service can't reach beyond its grants.
+- **Short-lived credentials, assume breach** — projected ServiceAccount tokens are short-lived; no long-lived secret exists to steal.
+
+Where AntKart **falls short** of full zero trust is the **network layer**: with no private endpoints (§5.10) and no in-cluster mTLS (§4.14), traffic between services isn't encrypted or network-isolated, and Discount doesn't verify its token (KI-002). So AntKart is **identity zero-trust, not network zero-trust** — strong on "verify every identity," weak on "isolate and encrypt every path." That honest distinction is the whole answer.
+
+**Alternatives and the trade-off** — Perimeter security (trust the interior) is simpler but brittle — one breach owns everything; zero trust costs more verification and per-identity scoping but contains breaches. AntKart bought the identity half (per-service validation, least-privilege identities) cheaply and deferred the network half (mTLS, private endpoints) — the pragmatic subset for a dev platform, but not the complete principle.
+
+**Gotchas** —
+- **Zero trust is a principle, not a product** — you don't "install zero trust"; it's per-request verification, least privilege, and assume-breach applied everywhere.
+- **Identity zero-trust without network zero-trust is partial** — AntKart verifies every identity but doesn't isolate/encrypt every path; claiming full zero trust would overstate it.
+- **One unverified hop breaks the chain** — Discount decoding but not verifying its token (KI-002) is a literal violation of "always verify."
+- **Least privilege is the quiet half** — people cite "verify explicitly" and forget resource-scoped, minimal grants, which is where AntKart is genuinely strong.
+
+**Interview traps** —
+- *"Is AntKart zero trust?"* — On identity, largely yes — every service re-validates the token and identities are least-privilege and short-lived. On network, no — no mTLS, no private endpoints. I'd draw that line explicitly.
+- *"Give a concrete zero-trust decision in the platform."* — Each service validates the Entra JWT independently instead of trusting the gateway — no trust from network position.
+- *"Where does it break?"* — Discount decodes but doesn't verify its token (KI-002) — a direct "always verify" violation.
+- *"Zero trust vs defence in depth?"* — Related: zero trust is the *principle* (verify everything, least privilege); defence in depth is the *layering* that implements it. AntKart's per-service validation is both.
+
+**The 60-second answer** — "Zero trust is 'never trust, always verify' — no implicit trust from network location; every request is authenticated and authorised on its own merits, every identity is least-privilege, and you assume breach. AntKart embodies the identity half well: the gateway validates the Entra token and every service validates it again, so bypassing the edge still meets a closed door, and each workload identity has resource-scoped roles — sender or receiver on just the topics it uses, never Manage — with short-lived tokens and no stored secrets. Where it falls short is the network: no private endpoints, no in-cluster mTLS, and Discount decodes but doesn't verify its token, KI-002 — a literal 'always verify' violation. So the honest framing is identity zero-trust, not network zero-trust."
+
+**Read the code** — The per-service validation in `AK.BuildingBlocks/.../Authentication/AuthenticationExtensions.cs` and each host's `UseEntraAuth()`; least-privilege role assignments in `infrastructure/environments/*/role-assignments`; the workload-identity chain in §5; the violation in [KI-002](KNOWN_ISSUES.md); the network gaps in §5.10 and §4.14.
+
+**To reach 🟢** — Without notes, define the "never trust, always verify" principle and its pillars, cite per-service token validation and least-privilege identity as AntKart's zero-trust in action, draw the identity-yes/network-no line honestly, and name KI-002 as a violation.
+
+---
+
+### 13. Threat modelling and STRIDE 🟡
+
+> **Not used in AntKart.** No formal threat model or STRIDE analysis exists, and no ADR discusses one — the choice was never formally recorded. Here because "how do you threat-model a system?" is a standard architecture question, and AntKart's security gaps are effectively an *informal* threat model already.
+
+**What it is** — **Threat modelling** is the structured practice of enumerating how a system could be attacked, *before* it's built or as it evolves — identifying assets, trust boundaries, and threats, then deciding mitigations. **STRIDE** is Microsoft's mnemonic for six threat categories: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosure, **D**enial of service, **E**levation of privilege — a checklist to reason through each trust boundary.
+
+**The problem it solves** — Security bolted on after the fact misses whole classes of attack. Threat modelling makes the analysis deliberate and complete, surfacing risks (an unverified token, an exposed endpoint) as design outputs rather than incident findings.
+
+**How it works** — You draw the system with its **trust boundaries** (where data crosses from less- to more-trusted — the internet→edge, service→database), then walk each boundary through STRIDE asking "how could this be spoofed / tampered / repudiated / disclosed / DoS'd / escalated?", and record a mitigation or an accepted risk for each. A data-flow diagram plus the STRIDE walk is the classic method.
+
+**Why AntKart does not use it** — AntKart has **no formal threat model or STRIDE document**; security was driven by principle (secret-less, zero-trust identity) and by **defects found while building** rather than by an up-front structured analysis. No ADR calls for one. That said, the **KNOWN_ISSUES register is an informal, partial threat model**: KI-002 (Discount unverified token) is a **Spoofing/Elevation** finding; the missing private endpoints (§5.10) are **Information disclosure** exposure; KI-003 (open CORS) is a client-trust weakness; KI-005 (no stock-release compensation) is an availability/integrity gap. So the honest position is that AntKart threat-models *reactively and informally* through its issues register, not *proactively and structurally* through STRIDE — and mapping the known issues to STRIDE categories is exactly how you'd start the formal version.
+
+**Alternatives and the trade-off** — Formal STRIDE up front is thorough but heavyweight and can feel bureaucratic for a small platform; principle-driven security plus a rigorous issues register (AntKart) catches much of the same ground more cheaply but **unsystematically** — it finds what you happen to hit, not what you'd enumerate. Lightweight alternatives (attack trees, LINDDUN for privacy, a simple "evil user story" pass) sit between. AntKart traded structured completeness for pragmatism, at the risk of missing an unhit category.
+
+**Gotchas** —
+- **STRIDE is per-trust-boundary, not per-feature** — the value is walking each boundary; applying it as a generic checklist without the data-flow diagram misses the point.
+- **No threat model means unknown-unknowns** — AntKart's issues register captures what was *encountered*; a category never triggered (e.g. Repudiation — is there an audit trail?) may be silently unaddressed.
+- **"We're zero-trust" is not a threat model** — a principle guides mitigations; it doesn't enumerate threats. Conflating the two overstates the security posture.
+- **Mitigation or accepted-risk — both are valid outputs** — a threat model that only lists threats without a decision per threat isn't finished.
+
+**Interview traps** —
+- *"Did you threat-model this?"* — Not formally — no STRIDE document; security was principle-driven and defect-driven. But the known-issues register is an informal, partial threat model, and I can map its findings to STRIDE.
+- *"Map a known issue to STRIDE."* — Discount's unverified token (KI-002) is Spoofing and Elevation of privilege; missing private endpoints are Information disclosure. Showing the mapping is the depth signal.
+- *"What's a trust boundary here?"* — Internet→ingress, gateway→service, service→database; STRIDE is walked at each.
+- *"What might an informal approach miss?"* — A category never hit while building — e.g. Repudiation/auditing — since the register only captures encountered defects.
+
+**The 60-second answer** — "Threat modelling is enumerating how a system could be attacked before or as you build it — draw the trust boundaries and walk each one through STRIDE: spoofing, tampering, repudiation, information disclosure, denial of service, elevation of privilege — recording a mitigation or an accepted risk per threat. AntKart has no formal STRIDE document; security was principle-driven — secret-less, zero-trust identity — and defect-driven. But the known-issues register is effectively an informal, partial threat model: Discount's unverified token is spoofing and elevation, the missing private endpoints are information disclosure, open CORS is a client-trust weakness. So we threat-model reactively through the issues register rather than proactively through STRIDE, and the honest risk is missing a category we never happened to hit, like repudiation and auditing."
+
+**Where this appears in AntKart** — There is no threat-model document; the nearest artefact is the [Known Issues Register](KNOWN_ISSUES.md), whose entries map onto STRIDE categories (KI-002 → Spoofing/Elevation, private-endpoint gap → Information disclosure, KI-003 → client trust, KI-005 → integrity/availability); the trust boundaries are drawn in the Security C4 render and §5's authentication-chain concepts.
+
+**To reach 🟢** — Without notes, define threat modelling and the six STRIDE letters, explain that AntKart does it informally via the issues register not formally via STRIDE, map at least two known issues to STRIDE categories, and name a category (Repudiation/audit) the informal approach might miss.
+
+---
+
 # 6. Observability
 
 ### 1. The three pillars 🟡
@@ -4280,6 +5166,154 @@ and Discount's second Kestrel listener were all removed) and the direction towar
 
 ---
 
+### 7. Prometheus 🟡
+
+> **Not used in AntKart today.** A self-hosted Prometheus stack was built and then removed ([ADR-025](adr/ADR-025-observability-architecture.md)). It's here because it's the default answer to "how do you do metrics on Kubernetes," and being able to explain the pull model — and why this platform dropped it — is interview-grade.
+
+**What it is** — Prometheus is a time-series database and monitoring system built around a **pull** model: it periodically **scrapes** an HTTP `/metrics` endpoint on each target, stores the numbers as time series identified by a metric name plus labels, and queries them with **PromQL**. Targets are found by **service discovery** (in Kubernetes, via the Prometheus Operator's `ServiceMonitor` CRDs).
+
+**The problem it solves** — You need aggregate, low-cost numeric signals over time — request rate, error ratio, p99 latency, saturation — that logs and traces can't give cheaply. Prometheus stores those as compact time series and lets you alert on trends, not individual events.
+
+**How it works** —
+
+| Piece | Role |
+|---|---|
+| **exporter / `/metrics`** | each target exposes counters, gauges, histograms in text exposition format |
+| **scrape** | Prometheus pulls `/metrics` on an interval (it is not pushed to) |
+| **data model** | `metric{label="value"}` → a stream of (timestamp, float) samples |
+| **PromQL** | query language: `rate(http_requests_total[5m])`, `histogram_quantile(...)` |
+| **service discovery** | `ServiceMonitor`/`PodMonitor` CRDs tell it what to scrape |
+
+**Why AntKart does not use it** — A full `kube-prometheus-stack` (Prometheus + Grafana via Argo CD, per-service `ServiceMonitor`s, a dedicated HTTP/1.1 metrics listener on the gRPC Discount service) was **delivered and then deliberately removed** — the operational complexity (CRDs, cross-namespace discovery, sizing) was disproportionate to a two-node dev cluster, and it presented unearned depth. Logs and traces stayed; metrics are not collected. Recorded in [ADR-025](adr/ADR-025-observability-architecture.md); the h2c-scrape wrinkle was [KI-008](KNOWN_ISSUES.md) (now Withdrawn).
+
+**Alternatives and the trade-off** — Managed metrics (Azure Monitor managed Prometheus, Datadog, Grafana Cloud) trade the operational burden for a standing cost; a push gateway suits short-lived jobs the pull model can't scrape. AntKart's trade was to drop metrics entirely for now and evaluate a managed APM later — honest scope over a half-operated stack.
+
+**Gotchas** —
+- **Pull, not push.** Prometheus scrapes targets; a target that isn't reachable on HTTP/1.1 (like an h2c-only gRPC port) can't be scraped — exactly the Discount problem (KI-008).
+- **Cardinality kills it.** A label with unbounded values (user id, request id) explodes the series count and the memory footprint — the number-one Prometheus outage.
+- **It's for aggregates, not individual events.** Don't reach for it to answer "what happened in *this* request" — that's logs/traces.
+
+**Interview traps** —
+- *"Push or pull, and why does it matter?"* — Pull: Prometheus scrapes `/metrics`. It matters for firewalling (Prometheus initiates), for detecting a down target (a missed scrape), and for what can't be scraped (h2c ports).
+- *"What breaks a Prometheus deployment in production?"* — High-cardinality labels. Naming the failure mode is the ran-it signal.
+- *"You had Prometheus and removed it — why?"* — Operational cost disproportionate to a two-node dev cluster; metrics aren't the platform's most valuable signal. Testing scope judgment (ADR-025).
+- *"metric vs log — when each?"* — Metric for a trend/threshold you alert on; log for the detail of a specific event.
+
+**The 60-second answer** — "Prometheus is a pull-based time-series monitoring system: it scrapes a `/metrics` endpoint on each target on an interval, stores the numbers as series keyed by name and labels, and queries them with PromQL, discovering targets in Kubernetes through ServiceMonitor CRDs. We actually built the full kube-prometheus stack and then removed it — on a two-node dev cluster the CRDs, discovery, and sizing were disproportionate to the value, so we kept logs and traces and dropped metrics, per ADR-025. The two things I'd stress are that it's pull not push — which is why our h2c-only gRPC port couldn't be scraped — and that high-cardinality labels are what blow it up in production."
+
+**Where you would see it** — Any Kubernetes platform doing real metric-based alerting and dashboards: an SRE team with SLOs, a fleet large enough that the operational cost is justified, or anywhere you need `rate()`/`histogram_quantile()` over high-frequency counters.
+
+**To reach 🟢** — Without notes, explain pull-vs-push and the cardinality failure mode, and give AntKart's reason for removing it. Then write a PromQL error-rate expression from memory.
+
+---
+
+### 8. Grafana 🟡
+
+> **Not used in AntKart today.** Removed with the metrics stack; **Azure Managed Grafana was explicitly rejected** ([ADR-025](adr/ADR-025-observability-architecture.md)). Here because "how do you visualise metrics" expects Grafana, and contrasting it with Log Analytics/KQL is a strong answer.
+
+**What it is** — Grafana is a visualisation and alerting front-end that queries one or more **data sources** (Prometheus, Loki, Log Analytics, SQL, …) and renders **dashboards** of panels, plus threshold-based **alerts**. It stores no data itself — it's a query-and-display layer over whatever backend holds the series.
+
+**The problem it solves** — Raw PromQL and log queries don't communicate state at a glance. Grafana turns them into shared, always-on dashboards and turns thresholds into alerts, so a team sees "the p99 is climbing" without running a query.
+
+**How it works** — A dashboard is a set of panels; each panel runs a query against a configured data source (e.g. a PromQL `rate(...)` against Prometheus) and renders it; alert rules evaluate a query on a schedule and fire to a notification channel. It is data-source-agnostic — the same dashboard UI sits over Prometheus, Loki, or Azure Monitor.
+
+**Why AntKart does not use it** — It was deployed with the self-hosted metrics stack and removed alongside it. **Azure Managed Grafana was considered and rejected** in [ADR-025](adr/ADR-025-observability-architecture.md): a standing monthly cost for a platform that is frequently torn down, Azure-locked, and less demonstrable than the GitOps-deployed self-hosted path that was the goal. With metrics gone, there is nothing for Grafana to chart; querying is done ad hoc in Log Analytics with KQL.
+
+**Alternatives and the trade-off** — Log Analytics **Workbooks** (Azure-native dashboards over KQL — what AntKart would use if it dashboarded today), Kibana (over Elasticsearch), or vendor APM UIs (Datadog). Grafana's strength is being backend-agnostic and portable; its cost is being another component to run (or pay for, managed). AntKart's KQL-in-the-portal approach trades polished dashboards for zero standing cost.
+
+**Gotchas** —
+- **Grafana stores nothing.** A "Grafana outage" is usually a data-source problem; the series live in Prometheus/Loki, not Grafana.
+- **Dashboards drift from reality.** A panel querying a metric that was renamed or dropped silently shows "No data" — looks healthy, tells you nothing.
+- **Managed vs self-hosted is a real cost decision**, not a default — exactly the ADR-025 call.
+
+**Interview traps** —
+- *"Where does Grafana keep its data?"* — It doesn't; it queries external data sources. If you think Grafana is a database, you've conflated the layers.
+- *"Grafana vs Log Analytics dashboards — when each?"* — Grafana for backend-agnostic/portable, multi-source; Log Analytics Workbooks when you're all-in on Azure Monitor and want KQL-native. Testing whether you know the Azure-native alternative.
+- *"Why reject Managed Grafana here?"* — Standing cost + Azure lock-in + less demonstrable on a frequently-rebuilt portfolio platform (ADR-025).
+- *"A panel shows 'No data' — is Grafana broken?"* — Usually the query or the source, not Grafana.
+
+**The 60-second answer** — "Grafana is a visualisation and alerting layer that queries external data sources — Prometheus, Loki, Log Analytics — and renders dashboards and alerts; it stores no data itself. We removed it with the metrics stack, and we explicitly rejected Azure Managed Grafana in ADR-025 because it's a standing cost on a platform we tear down constantly, it's Azure-locked, and it's less demonstrable than the GitOps self-hosted path we were showing. Since we don't collect metrics, there's nothing to chart, so we query logs and traces ad hoc in Log Analytics with KQL. If we did dashboard on Azure, the native answer would be Log Analytics Workbooks, not Grafana."
+
+**Where you would see it** — Teams with a metrics backend and a need for shared, at-a-glance dashboards across multiple data sources, or anywhere portability across clouds/backends matters more than Azure-native integration.
+
+**To reach 🟢** — Without notes, explain that Grafana stores nothing and contrast it with Log Analytics Workbooks, and give the ADR-025 reason for rejecting Managed Grafana. Then sketch what one panel's query→render path looks like.
+
+---
+
+### 9. Metrics versus logs versus traces, properly 🟡
+
+**What it is** — The three telemetry signals, but at the depth an architect is examined on: **logs** are discrete events, **traces** are causally-linked spans across services, **metrics** are pre-aggregated numbers over time. The distinctions that matter are **cost and cardinality**, and the **methods** built on each (RED, USE, SLI/SLO/error budgets). The existing *three pillars* concept (§6.1) introduces them; this goes deeper.
+
+**The problem it solves** — Choosing the wrong signal is expensive or blind: logging what should be a metric bankrupts your ingest bill; metricising what should be a log loses the detail you need to debug. Knowing which signal answers which question — and what each costs — is the architect's call.
+
+**How it works** —
+
+| | Logs | Traces | Metrics |
+|---|---|---|---|
+| Shape | discrete events | linked spans (one TraceId) | (timestamp, number) series |
+| Answers | *what happened here* | *where did the time go across services* | *what's the trend/rate/percentile* |
+| Cost | **high** — per event, stored verbatim | medium (often sampled) | **low** — pre-aggregated |
+| Cardinality | unbounded is fine (it's text) | per-request | **must be bounded** (labels) |
+| Method | — | — | **RED** (Rate, Errors, Duration) for services; **USE** (Utilisation, Saturation, Errors) for resources |
+
+**SLI/SLO/error budget:** an **SLI** is a measured indicator (e.g. success ratio), an **SLO** is the target (99.9%), and the **error budget** is the allowed shortfall (0.1%) — spend it on releases, freeze when it's exhausted.
+
+**How AntKart uses it** — AntKart deliberately delivers **two of the three** — logs (Serilog → `ContainerLog`) and traces (OpenTelemetry → `AppRequests`/`AppDependencies`), joined by `TraceId == OperationId` — and **not** metrics ([ADR-025](adr/ADR-025-observability-architecture.md)). So RED/USE dashboards and formal SLOs are not implemented; the platform reasons about "what happened" and "where the time went," not "what's the p99 trend." That absence is itself the honest, examinable position.
+
+**Alternatives and the trade-off** — You could collect all three (complete, but the metrics stack is real operational cost — ADR-025) or lean entirely on traces with metrics derived from spans (span-metrics — fewer moving parts, less precise). AntKart's two-of-three trade buys correlation and low cost at the price of no trend/SLO signal until a managed APM lands.
+
+**Gotchas** —
+- **A metric is cheap; a log line is not.** Metricising per-request detail with a high-cardinality label turns a cheap signal into an expensive one — the most common cost blowout.
+- **RED vs USE isn't interchangeable.** RED describes *services* (request-centric), USE describes *resources* (capacity-centric); mixing them produces dashboards that answer neither question.
+- **An SLO without an error budget is just a number.** The budget is what makes it a decision tool (ship vs freeze).
+
+**Interview traps** —
+- *"Why is a metric cheaper than a log line?"* — It's pre-aggregated to a number per interval; a log is stored verbatim per event. Naming cardinality as the cost driver is the depth signal.
+- *"RED vs USE — which for what?"* — RED (Rate/Errors/Duration) for services; USE (Utilisation/Saturation/Errors) for resources. Confusing them is the tell.
+- *"What's an error budget for?"* — To decide when to ship vs freeze — 100% reliability isn't the goal, the SLO is.
+- *"You have logs and traces but no metrics — what can't you answer?"* — Trends and SLO burn (is the error rate rising over the week?). Testing whether you know what the missing pillar costs.
+
+**The 60-second answer** — "Logs, traces, metrics answer different questions and cost differently. A log is a discrete event stored verbatim — high cost, but unbounded cardinality is fine. A trace links spans across services by one TraceId to show where the time went. A metric is a pre-aggregated number over time — cheap, but its labels must be bounded or the series count explodes. On top of these you get methods: RED — rate, errors, duration — for services; USE — utilisation, saturation, errors — for resources; and SLIs/SLOs with an error budget you spend on releases. AntKart delivers logs and traces, joined by a shared trace id, and deliberately not metrics — so we can answer what happened and where the time went, but not the p99 trend or SLO burn until a managed platform lands."
+
+**Read the code** — Logs: `AK.BuildingBlocks/AK.BuildingBlocks/Logging/SerilogExtensions.cs`; traces: `AK.BuildingBlocks/AK.BuildingBlocks/Observability/OpenTelemetryExtensions.cs`; the two-of-three scope and metrics removal: [ADR-025](adr/ADR-025-observability-architecture.md); the correlation join in [docs/development/5-observability.md](development/5-observability.md).
+
+**To reach 🟢** — Without notes, explain why a metric is cheaper than a log and what bounded cardinality means, distinguish RED from USE, and define an error budget. Then say what AntKart cannot answer without metrics.
+
+---
+
+### 10. The ELK stack 🟡
+
+> **Not used in AntKart's cloud build.** ELK was the *Phase-1 local* logging stack; the cloud platform uses a managed Azure Monitor workspace instead. No ADR names ELK specifically — the recorded decision is the positive one (Serilog → Log Analytics). Here because "how do you centralise logs" often expects ELK.
+
+**What it is** — ELK is a self-hosted log platform: **Elasticsearch** (a distributed search/analytics store), **Logstash** (an ingest/transform pipeline), and **Kibana** (the query and dashboard UI). Modern variants swap Logstash for lightweight **Beats** shippers (the "Elastic Stack"). You run and scale all of it.
+
+**The problem it solves** — Centralising logs from many services into one searchable store with full-text queries and dashboards, without depending on a cloud vendor's logging product — full control and portability.
+
+**How it works** — Services (or Beats/Logstash) ship structured log events into Elasticsearch, which indexes them for full-text and field search; Kibana queries Elasticsearch and renders searches and dashboards. Everything — the cluster, indices, retention, sizing — is yours to operate.
+
+**Why AntKart does not use it** — The earlier **Phase-1 local build** used ELK; the cloud migration replaced it with **Serilog writing JSON to stdout → the Azure Monitor agent → a Log Analytics workspace**, queried with KQL ([ADR-013](adr/ADR-013-key-vault-rbac-and-observability-foundation.md) workspace-based, [ADR-025](adr/ADR-025-observability-architecture.md)). There is **no ADR that names ELK as a rejected option** — the decision recorded is the positive managed-workspace choice; ELK was simply not carried into the cloud build (a managed store means no Elasticsearch cluster to run). Say that plainly rather than inventing a rejection rationale.
+
+**Alternatives and the trade-off** — A managed logging workspace (Azure Monitor/Log Analytics — AntKart's choice), a managed Elastic (Elastic Cloud), or Grafana **Loki** (label-indexed, cheaper than full-text). ELK's strength is powerful full-text search and portability; its cost is operating a stateful, memory-hungry cluster. AntKart traded that operational burden for a managed workspace it doesn't run.
+
+**Gotchas** —
+- **Elasticsearch is a stateful cluster to operate** — shards, heap sizing, index lifecycle, split-brain. It's the heaviest part of the stack, and the reason many teams move to managed logging.
+- **Index mapping explosions** — dynamically mapping every JSON field can blow up the index; you curate mappings.
+- **"ELK" often really means Elastic Stack with Beats** — Logstash is frequently replaced by Filebeat; conflating them dates you.
+
+**Interview traps** —
+- *"What are the three parts and what does each do?"* — Elasticsearch (store/search), Logstash (ingest/transform), Kibana (UI). Getting the roles right is the baseline.
+- *"Why would you *not* self-host ELK?"* — Elasticsearch is a stateful cluster with real operational cost; a managed workspace removes it. AntKart's implicit choice.
+- *"ELK vs Loki — the difference?"* — Elasticsearch full-text indexes content (powerful, heavy); Loki indexes only labels and stores log bodies cheaply (lighter, less flexible search). Testing modern awareness.
+- *"Is there an ADR rejecting ELK here?"* — No — the recorded decision is the positive Log Analytics choice; ELK was the Phase-1 stack, dropped without a dedicated ADR. Honesty over a manufactured rationale.
+
+**The 60-second answer** — "ELK is a self-hosted log platform — Elasticsearch stores and searches, Logstash ingests and transforms, Kibana visualises — and you run all of it, usually with Beats replacing Logstash these days. Our Phase-1 local build used it; the cloud platform replaced it with Serilog writing JSON to stdout, collected by the Azure Monitor agent into a Log Analytics workspace we query with KQL. There's no ADR that rejects ELK by name — the recorded decision is the positive managed-workspace one — so the honest framing is that ELK was the local stack and we didn't carry a stateful Elasticsearch cluster into the cloud. The trade is full-text power and portability versus operating a heavy stateful cluster."
+
+**Where you would see it** — Teams that want powerful full-text log search with full control and no cloud-logging dependency, or that are multi-cloud/on-prem where a single-vendor logging product isn't an option.
+
+**To reach 🟢** — Without notes, name the three components and their roles, contrast Elasticsearch with Loki, and state honestly that no ADR rejects ELK — the recorded choice is Log Analytics. Then explain why a managed workspace removes the heaviest part.
+
+---
+
 # 7. GitOps
 
 ### 1. GitOps principles and pull versus push 🟡
@@ -4685,6 +5719,121 @@ flowchart TD
 
 ---
 
+### 6. Flux 🟡
+
+> **Not used in AntKart.** AntKart chose **Argo CD** ([ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md)); Flux is the other major GitOps engine and is **not named as a rejected option** in the ADR, so the honest framing is that Argo was the positive choice and Flux simply wasn't taken. Here because "Argo or Flux?" is the standard GitOps question.
+
+**What it is** — **Flux** (Flux CD, a CNCF project) is a GitOps engine that continuously reconciles a cluster to manifests in Git — the same core job as Argo CD. It's built from a set of **controllers** (source-controller, kustomize-controller, helm-controller, image-automation) and is **Git-first and CLI/CRD-driven**, with **no built-in UI** by default (it's often paired with Weave GitOps or Capacitor for visualisation).
+
+**The problem it solves** — Pull-based, self-healing continuous delivery: the cluster reconciles itself to Git rather than a pipeline pushing to it — identical in intent to Argo CD, differing in architecture and ergonomics.
+
+**How it works** — Flux's **source-controller** fetches Git/Helm/OCI sources; **kustomize-** and **helm-controllers** apply them; **image-automation** controllers can write new image tags back to Git. It's a composable set of controllers you enable as needed, driven by CRDs (`GitRepository`, `Kustomization`, `HelmRelease`) with the CLI (`flux`) rather than a first-class web UI.
+
+**Why AntKart does not use it** — AntKart chose **Argo CD** for GitOps ([ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md)) — its `Application`/`ApplicationSet` model, its **web UI** for visualising sync state, and its app-of-apps pattern fit the goal of a *demonstrable* delivery platform. **Flux was not formally weighed** in an ADR — Argo was the positive choice — so the accurate statement is that Flux is the road not taken, not a considered rejection. Its main practical difference (no default UI, controller-composed) would have been a downside for a platform whose Argo dashboard is part of what it shows.
+
+**Alternatives and the trade-off** — Argo CD (AntKart) is UI-centric, application-centric, and easy to demo; Flux is lighter, more composable, more CLI/GitOps-purist, and integrates image automation natively — great for teams who want everything in Git with no UI. Both are CNCF-graduated and production-proven; the choice is ergonomics and model, not capability. AntKart valued the visualisation and application model.
+
+**Gotchas** —
+- **Argo vs Flux is ergonomics, not capability** — both do pull-based reconciliation; picking one over "it's more powerful" misframes it.
+- **Flux has no default UI** — its purist Git/CLI model is a feature to some, a gap to others; AntKart wanted the Argo dashboard.
+- **Flux's image-automation writes back to Git** — a native feature that overlaps with what AntKart does via a CI tag-bump step; different placement of the same idea.
+- **Don't claim an ADR rejected Flux** — it didn't name Flux; Argo was chosen positively.
+
+**Interview traps** —
+- *"Argo or Flux, and why?"* — Argo CD (ADR-023) for its application model and web UI on a platform meant to be demonstrated; Flux is the equally-valid, more composable, UI-less alternative — not formally rejected, just not taken.
+- *"Architectural difference?"* — Flux is a set of controllers (source/kustomize/helm/image-automation) driven by CRDs and CLI; Argo is an application-centric server with a UI.
+- *"Does Flux have a UI?"* — Not by default; you add Weave GitOps/Capacitor. Argo ships one.
+- *"Which is more powerful?"* — Neither, really — both reconcile Git to cluster; it's a model/ergonomics choice.
+
+**The 60-second answer** — "Flux is the other major GitOps engine — a CNCF set of controllers (source, kustomize, helm, image-automation) that reconciles a cluster to Git, the same job as Argo CD but composable, CLI- and CRD-driven, with no default UI. We use Argo CD, chosen in ADR-023 for its application model, app-of-apps pattern, and web dashboard, because the platform is meant to be demonstrated and the Argo UI is part of that. Flux wasn't formally rejected — Argo was the positive choice — so it's the road not taken. The honest framing is that Argo versus Flux is ergonomics, not capability: both do pull-based self-healing delivery, and Flux's UI-less, controller-composed model would just have been a poorer fit for showing sync state."
+
+**Where you would see it** — Teams wanting a pure Git/CLI GitOps model with no UI dependency, native image-update automation, or a lightweight composable controller set — common in platform teams that treat the UI as optional and Git as the single interface.
+
+**To reach 🟢** — Without notes, describe Flux's controller architecture and no-default-UI, state Argo was chosen in ADR-023 for its UI/application model while Flux wasn't formally rejected, and frame the choice as ergonomics not capability.
+
+---
+
+### 7. Kustomize versus Helm 🟡
+
+> **Partly recorded.** AntKart uses **Helm** (one generic chart parameterised per service); **Kustomize is not used**, and while the Helm choice is embodied in the repo, no ADR explicitly compares it against Kustomize — so the Helm decision is real but the head-to-head was never formally minuted.
+
+**What it is** — Two ways to manage Kubernetes manifests across services/environments. **Helm** is a **templating + packaging** tool: a chart with parameterised templates rendered against `values.yaml`, plus release management. **Kustomize** is **template-free overlays**: a `base` of plain manifests and per-environment `overlay` patches merged declaratively — no templating language, and it's built into `kubectl`.
+
+**The problem it solves** — Six services (and multiple environments) shouldn't each hand-maintain near-identical YAML. Both tools remove the duplication; the difference is *how* — parameterised templates (Helm) versus patch overlays on real manifests (Kustomize).
+
+**How it works** —
+
+| | Helm | Kustomize |
+|---|---|---|
+| Mechanism | Go templates + `values.yaml` → rendered manifests | `base` manifests + `overlay` patches, merged |
+| Templating | yes (a language) | none (declarative patches) |
+| Packaging/release | charts, versioning, `helm rollback` | none — just YAML |
+| Env differences | different `values` files | different overlays |
+| Tooling | separate `helm` CLI | built into `kubectl -k` |
+
+**How AntKart uses it** — AntKart uses **Helm**: **one generic chart** (`deploy/helm/antkart-service`) rendered per service via `helm/values/*.yaml` (six value files — products/cart/discount/order/payments/gateway), so all six services share a single templated chart and differ only by values. Argo CD renders that chart. **Kustomize is not used** anywhere in the tree. The one-chart-many-values design is precisely Helm's strength (parameterised templating), and no ADR pits it against Kustomize — the Helm choice is expressed in the repo structure, not in a formal comparison document, so honestly it was a default rather than a minuted head-to-head.
+
+**Alternatives and the trade-off** — Helm (AntKart) gives templating power, packaging, versioned releases, and rollback — ideal for "one chart, N services" — at the cost of Go-template complexity (logic in YAML, whitespace pain). Kustomize is simpler and template-free (patches on real, valid manifests, no rendering step) but has no packaging/release story and gets awkward when differences are parameter-like rather than patch-like. They also **compose** — Argo and Flux both support Helm *and* Kustomize, and you can Kustomize a rendered chart. AntKart's parameterised-per-service need fit Helm cleanly.
+
+**Gotchas** —
+- **Helm templates aren't YAML — they're text templates that produce YAML** — indentation and `{{ }}` logic are a notorious footgun; a rendered-output check (`helm template`) is essential.
+- **Kustomize has no variables by design** — if you find yourself wanting parameters, you want Helm; forcing patches to act like parameters is the anti-pattern.
+- **They're not mutually exclusive** — "Helm vs Kustomize" is a false binary at the tooling level; GitOps engines support both and can layer them.
+- **One chart, many values is the Helm sweet spot** — AntKart's exact pattern; it's where Helm clearly beats Kustomize.
+
+**Interview traps** —
+- *"Helm or Kustomize — what did you use and why?"* — Helm: one generic chart parameterised per service via values files — the templating/packaging model fits six near-identical services. Kustomize isn't used; the comparison wasn't formally minuted.
+- *"Core difference?"* — Helm templates with a language and packages/versions releases; Kustomize patches real manifests with no templating and is built into kubectl.
+- *"When is Kustomize the better pick?"* — Few environments differing by small patches, wanting template-free valid manifests and no separate tooling.
+- *"Can you use both?"* — Yes — they compose; Argo/Flux support both and you can overlay Kustomize on a rendered chart.
+
+**The 60-second answer** — "Helm is templating plus packaging — a chart of parameterised templates rendered against values files, with versioned releases and rollback; Kustomize is template-free overlays — a base of plain manifests with per-environment patches, built into kubectl. AntKart uses Helm: one generic chart rendered per service through six values files, so all six services share a single templated chart and differ only by values, and Argo CD renders it. That one-chart-many-values pattern is exactly Helm's sweet spot. Kustomize isn't used, and honestly no ADR formally compared them — Helm was the default the repo embodies. The nuance is they're not mutually exclusive: GitOps engines support both and you can layer Kustomize on a rendered chart. Helm's footgun is that templates are text producing YAML, so I always check the rendered output."
+
+**Read the code** — The single chart `deploy/helm/antkart-service/` and its per-service `deploy/helm/values/*.yaml` (six files); how Argo CD references the chart in `deploy/argocd/`; §7's Argo CD and §4's Helm concepts; there is no Kustomize in the tree (that's the point).
+
+**To reach 🟢** — Without notes, contrast templating (Helm) with patch-overlays (Kustomize), state AntKart's one-chart-many-values Helm design, note they compose rather than exclude, and say honestly the head-to-head wasn't formally recorded.
+
+---
+
+### 8. Multi-cluster and multi-tenancy in GitOps 🟡
+
+> **Not used in AntKart.** The platform is a **single cluster** with per-environment isolation via **separate Terraform environments**, not GitOps multi-cluster or in-cluster multi-tenancy. No ADR discusses multi-cluster GitOps — the choice was never formally recorded. Here because "how do you manage many clusters / many tenants with GitOps?" is a scaling question.
+
+**What it is** — Two scaling dimensions of GitOps. **Multi-cluster** — one GitOps control plane (e.g. one Argo CD) delivering to *many* clusters (dev/qa/prod, or regional clusters), registering each as a target. **Multi-tenancy** — many teams/tenants sharing GitOps infrastructure safely, isolated by **projects, RBAC, and namespaces** so one tenant can't affect another's apps or sync.
+
+**The problem it solves** — At scale you have more than one cluster and more than one team. Multi-cluster GitOps gives a single pane of delivery across clusters; multi-tenancy lets a shared Argo/Flux serve many teams with least-privilege isolation instead of one cluster per team or a free-for-all.
+
+**How it works** — Multi-cluster: Argo CD registers external cluster credentials and targets `Application`s at named clusters; **ApplicationSets** generate apps across clusters from a generator. Multi-tenancy: Argo **AppProjects** scope which repos/clusters/namespaces a set of apps may touch, with RBAC restricting who can sync what — tenants are walled off by project + namespace + RBAC.
+
+**How AntKart uses it** — AntKart is deliberately **single-cluster, single-tenant**, but it uses the **primitives** that would scale to multi-tenancy:
+- **One cluster** per environment; environments are isolated at the **infrastructure** layer (separate Terraform/Terragrunt trees, `environments/dev` and `environments/qa`), **not** by one Argo CD spanning clusters. qa was built and destroyed, never run alongside dev under one control plane.
+- **A least-privilege `AppProject`** already scopes the Argo applications (`deploy/argocd/` — a restricted AppProject + ApplicationSet + six `applications/ak-*.yaml`), which is exactly the **multi-tenancy building block**, used here for structure/least-privilege rather than to separate tenants.
+- **Namespaces** partition the single cluster (four namespaces), the other multi-tenancy primitive.
+
+So AntKart demonstrates the *mechanisms* (AppProject, ApplicationSet, namespaces) at single-cluster scale; it does **not** do GitOps multi-cluster delivery or serve multiple tenants, and no ADR weighed doing so — it was never needed.
+
+**Alternatives and the trade-off** — Single cluster + separate Terraform environments (AntKart) keeps blast radius and cost low and is simple to reason about, but doesn't exercise cross-cluster delivery; one Argo CD across many clusters centralises delivery at the cost of a control plane whose compromise reaches every cluster; a cluster-per-tenant is strongly isolated but expensive. AntKart chose environment isolation at the IaC layer over GitOps multi-cluster — appropriate for a cost-controlled dev platform.
+
+**Gotchas** —
+- **Environment isolation via Terraform ≠ GitOps multi-cluster** — AntKart separates dev/qa by *infrastructure trees*, not by one Argo targeting multiple clusters; don't conflate them.
+- **A multi-cluster Argo is a juicy blast radius** — the control plane holds credentials to every cluster; its compromise is fleet-wide.
+- **Multi-tenancy is enforced by AppProject + RBAC + namespaces together** — namespaces alone don't isolate Argo apps; the AppProject scoping is the real wall.
+- **ApplicationSet is the multiplier** — it generates apps across clusters/tenants; without it, multi-cluster is manual per-app toil.
+
+**Interview traps** —
+- *"How do you manage multiple clusters with GitOps?"* — AntKart doesn't — it's single-cluster, and environments are isolated by separate Terraform trees, not one Argo across clusters. I'd then describe how Argo *would* do it (registered clusters + ApplicationSets).
+- *"Do you use Argo AppProjects?"* — Yes — a least-privilege AppProject scopes the apps; it's the multi-tenancy primitive, used here for structure not tenant separation.
+- *"How would you add a prod cluster?"* — Register it in Argo and target apps via an ApplicationSet, or (AntKart's actual model) stand up a separate environment tree — a real design fork.
+- *"What's the risk of one Argo for all clusters?"* — Blast radius — it holds credentials to every cluster.
+
+**The 60-second answer** — "Multi-cluster GitOps is one control plane — say one Argo CD — delivering to many clusters, and multi-tenancy is many teams sharing GitOps safely, isolated by AppProjects, RBAC, and namespaces. AntKart is deliberately single-cluster and single-tenant: environments are isolated at the infrastructure layer with separate Terraform trees for dev and qa, not by one Argo spanning clusters. But it uses the primitives that would scale — a least-privilege AppProject, an ApplicationSet, and namespaces — at single-cluster scale, for structure and least privilege rather than tenant separation. No ADR weighed multi-cluster; it was never needed. The nuance is that Terraform environment isolation isn't GitOps multi-cluster, and a single Argo across many clusters is a fleet-wide blast radius because it holds every cluster's credentials."
+
+**Read the code** — The least-privilege `AppProject`, `ApplicationSet`, and `applications/ak-*.yaml` in `deploy/argocd/`; the separate environment trees `infrastructure/environments/dev` and `/qa`; the four namespaces in the Helm/deploy config; §7's Argo CD concepts and §2's environments-vs-workspaces concept (§2.11).
+
+**To reach 🟢** — Without notes, define multi-cluster vs multi-tenancy, state AntKart is single-cluster with Terraform-level environment isolation, identify the AppProject/ApplicationSet/namespaces as the multi-tenancy primitives it already uses, and name the single-Argo blast-radius risk.
+
+---
+
 # 8. DevOps
 
 ### 1. CI/CD pipeline design 🟡
@@ -5030,5 +6179,385 @@ SHA tags). Decision: [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md).
 
 ---
 
-_End of syllabus. Seventy concepts, all written to the full template. Every tag starts 🟡 — the writing is
-done; the proving is yours. When you change the last one to 🟢, this platform is yours to explain to anyone._
+### 6. Azure DevOps Pipelines 🟡
+
+> **Not used in AntKart.** **Explicitly rejected** in [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md) in favour of GitHub Actions with OIDC. Here because Azure DevOps is still the enterprise default and "why GitHub Actions over Azure DevOps?" is a near-certain question for an Azure platform.
+
+**What it is** — **Azure DevOps** is Microsoft's end-to-end DevOps suite; **Azure Pipelines** is its CI/CD engine, defining YAML (or classic) pipelines with stages/jobs/tasks, service connections to Azure, environments with approvals, and a large task marketplace. It's the Microsoft-native alternative to GitHub Actions.
+
+**The problem it solves** — Building, testing, and deploying with first-party Azure integration, mature release-management (approvals, gates, environments), and enterprise governance — the incumbent choice in many Microsoft shops.
+
+**How it works** — A pipeline YAML defines triggers, stages, and jobs run on Microsoft-hosted or self-hosted agents; **service connections** authenticate to Azure (historically a service-principal secret, now workload-identity federation too); environments add approvals and checks. It's a full ALM suite (Boards, Repos, Artifacts) around the pipeline.
+
+**Why AntKart does not use it** — [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md) chose **GitHub Actions with OIDC federation** and rejected Azure DevOps (Alternative 1): the code already lives on GitHub, so Actions keeps CI/CD **next to the source** with no second system; **OIDC federated credentials** give secret-less auth to Azure without a stored service-principal secret; and Actions' ecosystem fit the goal. The ADR explicitly acknowledges **"Azure DevOps remains common in enterprise"** — so this is a deliberate, recorded trade, not a claim that Azure DevOps is inferior.
+
+**Alternatives and the trade-off** — Azure DevOps offers richer built-in release management (approvals, gates, environments) and a mature ALM suite, but it's a **separate system** from where AntKart's code lives and historically leaned on service-principal secrets; GitHub Actions (AntKart) co-locates CI/CD with the repo and does secret-less OIDC, at the cost of less-mature native release-gating (branch protection + Argo CD fill that role). For a GitHub-hosted platform wanting secret-less Azure auth, Actions won.
+
+**Gotchas** —
+- **Both can now do OIDC** — Azure DevOps added workload-identity federation too; the "secret-less" edge is smaller than it once was, though co-location with the repo remains AntKart's reason.
+- **Azure DevOps ≠ GitHub, even under one owner** — they're distinct products; "Microsoft owns both" doesn't make them interchangeable.
+- **Release management differs** — Azure DevOps has first-class environments/approvals; AntKart gets gating from branch protection + GitOps, not a pipeline release stage.
+
+**Interview traps** —
+- *"Why GitHub Actions over Azure DevOps?"* — Code's on GitHub, so CI/CD sits with the source; OIDC gives secret-less Azure auth; ADR-022 — which explicitly notes Azure DevOps is still common in enterprise. A trade, not a verdict.
+- *"Isn't Azure DevOps better for Azure?"* — Tighter native release management, yes; but not enough to run a second system away from the repo, and Actions does secret-less OIDC too.
+- *"Where's your release-approval gate then?"* — Branch protection's required checks plus Argo CD auto-sync — GitOps, not a pipeline environment gate.
+- *"Does Azure DevOps support secret-less auth?"* — Yes, now — via workload-identity federation; the differentiator is co-location, not solely secrets.
+
+**The 60-second answer** — "Azure Pipelines is Azure DevOps's CI/CD engine — YAML stages and jobs, service connections to Azure, environments with approvals — the Microsoft-native alternative to GitHub Actions. We rejected it in ADR-022 and chose GitHub Actions with OIDC: our code is on GitHub, so CI/CD lives next to the source instead of in a second system, and OIDC federated credentials give secret-less auth to Azure. The ADR is honest that Azure DevOps is still the enterprise default — so it's a deliberate trade. The nuance is that Azure DevOps now supports OIDC too, so the real differentiator is co-location with the repo, and our release gating comes from branch protection plus Argo CD rather than a pipeline environment gate."
+
+**Where you would see it** — Microsoft-centric enterprises standardised on the Azure DevOps ALM suite (Boards, Repos, Pipelines, Artifacts) end to end, teams wanting first-class release management — environments, approvals, and gates — as a built-in pipeline feature, or organisations whose source is not on GitHub. (To contrast it with what AntKart chose instead, read the 12 workflows in `.github/workflows/` and their OIDC auth — [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md).)
+
+**To reach 🟢** — Without notes, give the co-location + OIDC reason for Actions over Azure DevOps, note Azure DevOps now does OIDC too so co-location is the real edge, and explain where AntKart's release gating actually lives.
+
+---
+
+### 7. Jenkins and the push model 🟡
+
+> **Not used in AntKart.** No ADR names Jenkins — ADR-022 chose GitHub Actions over Azure DevOps but didn't weigh Jenkins, so the choice was never formally recorded against it. Here because Jenkins is the classic CI server and it's the cleanest way to explain **push** deployment versus AntKart's **pull** (GitOps) model.
+
+**What it is** — **Jenkins** is the long-standing open-source automation server — pipelines defined in a `Jenkinsfile` (Groovy), run on a controller + agents, with a vast plugin ecosystem. Architecturally it typifies the **push model of deployment**: the CI/CD server holds cluster credentials and **pushes** changes *into* the target (`kubectl apply`, `helm upgrade`) at the end of a pipeline.
+
+**The problem it solves** — Self-hosted, highly-extensible automation with total control — no dependency on a SaaS CI provider, and a plugin for virtually everything. For years it was the default CI server before hosted runners and GitOps.
+
+**How it works (and the push/pull contrast)** —
+
+```mermaid
+flowchart TB
+  subgraph P["Push model - Jenkins"]
+    J["Jenkins pipeline"] -->|"holds kubeconfig · pushes"| KP["Cluster"]
+  end
+  subgraph G["Pull model - AntKart"]
+    CI["GitHub Actions - builds image, bumps tag in Git"] --> Git["Git"]
+    Argo["Argo CD in cluster"] -->|pulls desired state| Git
+    Argo --> KG["Cluster"]
+  end
+  classDef cicd fill:#639922,stroke:#3E5F16,color:#fff
+  classDef service fill:#1D9E75,stroke:#0E5C43,color:#fff
+  class J,CI,Argo cicd
+  class KP,KG,Git service
+```
+
+Push: the pipeline authenticates *to* the cluster and applies — the cluster's credentials live in the CI system. Pull: CI only writes to Git; an in-cluster agent (Argo CD) pulls and applies — CI never holds cluster credentials.
+
+**Why AntKart does not use it** — AntKart uses **GitHub Actions for CI** (build/test/image) and **Argo CD for CD** — a **pull** model ([ADR-022](adr/ADR-022-cicd-github-actions-oidc.md), [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md), [ADR-024](adr/ADR-024-cd-gitops-write-contention.md)): CI builds an image, pushes it to ACR (secret-less OIDC), and **bumps the image tag in Git**; Argo CD, running *in* the cluster, pulls that desired state and syncs. **CI never has cluster credentials** — nothing is pushed to the cluster. Jenkins was **never weighed in an ADR**; the platform went straight to hosted Actions + GitOps, so the honest statement is the choice against Jenkins was never formally made. The deeper point is the **model**: AntKart deliberately chose pull over push, and Jenkins is the canonical push example.
+
+**Alternatives and the trade-off** — Jenkins (push) gives maximum control and plugins but you **operate the server**, and its pipelines **hold cluster credentials** — a bigger attack surface and blast radius. Hosted Actions + GitOps pull (AntKart) means no CI server to run and **no cluster credentials in CI**, at the cost of depending on GitHub and Argo. The pull model's security win — CI can't touch the cluster directly — is the core reason.
+
+**Gotchas** —
+- **Push vs pull is a security boundary, not a style** — in push, a compromised CI system owns the cluster (it holds the kubeconfig); in pull, CI can only write to Git. This is the substantive difference.
+- **Jenkins is infrastructure you run** — controller, agents, plugin CVEs, upgrades; "just use Jenkins" hides real operational cost.
+- **Pull needs an in-cluster agent** — Argo CD *is* that agent; without something pulling, GitOps doesn't happen.
+- **CI still pushes the *image*** — pull model refers to *cluster deployment*; AntKart's CI does push an image to the registry. Don't overstate "nothing is pushed."
+
+**Interview traps** —
+- *"Push or pull deployment, and why?"* — Pull (GitOps): CI writes to Git, Argo CD in the cluster pulls and applies, so CI holds no cluster credentials. Jenkins is the classic push model where the pipeline pushes with a kubeconfig.
+- *"What's the security difference?"* — In push, compromising CI compromises the cluster; in pull, CI can only affect Git. The blast radius is the point.
+- *"Did you consider Jenkins?"* — No formal evaluation — we went straight to hosted Actions + Argo CD; Jenkins isn't in any ADR.
+- *"Is nothing pushed in GitOps?"* — The image is pushed to the registry; it's the *cluster deployment* that's pull-based via Argo.
+
+**The 60-second answer** — "Jenkins is the classic self-hosted CI server, and it's the cleanest example of the push model: the pipeline holds a kubeconfig and pushes changes into the cluster with kubectl or helm. AntKart uses the opposite — GitHub Actions for CI and Argo CD for CD, a pull model: CI builds the image, pushes it to ACR secret-lessly, and bumps the image tag in Git, and Argo CD running inside the cluster pulls that desired state and syncs. The key is that CI never holds cluster credentials, so a compromised pipeline can only affect Git, not the cluster — that blast-radius reduction is why we chose pull. Jenkins was never formally weighed; we went straight to hosted Actions plus GitOps. One precision: the image is still pushed to the registry — it's the deployment that's pull-based."
+
+**Where you would see it** — Self-hosted or on-prem CI where a team wants total control and the vast plugin ecosystem, air-gapped or regulated environments that can't use a SaaS runner, legacy pipelines predating hosted CI and GitOps, or any shop still on the push model where the CI server holds cluster credentials. (To contrast it with AntKart's pull model, read the CI/CD split in `.github/workflows/` and the Argo CD pull in `deploy/argocd/` — [ADR-024](adr/ADR-024-cd-gitops-write-contention.md).)
+
+**To reach 🟢** — Without notes, explain push (Jenkins holds the kubeconfig) versus pull (Argo pulls from Git), name the blast-radius/security difference as the substance, state Jenkins was never formally weighed, and correct "nothing is pushed" (the image is).
+
+---
+
+### 8. Deployment strategies — rolling, blue/green, canary, feature flags 🟡
+
+> **Partly present.** AntKart gets **rolling updates** by default from Kubernetes Deployments; **blue/green, canary, and feature flags are not implemented**, and no ADR discusses them — so the advanced strategies were never formally chosen or rejected.
+
+**What it is** — The ways to release a new version while managing risk. **Rolling** — replace old pods with new gradually (the Kubernetes default). **Blue/green** — run two full environments, cut traffic from old (blue) to new (green) at once, roll back by switching back. **Canary** — send a small % of traffic to the new version, watch, then ramp. **Feature flags** — deploy code dark and toggle features on at runtime, decoupling deploy from release.
+
+**The problem it solves** — Shipping a new version is the riskiest moment; these strategies control **blast radius and rollback speed** — how many users see a bad release and how fast you can undo it — trading infrastructure cost and complexity for safety.
+
+**How it works** —
+
+| Strategy | Mechanism | Rollback | Cost |
+|---|---|---|---|
+| Rolling (AntKart) | replace pods incrementally (`maxSurge`/`maxUnavailable`) | roll forward / redeploy prior image | low — built into Deployments |
+| Blue/green | two envs, switch traffic wholesale | flip traffic back | high — double the infra |
+| Canary | route small % to new, ramp up | drop the canary | medium — needs traffic-splitting |
+| Feature flags | deploy dark, toggle at runtime | turn the flag off | app complexity + a flag system |
+
+**How AntKart uses it** — AntKart uses **rolling updates only** — the Kubernetes Deployment default, driven by Argo CD syncing a new image tag: pods are replaced incrementally, and "rollback" is redeploying the previous immutable SHA-tagged image (Argo/Git revert). It does **not** do blue/green (no duplicate environments behind a switch), **canary** (no traffic-splitting — ingress-nginx routes 100% to the current version, and there's no mesh/Argo Rollouts to weight traffic), or **feature flags** (no flag system; deploy = release). No ADR weighed these — rolling was the default that came with Deployments, so the advanced strategies were simply never adopted. Honest gap: releases are all-or-nothing per service, mitigated only by immutable tags making rollback a clean redeploy.
+
+**Alternatives and the trade-off** — Rolling (AntKart) is free and built-in but offers no traffic-level canary and a brief mixed-version window; blue/green gives instant switch and rollback at double the infra cost; canary minimises blast radius but needs traffic-splitting (a mesh, or **Argo Rollouts**); feature flags decouple deploy from release at the cost of flag-management and dead-code cleanup. For a cost-controlled dev platform, rolling is the pragmatic floor; canary via Argo Rollouts would be the natural next step.
+
+**Gotchas** —
+- **Rolling means a mixed-version window** — old and new pods serve simultaneously mid-rollout, so a new version must be **backward-compatible** with in-flight requests and the shared database schema. This is the subtle rolling-update trap.
+- **Blue/green doubles infrastructure** — you pay for two full environments; on a cost-controlled platform that's a real objection.
+- **Canary needs traffic-splitting you don't get for free** — plain ingress/Deployments can't weight traffic; you need a mesh or Argo Rollouts. Claiming canary without that mechanism is wrong.
+- **Feature flags are deploy≠release** — the whole point is toggling at runtime; they're an app concern, not a Kubernetes one, and flags left on forever become debt.
+
+**Interview traps** —
+- *"What deployment strategy do you use?"* — Rolling — the Kubernetes Deployment default via Argo; rollback is redeploying the previous immutable SHA image. No blue/green, canary, or flags.
+- *"How would you add canary here?"* — Argo Rollouts or a service mesh to weight traffic — plain ingress can't split it. Naming the missing mechanism is the depth signal.
+- *"What's the risk in a rolling update?"* — The mixed-version window — new and old serve at once, so changes must be backward-compatible with in-flight requests and the DB schema.
+- *"Deploy vs release — difference?"* — Feature flags separate them: deploy the code dark, release by toggling. AntKart's deploy *is* release.
+
+**The 60-second answer** — "The strategies trade cost for blast-radius control: rolling replaces pods incrementally — the Kubernetes default; blue/green runs two full environments and cuts over wholesale; canary sends a small percentage to the new version and ramps; feature flags deploy code dark and toggle at runtime. AntKart uses rolling only — Argo syncs a new image tag, pods replace incrementally, and rollback is redeploying the previous immutable SHA image. No blue/green, canary, or flags, and no ADR weighed them — rolling came free with Deployments. The subtle trap is that rolling has a mixed-version window, so a release must be backward-compatible with in-flight requests and the shared schema. To add canary here I'd need Argo Rollouts or a mesh, because plain ingress can't split traffic."
+
+**Read the code** — The Deployment rollout config in `deploy/helm/antkart-service/templates/deployment.yaml` (`maxSurge`/`maxUnavailable`); Argo CD sync in `deploy/argocd/`; the immutable SHA tags in `.github/workflows/` (rollback mechanism); KI-004 on mutable tags; §7's sync/self-heal and §8's image-tag concepts.
+
+**To reach 🟢** — Without notes, give each strategy's mechanism/rollback/cost, state AntKart is rolling-only with SHA-image rollback, name the mixed-version-window backward-compatibility trap, and say canary would need Argo Rollouts or a mesh.
+
+---
+
+### 9. Supply chain security — SBOM, signing, provenance, scanning 🟡
+
+> **Partly present.** AntKart runs **Trivy image scanning** as a required CI check; **SBOM generation, image signing, and provenance attestation are not implemented**, and no ADR discusses them — so the rest of the supply-chain story was never formally adopted.
+
+**What it is** — Securing everything that goes *into* a deployed artifact, not just the running system. **Scanning** — checking images/dependencies for known CVEs. **SBOM** (Software Bill of Materials) — a machine-readable inventory of every component in an artifact. **Signing** — cryptographically signing images (e.g. Sigstore **cosign**) so consumers can verify authenticity. **Provenance/attestation** — a verifiable record of *how and where* an artifact was built (SLSA), proving it came from your pipeline unmodified.
+
+**The problem it solves** — Attacks increasingly target the *build* and *dependencies* (SolarWinds, compromised packages), not the running app. Supply-chain controls let you answer "what's in this image, is it vulnerable, did we really build it, and has it been tampered with?" — trust in the artifact itself.
+
+**How it works** — Scanning tools (Trivy, Grype) diff image contents against CVE databases in CI. SBOM generators (Syft, `docker sbom`) emit a component list (SPDX/CycloneDX). **cosign** signs the image digest and stores the signature alongside it; verification checks the signature before deploy. **SLSA provenance** attaches a signed statement of the build's source, builder, and steps, verifiable by an admission controller or policy.
+
+**How AntKart uses it** — AntKart does the **scanning** pillar: **Trivy** is one of the **four required branch-protection checks** (build-test, unit+integration tests, SonarCloud, Trivy) — a vulnerable image blocks the merge ([ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md)). **SonarCloud** adds static analysis of the source. What AntKart does **not** do: **no SBOM** is generated, images are **not signed** (no cosign), and there is **no provenance/attestation** (no SLSA) — nothing verifies at deploy time that an image was built by AntKart's pipeline and untampered. Combined with **immutable commit-SHA tags** (integrity of *which* image, KI-004) there's a partial story, but signing/provenance — proving *authenticity* — is the gap, and no ADR weighed it. So: CVE scanning and static analysis yes; SBOM, signing, provenance no.
+
+**Alternatives and the trade-off** — Scanning alone (AntKart) catches known-vulnerable images cheaply but proves nothing about authenticity — a swapped image with no CVEs passes; adding cosign signing + admission-time verification closes the "is this really our image" gap at the cost of key management and a verifying admission controller; SBOMs add inventory for fast CVE response at the cost of generation/storage. AntKart bought the cheap, high-value scanning gate and deferred the cryptographic-authenticity layer.
+
+**Gotchas** —
+- **Scanning ≠ signing** — Trivy tells you an image *has no known CVEs*; it says nothing about *who built it* or *whether it was swapped*. Different guarantees; conflating them overstates the posture.
+- **Immutable tags are integrity, not authenticity** — a SHA tag pins *which* bytes, but without a signature nothing proves those bytes came from your pipeline.
+- **An SBOM is only useful if you act on it** — generating one and never querying it on the next CVE is theatre; its value is fast "am I affected?" answers.
+- **Verification needs an enforcer** — signing without admission-time verification (a policy controller checking the signature) is a signature nobody checks.
+
+**Interview traps** —
+- *"What supply-chain controls do you have?"* — CVE image scanning via Trivy as a required merge check, plus SonarCloud static analysis; no SBOM, no image signing, no provenance — that's the honest gap.
+- *"Trivy passes — is the image trustworthy?"* — Only that it has no *known* CVEs; scanning doesn't prove authenticity. You'd need signing + verification for that.
+- *"How would you prove an image came from your pipeline?"* — cosign-sign the digest in CI and verify at admission (SLSA provenance) — neither of which we do today.
+- *"Do immutable tags solve this?"* — They give integrity of *which* image, not authenticity; a tag isn't a signature.
+
+**The 60-second answer** — "Supply-chain security protects what goes into the artifact: scanning for CVEs, an SBOM inventorying components, signing images so consumers can verify authenticity, and provenance attesting how they were built. AntKart does the scanning pillar well — Trivy is one of four required branch-protection checks, so a vulnerable image blocks the merge, plus SonarCloud static analysis. What it doesn't do is generate SBOMs, sign images with cosign, or produce SLSA provenance — so nothing at deploy time proves an image was built by our pipeline and untampered. Immutable SHA tags give integrity of which image, but that's not authenticity. No ADR weighed the signing side, so it's an honest gap: scanning yes, cryptographic authenticity no."
+
+**Read the code** — The Trivy and SonarCloud required checks in `.github/workflows/` and branch-protection config; the immutable SHA tagging in the CD workflows; [ADR-023](adr/ADR-023-cicd-pipeline-design-and-repository-strategy.md); KI-004 on tag integrity; §8's CI/CD-quality-gate concepts.
+
+**To reach 🟢** — Without notes, name the four pillars, state AntKart does scanning (Trivy) + static analysis but not SBOM/signing/provenance, distinguish integrity (SHA tags) from authenticity (signatures), and explain that signing needs admission-time verification to mean anything.
+
+---
+
+# 9. Architecture practice
+
+> This section is different. The eight sections before it are about **technologies**; this one is about the **craft of being an architect** — how you decide, document, and reason about trade-offs. These concepts have no "Read the code" line because they aren't in the code; instead each ends with **"Where this appears in AntKart"**, pointing at the ADRs, C4 models, and known-issues register where the practice is visible. An interviewer probes these to tell an architect from a senior engineer.
+
+---
+
+### 1. Architecture Decision Records (ADRs) 🟡
+
+**What it is** — An **ADR** is a short, immutable document capturing **one architectural decision**: its context, the options considered, the decision, and its consequences. ADRs are numbered, dated, and **append-only** — you don't edit a past decision, you supersede it with a new one — so the repository accumulates a **decision log** that explains *why* the system is the way it is, not just *what* it is.
+
+**The problem it solves** — Architectural decisions are made once and questioned forever ("why Terraform not Bicep? why a saga not 2PC?"). Without a record, the reasoning lives in someone's head and is lost when they leave; the same debates re-run. ADRs make the *why* durable, reviewable, and honest about what was traded away.
+
+**How it works** — Each decision gets a file (`ADR-NNN-title.md`) with a standard shape — Status (Proposed/Accepted/Superseded), Context, Options with trade-offs, Decision, Consequences. Superseding is explicit: ADR-021 supersedes the identity-service design; a decision is never silently rewritten. The set is an index, and the newest status wins.
+
+**How AntKart uses it** — AntKart has **25 ADRs** (`docs/adr/ADR-001…025`), and they are the backbone of this very playbook — nearly every "why" answer cites one. They record real decisions with their rejected alternatives: [ADR-005](adr/ADR-005-saga-orchestration.md) (saga over 2PC/choreography), [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md) (Terraform, rejecting Bicep/ARM/Pulumi), [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md) (GitHub Actions over Azure DevOps), and supersession is used honestly — [ADR-021](adr/ADR-021-retire-identity-service-for-entra.md) retires the identity service, [ADR-025](adr/ADR-025-observability-architecture.md) partly supersedes earlier observability decisions when the self-hosted metrics stack was removed. The ADRs are why this playbook can distinguish a recorded decision from "the choice was never formally made" — that phrase, used throughout the not-used concepts, is itself an ADR discipline: if there's no ADR, don't pretend there was a decision.
+
+**Alternatives and the trade-off** — The alternative is undocumented decisions (tribal knowledge) or burying rationale in wiki prose that drifts; ADRs cost a little discipline per decision but buy a permanent, greppable, honest record. Over-ADR-ing trivial choices is the failure mode at the other extreme — an ADR is for decisions with **consequences and alternatives**, not for every config value.
+
+**Gotchas** —
+- **ADRs are immutable — supersede, don't edit** — rewriting a past ADR destroys the history that makes them valuable. New decision → new ADR that marks the old one Superseded.
+- **No ADR is itself information** — if a choice has no ADR, the honest answer is "never formally decided," not a back-filled rationale. AntKart's playbook leans on exactly this.
+- **An ADR without its rejected options is half an ADR** — the value is the *alternatives and why not*; a decision with no trade-offs recorded teaches nothing.
+- **Status matters** — an Accepted ADR that reality has moved past (but nobody superseded) misleads; the register must be kept honest (as ADR-025 did for observability).
+
+**Interview traps** —
+- *"How do you record architecture decisions?"* — Numbered, immutable ADRs with context, options, decision, consequences; supersede rather than edit. AntKart has 25.
+- *"What if a decision changes?"* — A new ADR supersedes the old, which stays as history — e.g. ADR-021 retiring the identity service, ADR-025 superseding earlier observability calls.
+- *"How do you know something *wasn't* decided?"* — Absence of an ADR — and you say so, rather than inventing a reason. (This is the discipline behind every "not used" concept here.)
+- *"When is an ADR overkill?"* — For a decision with no real alternatives or consequences; ADRs are for consequential, contested choices.
+
+**The 60-second answer** — "An ADR captures one architectural decision — context, the options with their trade-offs, the decision, and its consequences — numbered, dated, and immutable, so you supersede rather than edit. The set becomes a decision log that answers 'why is it this way' long after the debate. AntKart has 25 ADRs, and they're the backbone of how I can explain the platform: saga over 2PC is ADR-005, Terraform over Bicep is ADR-012, GitHub Actions over Azure DevOps is ADR-022, and supersession is used honestly — ADR-021 retires the identity service, ADR-025 walks back earlier observability decisions. The discipline cuts both ways: when there's no ADR, the honest answer is 'never formally decided,' not a rationale invented after the fact."
+
+**Where this appears in AntKart** — The full set in [`docs/adr/`](adr/README.md) (25 ADRs, indexed); supersession in [ADR-021](adr/ADR-021-retire-identity-service-for-entra.md) and [ADR-025](adr/ADR-025-observability-architecture.md); and structurally, every "why" in this playbook and every "the choice was never formally made" in the not-used concepts is an application of ADR discipline.
+
+**To reach 🟢** — Without notes, explain the ADR shape and immutability/supersession, cite two AntKart ADRs and one supersession, and articulate why "no ADR" is itself honest information rather than a gap to paper over.
+
+---
+
+### 2. The C4 model 🟡
+
+**What it is** — **C4** is a way to diagram software architecture at **four levels of zoom**: **Context** (the system as a box among users and external systems), **Container** (the deployable/runnable units — services, databases, apps — inside it), **Component** (the major parts inside one container), and **Code** (classes — rarely drawn). The insight is that one diagram can't serve everyone; you pick the **zoom level for your audience** and keep each level consistent.
+
+**The problem it solves** — Architecture diagrams are usually an inconsistent mess — mixing abstraction levels, undefined boxes, no notation. C4 imposes a simple, hierarchical, audience-appropriate structure so a diagram communicates instead of confusing, and so a reader knows exactly what altitude they're looking at.
+
+**How it works** — You draw the levels top-down: Context for stakeholders (what is this system, who uses it, what does it depend on), Container for architects/devs (what runs, how they communicate), Component for developers of one container. Each element is a labelled box with a described relationship; consistency and legibility matter more than fancy notation. Tools like **Structurizr** render C4 from a text definition.
+
+**How AntKart uses it** — AntKart's diagrams are C4-based, authored in **Structurizr** and rendered to the SVGs the README embeds (`docs/C4Renders/`). The README's eight hero diagrams are essentially Container/Context views — the **System Overview** is Context (actors, the platform, external systems: Entra, Razorpay, ACS), while **Platform Architecture**, **Azure Services**, **Kubernetes**, **DevOps**, **Observability**, and **Security** are Container-level views each framed for one topic. The authoring sources (`workspace.dsl`, the `hero-*` folders) are internal-only; the rendered SVGs are the published, load-bearing artifact. The deliberate choice to give each *topic* its own diagram — rather than one god-diagram — is the C4 "zoom for the audience" principle applied.
+
+**Alternatives and the trade-off** — Freeform boxes-and-arrows (no method) are quick but drift into inconsistency; UML is precise but heavy and often over-detailed; C4 is a lightweight middle ground optimised for *communication*. Diagrams-as-code (Structurizr, AntKart's choice) keeps them versioned and regenerable at the cost of an authoring toolchain. The trade is a little method and tooling for diagrams that actually teach.
+
+**Gotchas** —
+- **Don't mix zoom levels in one diagram** — a Context diagram with internal classes on it is the classic C4 violation; each level has one altitude.
+- **The Code level is usually a waste** — C4 explicitly expects you rarely draw it; class diagrams rot instantly. Most value is Context + Container.
+- **A diagram is a view, not the system** — AntKart's `InfrastructureAsCode` render still shows qa as "planned" though qa was built and destroyed (a tracked staleness); diagrams drift from reality and must be maintained like docs.
+- **One diagram can't serve every audience** — the whole point is picking the level; a single all-in-one diagram serves no one well.
+
+**Interview traps** —
+- *"What are the C4 levels?"* — Context, Container, Component, Code — increasing zoom; you pick the level for the audience, and Code is rarely drawn.
+- *"What's the point of the model?"* — Consistency and audience-appropriateness — a diagram at a defined altitude that communicates, versus freeform inconsistency.
+- *"Container vs Component?"* — Container = a deployable/runnable unit (a service, a database); Component = a major part inside one container. Mixing them is the common error.
+- *"How do you keep diagrams from rotting?"* — Diagrams-as-code (Structurizr), versioned and regenerated — though even then they can drift, like our stale qa render, so they're maintained deliberately.
+
+**The 60-second answer** — "C4 diagrams architecture at four zoom levels — Context, the system among its users and dependencies; Container, the deployable units inside it; Component, the parts inside one container; and Code, which you rarely draw. The core idea is that no single diagram serves everyone, so you pick the altitude for your audience and keep each level consistent. AntKart's diagrams are C4, authored in Structurizr and rendered to the SVGs the README embeds: the System Overview is a Context view with the actors and external systems, and the topic diagrams — Azure, Kubernetes, DevOps, Security — are Container views each framed for one concern rather than one god-diagram. The discipline is not mixing zoom levels, skipping the Code level, and remembering a diagram is a view that can drift from reality, like our stale qa render."
+
+**Where this appears in AntKart** — The rendered C4 diagrams in [`docs/C4Renders/renders/`](C4Renders/renders/) embedded across the [README](../README.md); the eight hero diagrams (System Overview = Context; the rest Container-level per topic); the tracked diagram-staleness for qa in [PROJECT-STATE.md](PROJECT-STATE.md); the authoring approach (Structurizr, diagrams-as-code) described in the C4Renders material.
+
+**To reach 🟢** — Without notes, name the four levels and that Code is rarely drawn, distinguish Container from Component, explain AntKart's one-diagram-per-topic as the audience principle, and cite diagram drift (the stale qa render) as a maintenance reality.
+
+---
+
+### 3. Non-functional requirements 🟡
+
+**What it is** — **Non-functional requirements (NFRs)** — also called quality attributes or "the -ilities" — are what a system must *be*, as opposed to what it must *do*: scalability, availability, performance/latency, security, reliability, maintainability, observability, cost. Functional requirements say "the user can place an order"; NFRs say "orders succeed 99.9% of the time, in under 300ms, securely, and we can debug it." They are where architecture is mostly *decided*.
+
+**The problem it solves** — Two systems with identical features can be worlds apart in quality; the architecture — the hard-to-change decisions — is driven far more by NFRs than by features. Naming NFRs explicitly turns vague "make it good" into decidable targets and exposes the trade-offs between them (you can't max all of them).
+
+**How it works** — You elicit the quality attributes that matter, ideally as **measurable targets** (an availability SLO, a latency budget, a cost ceiling), then choose architecture to satisfy them, accepting that NFRs **conflict** — stronger consistency costs availability (CAP), more security costs latency/convenience, more resilience costs complexity. The architect's job is prioritising and trading them deliberately.
+
+**How AntKart uses it** — AntKart's whole design is a set of NFR choices, mostly recorded in ADRs:
+- **Scalability/availability** — stateless services + managed PaaS + orchestrated saga so services scale independently and a failure compensates rather than cascades.
+- **Security** — secret-less workload identity and per-service token validation (a top-priority NFR here), with the honest gaps (no mTLS, no private endpoints) named.
+- **Resilience** — criticality-tiered Polly pipelines (patient retries for critical Cosmos/Service Bus, fail-fast for the optional Discount dependency) — an explicit availability-vs-latency trade.
+- **Observability** — logs + traces (deliberately not metrics), a maintainability/debuggability NFR scoped by cost (ADR-025).
+- **Cost** — the stop-between-sessions operating model and budget module — cost treated as a first-class NFR.
+
+The **KNOWN_ISSUES register is largely a list of NFR shortfalls** — KI-002 (security), KI-005 (reliability/integrity), the private-endpoint gap (security) — which is why AntKart can talk about its quality attributes honestly, including where they're unmet.
+
+**Alternatives and the trade-off** — Ignoring NFRs until they bite (build features, discover it's slow/insecure/unobservable later) is the common failure; naming them up front costs analysis but drives the right architecture. The deeper trade is *among* NFRs — AntKart consciously prioritised security and maintainability over, say, network isolation and metrics, and recorded those priorities rather than pretending it optimised everything.
+
+**Gotchas** —
+- **NFRs conflict — you can't maximise all** — consistency vs availability, security vs latency, resilience vs simplicity. An architect who claims to have maxed everything hasn't understood the trade-offs.
+- **Unmeasured NFRs are wishes** — "highly available" means nothing without a number; AntKart's honesty is naming which NFRs it *doesn't* meet rather than vaguely claiming all of them.
+- **Architecture serves NFRs, features don't need it** — you can build features in a monolith; you choose distributed architecture to hit availability/scale NFRs, and pay the complexity for it.
+- **The -ilities include maintainability and observability** — people list scale and security and forget the ones that make a system *operable*; AntKart treats observability as an NFR explicitly.
+
+**Interview traps** —
+- *"What NFRs drove this architecture?"* — Security (secret-less identity, top priority), availability/scalability (stateless + saga), resilience (tiered Polly), observability and cost — most recorded in ADRs. And I'd name the ones I traded away.
+- *"Which NFRs did you trade off?"* — Network isolation and metrics were deprioritised versus security and maintainability — deliberately, and the gaps are in the issues register.
+- *"Functional vs non-functional — an example?"* — Functional: place an order. Non-functional: at 99.9% success, sub-300ms, securely, debuggably.
+- *"Can you have all the -ilities?"* — No — they conflict (CAP is the sharpest case); the job is prioritising and recording the trade.
+
+**The 60-second answer** — "Non-functional requirements are what a system must *be* rather than *do* — scalability, availability, latency, security, reliability, maintainability, observability, cost — and they're where architecture is mostly decided, because two systems with the same features can differ enormously in quality. They also conflict: you can't maximise all of them, so the architect prioritises and trades deliberately. AntKart's design is a set of NFR choices, mostly in ADRs: security via secret-less identity as the top priority, availability via stateless services and a compensating saga, resilience via criticality-tiered retry pipelines, observability scoped to logs and traces not metrics for cost. And I'd be honest that the known-issues register is largely a list of NFR shortfalls — network isolation and metrics were consciously deprioritised. Unmeasured NFRs are just wishes, so naming what's unmet matters as much as claiming what's met."
+
+**Where this appears in AntKart** — The quality-attribute decisions across [`docs/adr/`](adr/README.md) (resilience, security, observability, cost); the NFR shortfalls catalogued in [KNOWN_ISSUES.md](KNOWN_ISSUES.md); the resilience tiers in `AK.BuildingBlocks/Resilience`; §5 (security), §6 (observability), and the CAP/PACELC concept (§9.4) for the sharpest NFR conflict.
+
+**To reach 🟢** — Without notes, define NFRs vs functional requirements with an example, name the quality attributes AntKart prioritised and the ones it traded away, explain that NFRs conflict and must be measured, and cite the issues register as its honest NFR-shortfall list.
+
+---
+
+### 4. CAP theorem and PACELC 🟡
+
+**What it is** — **CAP** states that a distributed data system, when a network **P**artition happens, must choose between **C**onsistency (every read sees the latest write) and **A**vailability (every request gets a response) — you cannot have both *during a partition*. **PACELC** extends it: **P**artition → **A** vs **C** (as CAP), **E**lse (normal operation) → **L**atency vs **C**onsistency. PACELC is the more complete statement because it captures the trade you make *even when the network is fine*: stronger consistency costs latency.
+
+**The problem it solves** — It's the sharpest lens on the deepest NFR conflict (§9.3): you cannot have perfect consistency, availability, and partition-tolerance together, and since partitions are unavoidable in a distributed system, you must *choose* your failure behaviour — and, per PACELC, your everyday latency behaviour — rather than wish the conflict away.
+
+**How it works** — Partitions are a given (networks fail), so the real CAP choice is **CP** (stay consistent, refuse or block requests during a partition) vs **AP** (stay available, serve possibly-stale data). PACELC adds the normal-case axis: a store tuned for strong consistency (EC) pays latency on every operation (cross-region quorum), while one tuned for low latency (EL) relaxes consistency. Most real systems are **tunable per operation**, not globally one letter.
+
+**How AntKart uses it** — AntKart is **polyglot persistence** ([ADR-004](adr/ADR-004-polyglot-persistence.md)), so different stores sit at different CAP/PACELC points — which is the whole point of choosing a store per workload:
+- **Cosmos DB** (catalogue) is the textbook **tunable** case — its consistency levels (strong → eventual) are an explicit CAP/PACELC dial; AntKart uses it for the read-heavy catalogue where some staleness is acceptable, favouring availability/latency.
+- **PostgreSQL** (orders, payments) is chosen precisely for **strong consistency / ACID** — money and orders need CP-leaning behaviour, accepting the latency (and the cross-region hop to East US 2) that consistency costs — a direct PACELC "EC pays latency" example.
+- **Redis** (cart) favours latency/availability for ephemeral cart state.
+- The **saga** itself is an availability choice: rather than a 2PC that blocks (sacrificing availability for cross-service consistency), AntKart accepts **eventual consistency** across services and compensates — a CAP-style AP lean at the *system* level (§1's saga, §9's distributed-transactions concept).
+
+So AntKart doesn't pick "one letter" — it places each workload at the consistency/availability/latency point that workload needs, which is exactly how CAP/PACELC is applied in practice.
+
+**Alternatives and the trade-off** — A single relational store everywhere (uniform strong consistency) is simpler but forces the catalogue and cart to pay consistency costs they don't need; a single eventually-consistent store forces orders/payments into staleness they can't tolerate. Polyglot (AntKart) matches each store's CAP/PACELC posture to its workload at the cost of operating several data technologies — the trade ADR-004 makes deliberately.
+
+**Gotchas** —
+- **CAP is only about *during a partition*** — "you must give up one of the three" is loose; C-vs-A is forced *only when partitioned*. PACELC's "else latency vs consistency" is the part people miss and the more useful everyday lens.
+- **You don't choose P** — partitions happen to you; the choice is C vs A *when they do*. Framing P as optional is the classic misunderstanding.
+- **Systems are tunable, not one letter** — Cosmos is the proof: consistency is a per-request dial, not a fixed CAP verdict. Labelling a whole database "CP" or "AP" oversimplifies.
+- **Strong consistency isn't free even without partitions** — the PACELC latency cost (quorum, cross-region) is real every single operation; AntKart's East US 2 Postgres hop is a concrete instance.
+
+**Interview traps** —
+- *"State CAP correctly."* — During a partition you choose consistency or availability; you can't have both then. You don't choose partition-tolerance — partitions happen.
+- *"Why PACELC over CAP?"* — It adds the normal-case trade: else, latency vs consistency. Strong consistency costs latency even when the network is healthy — the everyday reality CAP omits.
+- *"Where's a CAP choice in your platform?"* — Postgres for orders/payments (CP-leaning, strong consistency, accepts latency) vs Cosmos for the catalogue (tunable, availability/latency); and the saga choosing eventual consistency over blocking 2PC.
+- *"Is Cosmos CP or AP?"* — Neither fixed — it's tunable via consistency levels; that per-operation dial *is* the CAP/PACELC trade made explicit.
+
+**The 60-second answer** — "CAP says that during a network partition a distributed store must choose consistency or availability — not both — and crucially you don't choose partition tolerance, partitions just happen. PACELC completes it: partition, availability vs consistency; else, latency vs consistency — so strong consistency costs latency even when the network is fine. AntKart applies this through polyglot persistence, ADR-004: Postgres for orders and payments because money needs strong, CP-leaning consistency and we accept the latency — including a cross-region hop; Cosmos for the catalogue, where consistency is a tunable dial and we favour availability and latency for read-heavy data; Redis for the cart. And at the system level, the saga chooses eventual consistency and compensation over a blocking 2PC — an availability lean. The point is we don't pick one letter; we place each workload where it needs to be."
+
+**Where this appears in AntKart** — The polyglot-persistence decision in [ADR-004](adr/ADR-004-polyglot-persistence.md); the saga-over-2PC availability choice in [ADR-005](adr/ADR-005-saga-orchestration.md) and §9's distributed-transactions concept (§1.20); Cosmos consistency in the Products design (`AK.Products/PRODUCTS_TECHNICAL_DESIGN.md`); the cross-region latency note in the [README](../README.md); the NFR-conflict framing in §9.3.
+
+**To reach 🟢** — Without notes, state CAP precisely (C-vs-A only during a partition, P isn't chosen), explain what PACELC adds (else latency-vs-consistency), map Postgres/Cosmos/saga to their CAP-PACELC postures, and explain why "tunable" beats a single-letter label.
+
+---
+
+### 5. Trade-off analysis 🟡
+
+**What it is** — The core skill of architecture: **there is no right answer, only trade-offs** made deliberately for a context. Trade-off analysis is the disciplined comparison of options against the qualities that matter (the NFRs), choosing the one whose *downsides you can live with* — and being able to **articulate what you gave up**, not just what you gained. An architect is distinguished less by knowing the "best" technology than by reasoning transparently about competing options.
+
+**The problem it solves** — Every consequential decision has viable alternatives; picking one on hype, habit, or "best practice" without weighing the alternatives produces fragile, unjustifiable systems. Trade-off analysis makes the reasoning explicit and reviewable, and — critically for interviews — demonstrates that you understand a choice by naming its costs.
+
+**How it works** — You enumerate real options, identify the qualities they trade against (consistency vs availability, simplicity vs control, cost vs resilience, portability vs integration), evaluate each option against them for *this* context, decide, and **record the consequences including the accepted downside**. The output is an ADR. The tell of good analysis is that you can state the *strongest case for the option you rejected* and why you still chose otherwise.
+
+**How AntKart uses it** — Trade-off analysis is the connective tissue of this entire playbook. Every ADR is one, and the strongest ones name what they gave up: [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md) chose Terraform *knowing* Bicep has tighter Azure integration; [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md) chose GitHub Actions *while acknowledging* Azure DevOps is the enterprise default; [ADR-005](adr/ADR-005-saga-orchestration.md) chose a saga *accepting* eventual consistency and the burden of writing compensations; [ADR-025](adr/ADR-025-observability-architecture.md) *removed* a working metrics stack because its operational cost outweighed its value. Even the platform's **honesty about gaps** is trade-off analysis: no private endpoints, no metrics, no mesh are *accepted downsides* of choosing simplicity/cost/identity-first for a dev platform — recorded, not hidden. And the discipline running through every "not used" concept in this playbook — citing the ADR that rejected something, or admitting "never formally decided" — *is* trade-off analysis applied to writing.
+
+**Alternatives and the trade-off** — The alternative to explicit trade-off analysis is decision-by-default (use what you know), decision-by-hype (use what's trendy), or decision-by-authority (use what a blog called "best practice") — all cheaper in the moment and all fragile under questioning. Explicit analysis costs deliberation and honesty about downsides; it buys defensible, contextual decisions. The meta-trade: it's slower, and for trivial choices it's overkill — reserve it for decisions with real consequences and real alternatives.
+
+**Gotchas** —
+- **"Best practice" is not analysis** — it's someone else's trade-off for someone else's context; applying it without checking *your* context is the most common architecture mistake.
+- **If you can't name the downside, you haven't analysed it** — every choice has a cost; a decision presented as pure upside is a red flag, not a strong answer.
+- **Context is the whole thing** — the "right" call for a global production platform (private endpoints, metrics, a mesh) is the *wrong* call for a cost-controlled dev platform; the same option, different context, different answer.
+- **Reversibility matters** — one-way-door decisions (data model, primary datastore) deserve deep analysis; two-way doors deserve speed. Treating them the same wastes analysis or invites risk.
+
+**Interview traps** —
+- *"Why did you choose X?"* — The strong answer names the alternatives, what each traded, and the downside you accepted — not "X is the best." E.g. Terraform over Bicep, giving up tighter Azure integration for portability.
+- *"What's the downside of your own choice?"* — Always have it ready — saga → eventual consistency + compensation burden; identity-first → no network isolation. Inability to name it is the tell.
+- *"Isn't Y the best practice?"* — Best practice for whose context? Re-anchor to *this* system's NFRs; a cost-controlled dev platform trades differently than global prod.
+- *"When would you decide differently?"* — Change the context (production, real scale, multiple teams) and several AntKart trades flip — private endpoints, metrics, canary. Showing the decision is contextual is the depth signal.
+
+**The 60-second answer** — "Trade-off analysis is the core architecture skill: there's no right answer, only trade-offs chosen deliberately for a context, and you demonstrate you understand a decision by naming what you *gave up*, not just what you gained. The method is to enumerate real options, weigh them against the qualities that matter, pick the one whose downsides you can live with, and record the accepted cost — which is what an ADR is. AntKart's ADRs do this: Terraform over Bicep, giving up tighter Azure integration for portability; a saga over 2PC, accepting eventual consistency and compensation work; removing a working metrics stack because its operational cost outweighed its value. Even the platform's honesty about gaps — no private endpoints, no metrics — is trade-off analysis: accepted downsides of choosing simplicity and cost for a dev platform. The tell of good analysis is being able to argue the rejected option's best case and still explain your choice."
+
+**Where this appears in AntKart** — Every ADR in [`docs/adr/`](adr/README.md) is a trade-off analysis; the ones that best name their accepted downside — [ADR-012](adr/ADR-012-iac-with-terraform-terragrunt.md), [ADR-022](adr/ADR-022-cicd-github-actions-oidc.md), [ADR-005](adr/ADR-005-saga-orchestration.md), [ADR-025](adr/ADR-025-observability-architecture.md); the accepted-downside gaps in [KNOWN_ISSUES.md](KNOWN_ISSUES.md); and the "not used" concepts throughout this playbook, each of which is trade-off reasoning about an alternative.
+
+**To reach 🟢** — Without notes, articulate "no right answer, only trade-offs," name the accepted downside of three AntKart decisions, explain why "best practice" isn't analysis without context, and distinguish one-way-door from two-way-door decisions.
+
+---
+
+### 6. Documenting for a reader who is not you 🟡
+
+**What it is** — The discipline of writing documentation for someone **without your context** — a new engineer, an interviewer, your future self who's forgotten — rather than for the person who already knows the system (you, today). It means no unexplained jargon, no reference to resources only you can see, no step that assumes prior knowledge, and an honest account of what *doesn't* work — because the reader can't ask you a follow-up.
+
+**The problem it solves** — Most documentation is written from the author's context and is useless to anyone else: it assumes the reader knows why, skips the step that's "obvious," links to things only the author can access, and hides the gaps. Writing for a context-free reader is what makes docs actually transfer knowledge instead of merely appearing to.
+
+**How it works** — You assume the reader knows nothing specific to your setup; you define terms on first use, make every step self-contained, replace "ask me" with the actual answer, and state gaps and unverified areas explicitly. You also structure for the reader's *path* (a reading order, an index) rather than dumping information. The test is concrete: could a stranger follow this and succeed without you in the room?
+
+**How AntKart uses it** — This principle is written into AntKart's documentation contract and visible throughout:
+- **"The promise the docs make"** (CLAUDE.md) is stated exactly this way: *a stranger with an empty Azure subscription should be able to follow the DevelopmentGuide and build this platform* — no unexplained step, no reference to a resource only the author has, no instruction assuming prior context.
+- **A defined reading path** — Root README → DevelopmentGuide → per-layer docs → ADRs/guides/known-issues — structures for the reader rather than dumping.
+- **Honesty about gaps for a reader who can't ask** — `⚠️ UNVERIFIED` markers in the provisioning runbook, the [KNOWN_ISSUES.md](KNOWN_ISSUES.md) register, and [PROJECT-STATE.md](PROJECT-STATE.md) (written for "a fresh reader — a person or an AI assistant with no prior context") all tell the reader what *isn't* proven.
+- **This very playbook** — the not-used concepts exist because "an interviewer asks about alternatives that were not chosen"; writing them, and marking "never formally decided" rather than inventing rationale, is documenting honestly for a reader who wasn't there.
+
+The public-vs-internal repository split is the same idea institutionalised: *assume everything you write may be published* to a reader with none of your context.
+
+**Alternatives and the trade-off** — Writing for yourself (or your team's shared context) is faster and feels complete because *you* can read it — but it fails the newcomer, the interviewer, and future-you. Writing for a context-free reader costs more effort (defining, self-containing, admitting gaps) and buys documentation that actually onboards and survives the author leaving. The trade is author time now for reader success later.
+
+**Gotchas** —
+- **The curse of knowledge** — you literally cannot see your own assumptions; the fix is a concrete external test ("empty subscription, no me in the room"), not introspection.
+- **Hiding gaps betrays a reader who can't ask** — omitting what's broken is the cruelest failure of context-free writing; the reader hits it with no recourse. AntKart's `⚠️ UNVERIFIED` and KI-register are the antidote.
+- **A reference isn't a reading path** — a pile of correct documents with no order or index still fails a newcomer; structure (the DevelopmentGuide spine) is part of the job.
+- **"Ask me" and internal-only links are context leaks** — a doc that depends on the author being reachable, or links to a resource only they can see, isn't self-contained. (AntKart's rule: public docs must not link into internal-only paths.)
+
+**Interview traps** —
+- *"Who do you write docs for?"* — The reader without my context — new engineer, interviewer, future me — which means defining terms, self-contained steps, and honest gaps, because they can't ask a follow-up.
+- *"How do you know your docs are good?"* — A concrete external test: could a stranger with an empty subscription follow them and succeed? Not "do they look complete to me."
+- *"What do you do about things that don't work?"* — State them explicitly — unverified markers, a known-issues register — because hiding gaps is worst for a reader who can't ask.
+- *"Why write about alternatives you didn't use?"* — Because the reader (an interviewer) asks about them, and explaining *why not* is as valuable as explaining what — exactly why this playbook has not-used concepts.
+
+**The 60-second answer** — "The discipline is writing for a reader who doesn't have my context — a new engineer, an interviewer, future me who's forgotten — instead of for the person who already knows the system. That means defining jargon, making every step self-contained, replacing 'ask me' with the actual answer, and stating gaps honestly, because the reader can't ask a follow-up. AntKart's docs contract states it as a promise: a stranger with an empty Azure subscription should be able to follow the guide and build the platform, with no unexplained step and no reference to something only the author has. You see it in the defined reading path, the UNVERIFIED markers and known-issues register that admit what isn't proven, and this playbook's not-used concepts — written, and marked 'never formally decided' rather than back-filled, precisely because a reader wasn't there. The trap is the curse of knowledge, so the test is external and concrete, not introspective."
+
+**Where this appears in AntKart** — The "promise the docs make" and the public/internal split in `CLAUDE.md`; the reading path Root README → [DevelopmentGuide](../DevelopmentGuide.md) → [`docs/development/`](development/); the honest-gap artifacts [KNOWN_ISSUES.md](KNOWN_ISSUES.md), [PROJECT-STATE.md](PROJECT-STATE.md), and the `⚠️ UNVERIFIED` markers in the [provisioning runbook](guides/environment-provisioning-runbook.md); and this playbook's not-used concepts and honesty conventions.
+
+**To reach 🟢** — Without notes, state who the reader is and why their lack of context changes the writing, give AntKart's "empty subscription" promise as the concrete test, explain why hiding gaps is the worst failure for a reader who can't ask, and connect it to the not-used concepts you're studying right now.
+
+---
+
+_End of syllabus. **One hundred and eleven concepts** across nine sections, all written to the full template — the
+original seventy the platform runs on, plus alternatives it chose against, adjacent technologies it doesn't use, and
+the architecture-practice concepts that turn a builder into an architect. Every tag starts 🟡 — the writing is
+done; the proving is yours. When you change the last one to 🟢, this platform is yours to explain to anyone —
+including everything you deliberately did **not** build, and why._
